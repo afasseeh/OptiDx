@@ -35,8 +35,15 @@
 ## 5. PDF reporting polish
 
 - **Context:** HTML reporting is the safest initial path.
-- **Limitation:** PDF export quality and pagination still need validation.
-- **Improvement:** Add a dedicated PDF rendering pipeline and layout snapshots.
-- **Benefit:** More reliable ministry/HTA-ready reporting.
+- **Limitation:** The current shell still falls back to browser-side text downloads for some report export controls.
+- **Improvement:** Add a dedicated server-side DOCX/PDF rendering pipeline and layout snapshots, then route the download buttons to those endpoints.
+- **Benefit:** More reliable ministry/HTA-ready reporting with real file formats.
 - **Priority:** Medium
 
+## 6. Collaboration and admin actions
+
+- **Context:** Several team, collaboration, and workspace-management controls are now wired to clear feedback states in the UI shell.
+- **Limitation:** Invite, role-management, and advanced collaboration flows are still simplified and do not yet persist full permissions or audit trails.
+- **Improvement:** Implement the workspace collaboration backend, role-based permissions, and durable audit logging for those controls.
+- **Benefit:** Makes the Teams surface operational rather than only demonstrative.
+- **Priority:** High

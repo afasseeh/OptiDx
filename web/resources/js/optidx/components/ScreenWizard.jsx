@@ -2,6 +2,7 @@
 function ScreenWizard({ setScreen }) {
   const [step, setStep] = useState(0);
   const [mode, setMode] = useState(null); // null | "test" | "optimize"
+  const [objective, setObjective] = useState("Balanced MCDA");
   const steps = ["Disease", "Test library", "Constraints", "Review", "Run"];
 
   const onContinue = () => {
@@ -44,7 +45,7 @@ function ScreenWizard({ setScreen }) {
           ))}
         </div>
 
-        {step === 0 && <WizardStep1/>}
+        {step === 0 && <WizardStep1 objective={objective} setObjective={setObjective}/>}
         {step === 1 && <WizardStep2/>}
         {step === 2 && <WizardStep3/>}
         {step === 3 && <WizardStep4/>}
@@ -117,7 +118,7 @@ function WizardStep5({ mode, setMode }) {
   );
 }
 
-function WizardStep1() {
+function WizardStep1({ objective, setObjective }) {
   return (
     <div className="card card--pad">
       <div className="sme-eyebrow" style={{marginBottom:6}}>Step 01</div>
@@ -147,8 +148,8 @@ function WizardStep1() {
         <div className="field" style={{gridColumn:"span 2"}}>
           <label className="field__label">Pathway objective</label>
           <div className="row row--wrap" style={{gap:6}}>
-            {["Minimize cost","Maximize sensitivity","Maximize specificity","Minimize TAT","Balanced MCDA","Custom"].map((o,i) =>
-              <button key={o} className={"btn btn--sm" + (i === 4 ? " btn--ink" : "")}>{o}</button>
+            {["Minimize cost","Maximize sensitivity","Maximize specificity","Minimize TAT","Balanced MCDA","Custom"].map((o) =>
+              <button key={o} type="button" onClick={() => setObjective(o)} className={"btn btn--sm" + (objective === o ? " btn--ink" : "")}>{o}</button>
             )}
           </div>
         </div>
@@ -166,8 +167,8 @@ function WizardStep2() {
         Add the tests you want available on the canvas. Import from evidence database or define manually.
       </p>
       <div className="row" style={{marginBottom:12, gap:8}}>
-        <button className="btn btn--primary"><Icon name="plus"/>Add test</button>
-        <button className="btn"><Icon name="database"/>Import from evidence</button>
+        <button className="btn btn--primary" onClick={() => window.OptiDxActions.comingSoon("Add test") }><Icon name="plus"/>Add test</button>
+        <button className="btn" onClick={() => window.OptiDxActions.comingSoon("Import from evidence")}><Icon name="database"/>Import from evidence</button>
         <div className="spacer"/>
         <span className="u-meta">{window.SEED_TESTS.length} tests in library</span>
       </div>
@@ -231,7 +232,7 @@ function WizardStep3() {
           <label className="field__label">Allowed sample types</label>
           <div className="row row--wrap" style={{gap:6}}>
             {["None","Blood","Urine","Stool","Sputum","Nasal swab","Imaging"].map((s,i) =>
-              <button key={s} className={"btn btn--sm" + (i < 5 ? " btn--ink" : "")}>
+              <button key={s} type="button" onClick={() => window.OptiDxActions.comingSoon(`Sample type: ${s}`)} className={"btn btn--sm" + (i < 5 ? " btn--ink" : "")}>
                 {i < 5 && <Icon name="check" size={11}/>}{s}
               </button>
             )}

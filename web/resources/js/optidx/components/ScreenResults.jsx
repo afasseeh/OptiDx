@@ -10,9 +10,9 @@ function ScreenResults({ variant = "A", setVariant, setScreen, onShare }) {
             <button className={"btn btn--sm " + (variant === "A" ? "btn--ink" : "")} onClick={() => setVariant && setVariant("A")}>Compact</button>
             <button className={"btn btn--sm " + (variant === "B" ? "btn--ink" : "")} onClick={() => setVariant && setVariant("B")}>Hero</button>
           </div>
-          <button className="btn"><Icon name="play"/>Re-run</button>
+          <button className="btn" onClick={() => window.OptiDxActions.comingSoon("Re-run pathway")}><Icon name="play"/>Re-run</button>
           {onShare && <button className="btn" onClick={onShare}><Icon name="upload"/>Share</button>}
-          <button className="btn"><Icon name="download"/>Export</button>
+          <button className="btn" onClick={() => window.OptiDxActions.downloadJson("optidx-results.json", r)}><Icon name="download"/>Export</button>
           <button className="btn btn--primary" onClick={() => setScreen("report")}>
             <Icon name="file-text"/>Generate report
           </button>

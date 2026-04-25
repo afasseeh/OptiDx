@@ -170,7 +170,7 @@ function ScreenScenarios({ setScreen }) {
               <div style={{fontWeight:700, fontSize:13, marginTop:4}}>{current.trade}</div>
             </div>
             <div className="spacer"/>
-            <button className="btn">
+            <button className="btn" onClick={() => window.OptiDxActions.comingSoon("Duplicate scenario")}>
               <Icon name="copy"/>Duplicate
             </button>
             <button className="btn btn--primary" onClick={() => setScreen("canvas")}>
@@ -240,7 +240,7 @@ function SetProfile() {
             color:"var(--sme-orange-600)", display:"grid", placeItems:"center",
             fontSize:24, fontWeight:700, fontFamily:"var(--font-display)"}}>SE</div>
           <div>
-            <button className="btn btn--sm">Upload photo</button>
+            <button className="btn btn--sm" onClick={() => window.OptiDxActions.comingSoon("Upload profile photo")}>Upload photo</button>
             <div className="u-meta" style={{marginTop:4}}>JPG or PNG, max 2MB</div>
           </div>
         </div>
@@ -261,15 +261,15 @@ function SetProfile() {
         <div className="card card--pad">
           <h3 style={{fontSize:14, marginBottom:14}}>Password & security</h3>
           <div className="stack" style={{gap:10}}>
-            <button className="btn" style={{justifyContent:"space-between"}}>
+            <button className="btn" style={{justifyContent:"space-between"}} onClick={() => window.OptiDxActions.comingSoon("Change password")}>
               <span><Icon name="settings"/> Change password</span>
               <Icon name="chevron-right" size={12}/>
             </button>
-            <button className="btn" style={{justifyContent:"space-between"}}>
+            <button className="btn" style={{justifyContent:"space-between"}} onClick={() => window.OptiDxActions.comingSoon("Enable two-factor auth")}>
               <span><Icon name="info"/> Enable two-factor auth</span>
               <span className="chip chip--outline">Recommended</span>
             </button>
-            <button className="btn" style={{justifyContent:"space-between"}}>
+            <button className="btn" style={{justifyContent:"space-between"}} onClick={() => window.OptiDxActions.comingSoon("Active sessions")}>
               <span><Icon name="database"/> Active sessions (3)</span>
               <Icon name="chevron-right" size={12}/>
             </button>
@@ -319,7 +319,7 @@ function SetWorkspace() {
         <div className="row" style={{marginBottom:14}}>
           <h3 style={{fontSize:14}}>Team members</h3>
           <div className="spacer"/>
-          <button className="btn btn--sm"><Icon name="plus" size={12}/>Invite</button>
+          <button className="btn btn--sm" onClick={() => window.OptiDxActions.comingSoon("Invite workspace member")}><Icon name="plus" size={12}/>Invite</button>
         </div>
         <div className="stack" style={{gap:0}}>
           {[
@@ -355,7 +355,7 @@ function SetWorkspace() {
             <div className="u-meta" style={{marginTop:4}}>Waived, research license</div>
           </div>
           <div>
-            <button className="btn">Manage billing</button>
+            <button className="btn" onClick={() => window.OptiDxActions.comingSoon("Manage billing")}>Manage billing</button>
           </div>
         </div>
       </div>
@@ -547,7 +547,7 @@ function SetIntegrations() {
               <div style={{fontSize:12, color:"var(--fg-2)", marginTop:8, lineHeight:1.5}}>{it.desc}</div>
             </div>
             <div style={{flex:1}}/>
-            <button className="btn btn--sm" disabled style={{opacity:0.6, cursor:"not-allowed"}}>
+            <button className="btn btn--sm" onClick={() => window.OptiDxActions.comingSoon("Notify me")}>
               <Icon name="info" size={12}/>Notify me
             </button>
           </div>
@@ -645,7 +645,7 @@ function ShareModal({ onClose }) {
               {platforms.map(p => (
                 <button key={p.id} className="btn" style={{
                   flexDirection:"column", height:64, gap:6, padding:0, justifyContent:"center",
-                }}>
+                }} onClick={() => window.OptiDxActions.comingSoon(`Share via ${p.label}`)}>
                   <svg width="20" height="20" viewBox="0 0 24 24" style={{color:p.color}}>{p.icon}</svg>
                   <span style={{fontSize:10, fontWeight:400, color:"var(--fg-2)"}}>{p.label}</span>
                 </button>
@@ -811,7 +811,7 @@ function ScreenTeams() {
           <div className="card__head">
             <h3>Members <span className="u-meta" style={{marginLeft:8, fontWeight:400}}>(preview · disabled)</span></h3>
             <div className="spacer"/>
-            <button className="btn btn--sm" disabled><Icon name="plus" size={12}/>Invite member</button>
+            <button className="btn btn--sm" onClick={() => window.OptiDxActions.comingSoon("Invite member")}><Icon name="plus" size={12}/>Invite member</button>
           </div>
           <table className="table">
             <thead><tr>

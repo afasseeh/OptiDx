@@ -75,17 +75,29 @@ function ScreenReport({ setScreen, onShare }) {
   }, [visible]);
 
   const audMeta = AUDIENCES.find(a => a.id === audience);
+  const summaryText = useMemo_R(() => {
+    const sectionLines = visible.map(s => `- ${s.label} (p.${s.page})`).join("\n");
+    return [
+      "OptiDx Report Preview",
+      `Audience: ${audMeta.label}`,
+      `Format: ${format.toUpperCase()}`,
+      `Pages: ${pageCount}`,
+      "",
+      "Included sections:",
+      sectionLines || "- None selected",
+    ].join("\n");
+  }, [audMeta.label, format, pageCount, visible]);
 
   return (
     <>
       <TopBar crumbs={["OptiDx","TB Community Screening","Report preview"]}
         actions={<>
-          <button className="btn"><Icon name="copy"/>Copy summary</button>
+          <button className="btn" onClick={() => window.OptiDxActions.copyText(summaryText)}><Icon name="copy"/>Copy summary</button>
           <button className="btn" onClick={onShare}><Icon name="upload"/>Share</button>
-          <button className="btn">
+          <button className="btn" onClick={() => window.OptiDxActions.downloadText("optidx-report.docx.txt", summaryText)}>
             <DocxLogo size={14}/>Download DOCX
           </button>
-          <button className="btn btn--primary">
+          <button className="btn btn--primary" onClick={() => window.OptiDxActions.downloadText("optidx-report.pdf.txt", summaryText)}>
             <PdfLogo size={14}/>Download PDF
           </button>
         </>}/>

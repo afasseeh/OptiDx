@@ -1,10 +1,24 @@
 // Remaining screens: trace, compare, evidence, report, settings, parallel modal
 function ScreenTrace({ setScreen }) {
   const r = window.SEED_RESULTS;
+  const csv = [
+    ["Path", "Sequence", "Terminal", "P(path | D+)", "P(path | D-)", "Cost", "TAT", "Samples", "Skill"],
+    ...r.paths.map(p => [
+      p.id,
+      p.sequence,
+      p.terminal,
+      (p.pIfD * 100).toFixed(1) + "%",
+      (p.pIfND * 100).toFixed(1) + "%",
+      "$" + p.cost.toFixed(2),
+      p.tat,
+      p.samples,
+      p.skill,
+    ]),
+  ].map(row => row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(",")).join("\n");
   return (
     <>
       <TopBar crumbs={["OptiDx", "Results", "Path-level trace"]}
-        actions={<><button className="btn"><Icon name="download"/>CSV</button><button className="btn btn--primary" onClick={() => setScreen("results")}>Back to dashboard</button></>}/>
+        actions={<><button className="btn" onClick={() => window.OptiDxActions.downloadText("optidx-path-trace.csv", csv)}><Icon name="download"/>CSV</button><button className="btn btn--primary" onClick={() => setScreen("results")}>Back to dashboard</button></>}/>
       <div className="page" style={{maxWidth:1440}}>
         <div className="page__head">
           <div>
@@ -58,7 +72,7 @@ function ScreenCompare({ setScreen }) {
   return (
     <>
       <TopBar crumbs={["OptiDx", "TB Community Screening", "Compare"]}
-        actions={<><button className="btn"><Icon name="download"/>Export</button><button className="btn btn--primary">Apply suggestion</button></>}/>
+        actions={<><button className="btn" onClick={() => window.OptiDxActions.downloadJson("optidx-compare-candidates.json", window.SEED_COMPARE)}><Icon name="download"/>Export</button><button className="btn btn--primary" onClick={() => setScreen("canvas")}>Apply suggestion</button></>}/>
       <div className="page" style={{maxWidth:1440}}>
         <div className="page__head">
           <div>
@@ -203,7 +217,7 @@ function ScreenEvidence() {
             <button className={"btn btn--sm " + (view==="table" ? "btn--ink" : "")} onClick={() => setView("table")}><Icon name="grid" size={11}/></button>
           </div>
           <button className="btn" onClick={() => setShowAccess(true)}><Icon name="lock"/>Request edit access</button>
-          <button className="btn btn--primary" disabled title="Coming soon"><Icon name="plus"/>Add record</button>
+          <button className="btn btn--primary" onClick={() => window.OptiDxActions.comingSoon("Add record")}><Icon name="plus"/>Add record</button>
         </>}
       />
 
@@ -367,7 +381,7 @@ function ScreenEvidence() {
             <div style={{flex:1, fontSize:12, color:"var(--fg-2)"}}>
               <b>Don't see what you need?</b> Submit a request and our clinical evidence team will source, vet, and add it within 7 days. Custom catalogs can be scoped to your workspace.
             </div>
-            <button className="btn btn--sm">Request a test</button>
+            <button className="btn btn--sm" onClick={() => window.OptiDxActions.comingSoon("Request a test")}>Request a test</button>
           </div>
         </main>
       </div>
@@ -566,8 +580,8 @@ function PresetInspectModal({ preset:p, onClose, onRequest }) {
         <div className="modal__foot">
           <button className="btn" onClick={onClose}>Close</button>
           <div className="spacer"/>
-          <button className="btn" disabled title="Coming soon"><Icon name="file"/>View source PDF</button>
-          <button className="btn btn--primary" disabled title="Coming soon"><Icon name="plus"/>Import to pathway</button>
+          <button className="btn" onClick={() => window.OptiDxActions.comingSoon("View source PDF")}><Icon name="file"/>View source PDF</button>
+          <button className="btn btn--primary" onClick={() => window.OptiDxActions.comingSoon("Import to pathway")}><Icon name="plus"/>Import to pathway</button>
         </div>
       </div>
     </div>
@@ -706,6 +720,7 @@ function ScreenSettingsLegacy() {
 
 // Parallel block configuration — as a modal invoked from canvas toolbar
 function ParallelModal({ onClose }) {
+  const [rule, setRule] = useState("parallel");
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
@@ -737,8 +752,8 @@ function ParallelModal({ onClose }) {
             <div className="field">
               <label className="field__label">Timing rule</label>
               <div className="btn-group">
-                <button className="btn btn--ink" style={{flex:1}}>Max TAT (parallel)</button>
-                <button className="btn" style={{flex:1}}>Sum TAT (sequential)</button>
+                <button className={"btn" + (rule === "parallel" ? " btn--ink" : "")} style={{flex:1}} onClick={() => setRule("parallel")}>Max TAT (parallel)</button>
+                <button className={"btn" + (rule === "sequential" ? " btn--ink" : "")} style={{flex:1}} onClick={() => setRule("sequential")}>Sum TAT (sequential)</button>
               </div>
               <div className="field__hint">Parallel blocks report the longest test TAT, not the sum.</div>
             </div>
@@ -761,7 +776,7 @@ function ParallelModal({ onClose }) {
                   <div className="spacer"/>
                   <span className="u-meta">A(+) ⊕ B(+)</span>
                 </div>
-                <button className="btn btn--sm" style={{alignSelf:"flex-start"}}><Icon name="plus" size={11}/>Add custom combination</button>
+                <button className="btn btn--sm" style={{alignSelf:"flex-start"}} onClick={() => window.OptiDxActions.comingSoon("Add custom combination")}><Icon name="plus" size={11}/>Add custom combination</button>
               </div>
             </div>
 

@@ -40,7 +40,7 @@ function TestLibrary({ collapsed, onToggle }) {
         <div className="side__head">
           <h2>Diagnostic tests</h2>
           <div className="spacer"/>
-          <button className="btn btn--sm btn--icon" title="Add test parameter"><Icon name="plus" size={12}/></button>
+          <button className="btn btn--sm btn--icon" title="Add test parameter" onClick={() => window.OptiDxActions.comingSoon("Add test parameter")}><Icon name="plus" size={12}/></button>
         </div>
       )}
       {collapsed && (
@@ -304,6 +304,13 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
     window.SEED_VALIDATIONS.forEach(v => { if (v.target && v.target !== "pathway") m[v.target] = v.level; });
     return m;
   }, []);
+  const focusValidationTarget = (target) => {
+    if (!target) return;
+    setSelected(target);
+    setRightTab("props");
+    setOpenPanel && setOpenPanel("node");
+    flash("Selected " + target + " in the inspector");
+  };
 
   // ---- Node + edge mutation helpers ----
   const updateNode = (id, patch) => setNodes(ns => ns.map(n => n.id === id ? { ...n, ...patch } : n));
@@ -752,7 +759,7 @@ function ValidationPanel() {
           <div className="valid-card__detail">{item.detail}</div>
           <div className="valid-card__fix"><b>Suggested fix.</b> {item.fix}</div>
           {item.target && item.target !== "pathway" && (
-            <button className="valid-card__locate"><Icon name="crosshair" size={10}/>Locate on canvas</button>
+            <button className="valid-card__locate" onClick={() => focusValidationTarget(item.target)}><Icon name="crosshair" size={10}/>Locate on canvas</button>
           )}
         </div>
       ))}

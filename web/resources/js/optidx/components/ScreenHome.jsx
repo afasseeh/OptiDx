@@ -5,7 +5,9 @@ function ScreenHome({ setScreen }) {
       <TopBar
         crumbs={["OptiDx", "Workspace"]}
         actions={<>
-          <button className="btn"><Icon name="upload"/>Import JSON</button>
+          <button className="btn" onClick={() => window.OptiDxActions.importJsonFile((pathway) => {
+            window.OptiDxActions.comingSoon("Imported pathway payload");
+          })}><Icon name="upload"/>Import JSON</button>
           <button className="btn btn--primary" onClick={() => setScreen("wizard")}>
             <Icon name="plus"/>New pathway
           </button>
@@ -27,7 +29,7 @@ function ScreenHome({ setScreen }) {
           <div className="row" style={{marginBottom:12}}>
             <h2 style={{fontSize:14, letterSpacing:"0.08em", textTransform:"uppercase", color:"var(--fg-2)"}}>Recent pathways</h2>
             <div className="spacer"/>
-            <button className="btn btn--sm btn--ghost">View all <Icon name="chevron-right" size={12}/></button>
+            <button className="btn btn--sm btn--ghost" onClick={() => setScreen("results")}>View all <Icon name="chevron-right" size={12}/></button>
           </div>
           <div className="grid" style={{gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))"}}>
             {window.SEED_PATHWAYS.map(p => (

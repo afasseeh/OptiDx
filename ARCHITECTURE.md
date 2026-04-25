@@ -37,9 +37,11 @@ The backend owns:
 - project, pathway, evidence, report, and settings persistence
 - schema validation
 - API responses
+- user authentication, session state, email verification, and password reset flows
 - optimization orchestration
 - report generation jobs
 - bridge calls to the Python evaluator
+- transactional email delivery through the configured SMTP transport
 
 ### Python Engine
 
@@ -67,6 +69,26 @@ Current bridge shape:
 - `web/app/Services/PythonEngineBridge.php` executes `python -m optidx_package.optidx.cli`
 - `optidx_package/optidx/cli.py` loads canonical engine payloads, evaluates them, and returns JSON
 - `web/app/Services/PathwayDefinitionService.php` performs Laravel-side graph validation before evaluation
+- `web/app/Http/Controllers/AuthController.php` owns the session-backed auth endpoints used by the React shell
+
+### Auth and Email
+
+OptiDx now uses Laravel session authentication for the web shell and relies on email verification before a new account can access the authenticated experience.
+
+The active flow is:
+
+1. A user registers or requests a resend/reset action from the React shell.
+2. Laravel creates or looks up the user record and dispatches the appropriate notification.
+3. Notifications are sent through the SMTP mailer configured for SendGrid.
+4. Verification and password-reset links route back into the Laravel app, which completes the state change and redirects the user into the shell.
+
+Important implementation details:
+
+- `App\Models\User` implements `MustVerifyEmail`.
+- Verification uses a signed Laravel route at `/verify-email/{id}/{hash}`.
+- Password reset tokens are handled by Laravel's password broker.
+- The React shell reads auth state from `/auth/me` on startup and switches between auth, verified, and reset states based on query parameters.
+- `web/resources/js/optidx/actions.js` exposes a shared browser action helper for clipboard, download, and temporary UX messaging so the UI can progress from mockup screens to functional controls without duplicating logic in every component.
 
 ## Persistence Model
 
@@ -101,3 +123,4 @@ Implemented tables in `web/database/migrations`:
 - Redis is reserved for queueing and transient coordination.
 - PostgreSQL remains the preferred long-term system of record, but the Laragon MVP can use MariaDB if needed for local ergonomics.
 - Docker should be documented later, but it is not the initial local runtime dependency.
+- The browser shell currently uses local file downloads for some export controls; those should be replaced with server-side DOCX/PDF generation when the reporting pipeline is finalized.

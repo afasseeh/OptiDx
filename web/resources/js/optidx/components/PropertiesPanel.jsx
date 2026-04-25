@@ -89,10 +89,10 @@ function ParallelBlockProps({ node, updateNode, ungroupParallel }) {
                 <div style={{fontSize:12, fontWeight:700}}>{t.name}</div>
                 <div style={{fontSize:11, color:"var(--fg-3)"}}>Se {t.sens.toFixed(2)} · Sp {t.spec.toFixed(2)} · {t.tat}{t.tatUnit[0]}</div>
               </div>
-              <button className="btn btn--xs btn--icon" title="Remove from block"><Icon name="x" size={10}/></button>
+              <button className="btn btn--xs btn--icon" title="Remove from block" onClick={() => window.OptiDxActions.comingSoon("Remove test from block")}><Icon name="x" size={10}/></button>
             </div>
           ))}
-          <button className="btn btn--sm" style={{marginTop:6}}><Icon name="plus" size={11}/>Add test to block</button>
+          <button className="btn btn--sm" style={{marginTop:6}} onClick={() => window.OptiDxActions.comingSoon("Add test to block")}><Icon name="plus" size={11}/>Add test to block</button>
         </div>
       </div>
 
@@ -132,7 +132,7 @@ function ParallelBlockProps({ node, updateNode, ungroupParallel }) {
             </div>
           </div>
         </div>
-        <button className="btn btn--sm" style={{marginTop:10}}><Icon name="git-branch" size={11}/>Add custom branch</button>
+        <button className="btn btn--sm" style={{marginTop:10}} onClick={() => window.OptiDxActions.comingSoon("Add custom branch")}><Icon name="git-branch" size={11}/>Add custom branch</button>
       </div>
 
       <div className="props__section">
@@ -249,7 +249,7 @@ function ConditionBuilder({ node, test }) {
             <span className="cb__chip cb__chip--op">is</span>
             <span className="cb__chip cb__chip--val cb__chip--neg">negative</span>
           </div>
-          <button className="btn btn--xs" style={{marginTop:6}}><Icon name="plus" size={10}/>Add clause</button>
+          <button className="btn btn--xs" style={{marginTop:6}} onClick={() => window.OptiDxActions.comingSoon("Add clause")}><Icon name="plus" size={10}/>Add clause</button>
         </div>
       )}
 
@@ -293,7 +293,7 @@ function ConditionBuilder({ node, test }) {
           </select>
         </div>
       </div>
-      <button className="btn btn--xs" style={{marginTop:8}}><Icon name="plus" size={10}/>Add discordant / inconclusive branch</button>
+      <button className="btn btn--xs" style={{marginTop:8}} onClick={() => window.OptiDxActions.comingSoon("Add discordant / inconclusive branch")}><Icon name="plus" size={10}/>Add discordant / inconclusive branch</button>
     </div>
   );
 }

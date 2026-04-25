@@ -3,7 +3,10 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 // OptiDx — main app
 function App() {
   const [authed, setAuthed] = useState(false);
-  const [authMode, setAuthMode] = useState("login");
+  const [authMode, setAuthMode] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("auth") === "reset" ? "reset" : "login";
+  });
   const [screen, setScreen] = useState("home");
   const [variant, setVariant] = useState({ canvas: "A", results: "A" });
   const [openPanel, setOpenPanel] = useState(null);
@@ -22,8 +25,36 @@ function App() {
   }, []);
   const [showTweaks, setShowTweaks] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
+  const [sessionChecked, setSessionChecked] = useState(false);
 
-  if (!authed) return <AuthShell mode={authMode} setMode={setAuthMode} onAuthed={() => setAuthed(true)}/>;
+  useEffect(() => {
+    let active = true;
+    window.axios?.get('/auth/me')
+      .then(response => {
+        if (!active) return;
+        if (response?.data?.authenticated) {
+          setAuthed(true);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setSessionChecked(true);
+      });
+    return () => { active = false; };
+  }, []);
+
+  if (!sessionChecked && !authed) {
+    return (
+      <div className="app" style={{minHeight:"100vh", display:"grid", placeItems:"center", background:"var(--surface)"}}>
+        <div style={{display:"flex", flexDirection:"column", alignItems:"center", gap:12}}>
+          <LogoMark size={54}/>
+          <div style={{fontSize:12, color:"var(--fg-3)"}}>Checking session...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!authed) return <AuthShell mode={authMode} setMode={setAuthMode} onAuthed={() => { setAuthed(true); setAuthMode("login"); }}/>;
 
   return (
     <div className="app">
@@ -72,8 +103,8 @@ function CanvasWrapper({ variant, setVariant, openPanel, setOpenPanel, setScreen
             <button className={"btn btn--sm " + (variant === "A" ? "btn--ink" : "")} onClick={() => setVariant("A")}>Layout A</button>
             <button className={"btn btn--sm " + (variant === "B" ? "btn--ink" : "")} onClick={() => setVariant("B")}>Layout B</button>
           </div>
-          <button className="btn"><Icon name="save"/>Save</button>
-          <button className="btn"><Icon name="download"/>Export</button>
+          <button className="btn" onClick={() => window.OptiDxActions.comingSoon("Save pathway")}><Icon name="save"/>Save</button>
+          <button className="btn" onClick={() => window.OptiDxActions.downloadJson("optidx-pathway.json", window.SEED_PATHWAY || {})}><Icon name="download"/>Export</button>
           <button className="btn btn--primary" onClick={() => setScreen("results")}><Icon name="play"/>Run pathway</button>
         </>}/>
       <ScreenCanvas variant={variant} openPanel={openPanel} setOpenPanel={setOpenPanel}/>

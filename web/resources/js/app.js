@@ -1,6 +1,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 
+import './optidx/actions.js';
 import './optidx/app.css';
 import './optidx/canvas.css';
 import './optidx/data.js';

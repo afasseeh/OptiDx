@@ -1,7 +1,7 @@
 # OptiDx
 
 <p align="center">
-  <img src="OptiDx%20UI%20V2/optidx/brand/logo-sme.png" alt="Syreon OptiDx logo" width="520" />
+  <img src="web/resources/js/optidx/brand/logo-sme.png" alt="OptiDx by Syreon" width="560" />
 </p>
 
 <p align="center">
@@ -10,7 +10,15 @@
 </p>
 
 <p align="center">
-  <img src="OptiDx%20UI%20V2/_verify/04-final.png" alt="OptiDx UI preview" width="100%" />
+  Live screenshots from the local web tool.
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/auth.png" alt="OptiDx auth screen" width="19%" />
+  <img src="docs/screenshots/home.png" alt="OptiDx home screen" width="19%" />
+  <img src="docs/screenshots/wizard.png" alt="OptiDx wizard screen" width="19%" />
+  <img src="docs/screenshots/builder.png" alt="OptiDx workflow builder" width="19%" />
+  <img src="docs/screenshots/results.png" alt="OptiDx results screen" width="19%" />
 </p>
 
 ## What OptiDx Does
@@ -65,6 +73,7 @@ pytest optidx_package/tests/test_engine.py
 
 - `web/` Laravel app and Vite frontend
 - `optidx_package/` canonical Python engine package and benchmark fixtures
+- `docs/screenshots/` live screenshots captured from the running web tool
 - `OptiDx UI V2/` authoritative Syreon visual language and UI reference
 - `ARCHITECTURE.md` technical architecture baseline
 - `FUTURE_TASKS.md` deferred work and technical debt
@@ -79,4 +88,3 @@ If the architecture changes, update `ARCHITECTURE.md` as well.
 ## License
 
 OptiDx is intended as an open-source public good. Add the final project license here when the licensing decision is finalized.
-
