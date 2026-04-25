@@ -90,5 +90,121 @@ class PathwayApiTest extends TestCase
                 ],
             ]);
     }
-}
 
+    public function test_store_import_and_export_use_canonical_graph_shape(): void
+    {
+        $payload = [
+            'schema_version' => 'canvas-v1',
+            'start_node' => 'start',
+            'metadata' => [
+                'label' => 'Canonical pathway',
+                'source' => 'test',
+            ],
+            'tests' => [
+                'A' => [
+                    'id' => 'A',
+                    'name' => 'Test A',
+                    'sensitivity' => 0.91,
+                    'specificity' => 0.84,
+                    'turnaround_time' => 2,
+                    'sample_types' => ['blood'],
+                    'skill_level' => 2,
+                    'cost' => 4,
+                ],
+            ],
+            'nodes' => [
+                'start' => [
+                    'id' => 'start',
+                    'type' => 'test',
+                    'testId' => 'A',
+                    'label' => 'Entry',
+                    'x' => 40,
+                    'y' => 80,
+                ],
+                'final_positive' => [
+                    'id' => 'final_positive',
+                    'type' => 'terminal',
+                    'subtype' => 'pos',
+                    'label' => 'Positive',
+                    'x' => 260,
+                    'y' => 20,
+                ],
+                'final_negative' => [
+                    'id' => 'final_negative',
+                    'type' => 'terminal',
+                    'subtype' => 'neg',
+                    'label' => 'Negative',
+                    'x' => 260,
+                    'y' => 140,
+                ],
+            ],
+            'edges' => [
+                ['id' => 'e1', 'from' => 'start', 'fromPort' => 'pos', 'to' => 'final_positive', 'kind' => 'pos', 'label' => 'Positive'],
+                ['id' => 'e2', 'from' => 'start', 'fromPort' => 'neg', 'to' => 'final_negative', 'kind' => 'neg', 'label' => 'Negative'],
+            ],
+        ];
+
+        $created = $this->postJson('/api/pathways', [
+            'name' => 'Canonical pathway',
+            'editor_definition' => $payload,
+            'metadata' => ['owner' => 'Test'],
+        ])
+            ->assertCreated()
+            ->json();
+
+        $this->assertSame('start', $created['editor_definition']['start_node']);
+        $this->assertSame('start', $created['start_node_id']);
+        $this->assertSame('A', $created['engine_definition']['nodes']['start']['action']['test_names'][0]);
+
+        $this->getJson("/api/pathways/{$created['id']}/export/json")
+            ->assertOk()
+            ->assertJsonPath('start_node', 'start')
+            ->assertJsonPath('nodes.start.testId', 'A');
+
+        $this->postJson('/api/pathways/import', ['pathway' => $payload])
+            ->assertCreated()
+            ->assertJsonPath('editor_definition.start_node', 'start')
+            ->assertJsonPath('engine_definition.nodes.start.branches.0.next_node', 'final_positive');
+    }
+
+    public function test_optimize_accepts_ui_seed_test_shape(): void
+    {
+        $response = $this->postJson('/api/pathways/optimize', [
+            'tests' => [
+                [
+                    'id' => 't_symp',
+                    'name' => 'Symptom Screen (WHO-4)',
+                    'sens' => 0.77,
+                    'spec' => 0.68,
+                    'tat' => 5,
+                    'tatUnit' => 'min',
+                    'sample' => 'none',
+                    'skill' => 'CHW',
+                    'cost' => 0.5,
+                ],
+                [
+                    'id' => 't_xpert',
+                    'name' => 'Xpert MTB/RIF Ultra',
+                    'sens' => 0.88,
+                    'spec' => 0.98,
+                    'tat' => 2,
+                    'tatUnit' => 'hr',
+                    'sample' => 'sputum',
+                    'skill' => 'Lab Tech',
+                    'cost' => 9.98,
+                ],
+            ],
+            'constraints' => [
+                'minimum_sensitivity' => 0.85,
+                'minimum_specificity' => 0.90,
+                'maximum_total_cost' => 10,
+            ],
+            'prevalence' => 0.08,
+        ]);
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('candidate_count', 1)
+            ->assertJsonPath('ranked_results.0.label', 'Single test');
+    }
+}

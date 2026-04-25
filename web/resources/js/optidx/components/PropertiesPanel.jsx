@@ -1,5 +1,5 @@
 // Properties panel — context-sensitive right sidebar with rich condition builder
-function PropertiesPanel({ selected, nodes, setOpenPanel, updateNode, deleteNode, duplicateNode, ungroupParallel }) {
+function PropertiesPanel({ selected, nodes, setOpenPanel, updateNode, deleteNode, duplicateNode, ungroupParallel, addParallelMember, removeParallelMember, updateParallelRule }) {
   const node = nodes.find(n => n.id === selected);
   if (!node) {
     return (
@@ -24,7 +24,7 @@ function PropertiesPanel({ selected, nodes, setOpenPanel, updateNode, deleteNode
         <button className="btn btn--xs" onClick={deleteNode} title="Delete (Del)"><Icon name="trash" size={10}/>Delete</button>
       </div>
       {node.type === "test" && <TestNodeProps node={node} updateNode={updateNode}/>}
-      {node.type === "parallel" && <ParallelBlockProps node={node} updateNode={updateNode} ungroupParallel={ungroupParallel}/>}
+      {node.type === "parallel" && <ParallelBlockProps node={node} updateNode={updateNode} ungroupParallel={ungroupParallel} addParallelMember={addParallelMember} removeParallelMember={removeParallelMember} updateParallelRule={updateParallelRule}/>}
       {node.type === "terminal" && <TerminalNodeProps node={node} updateNode={updateNode}/>}
       {node.type === "annotation" && <AnnotationProps node={node} updateNode={updateNode}/>}
     </div>
@@ -68,8 +68,17 @@ function TestNodeProps({ node, updateNode }) {
   );
 }
 
-function ParallelBlockProps({ node, updateNode, ungroupParallel }) {
+function ParallelBlockProps({ node, updateNode, ungroupParallel, addParallelMember, removeParallelMember, updateParallelRule }) {
   const tests = (node.members || []).map(m => window.SEED_TESTS.find(t => t.id === m.testId)).filter(Boolean);
+  const availableTests = window.SEED_TESTS.filter(t => !(node.members || []).some(m => m.testId === t.id));
+  const addMember = () => {
+    const picked = window.prompt(
+      "Enter a test ID to add to this parallel block.\n\nAvailable: " + availableTests.map(t => `${t.id} (${t.name})`).join(", "),
+      availableTests[0]?.id || ""
+    );
+    if (!picked) return;
+    addParallelMember?.(node.id, picked.trim());
+  };
   return (
     <div>
       <div className="props__section">
@@ -89,22 +98,30 @@ function ParallelBlockProps({ node, updateNode, ungroupParallel }) {
                 <div style={{fontSize:12, fontWeight:700}}>{t.name}</div>
                 <div style={{fontSize:11, color:"var(--fg-3)"}}>Se {t.sens.toFixed(2)} · Sp {t.spec.toFixed(2)} · {t.tat}{t.tatUnit[0]}</div>
               </div>
-              <button className="btn btn--xs btn--icon" title="Remove from block" onClick={() => window.OptiDxActions.comingSoon("Remove test from block")}><Icon name="x" size={10}/></button>
+              <button className="btn btn--xs btn--icon" title="Remove from block" onClick={() => removeParallelMember?.(node.id, t.id)}><Icon name="x" size={10}/></button>
             </div>
           ))}
-          <button className="btn btn--sm" style={{marginTop:6}} onClick={() => window.OptiDxActions.comingSoon("Add test to block")}><Icon name="plus" size={11}/>Add test to block</button>
+          <button className="btn btn--sm" style={{marginTop:6}} onClick={addMember}><Icon name="plus" size={11}/>Add test to block</button>
         </div>
       </div>
 
       <div className="props__section">
         <h4>Combined parameters</h4>
+        {(() => {
+          const maxTat = tests.length
+            ? Math.max(...tests.map(t => t.tatUnit === "min" ? t.tat : t.tatUnit === "hr" ? t.tat * 60 : t.tat * 1440))
+            : 0;
+          const sampleTypes = [...new Set(tests.map(t => t.sample))].filter(Boolean);
+          return (
         <dl className="kv">
           <dt>Combined cost</dt><dd className="mono">${tests.reduce((s,t) => s + t.cost, 0).toFixed(2)}</dd>
-          <dt>TAT (max rule)</dt><dd className="mono">{Math.max(...tests.map(t => t.tatUnit === "min" ? t.tat : t.tatUnit === "hr" ? t.tat*60 : t.tat*1440))} min</dd>
-          <dt>Sample types</dt><dd>{[...new Set(tests.map(t => t.sample))].join(", ")}</dd>
+          <dt>TAT (max rule)</dt><dd className="mono">{maxTat ? `${maxTat} min` : "n/a"}</dd>
+          <dt>Sample types</dt><dd>{sampleTypes.length ? sampleTypes.join(", ") : "n/a"}</dd>
           <dt>Max skill</dt><dd>Lab Tech</dd>
           <dt>Independence</dt><dd><span className="chip chip--info">Conditional, given D</span></dd>
         </dl>
+          );
+        })()}
       </div>
 
       <div className="props__section">
@@ -132,7 +149,10 @@ function ParallelBlockProps({ node, updateNode, ungroupParallel }) {
             </div>
           </div>
         </div>
-        <button className="btn btn--sm" style={{marginTop:10}} onClick={() => window.OptiDxActions.comingSoon("Add custom branch")}><Icon name="git-branch" size={11}/>Add custom branch</button>
+        <button className="btn btn--sm" style={{marginTop:10}} onClick={() => {
+          updateParallelRule?.(node.id, "CUSTOM");
+          window.OptiDxActions?.showToast?.("Parallel block marked as custom", "success");
+        }}><Icon name="git-branch" size={11}/>Add custom branch</button>
       </div>
 
       <div className="props__section">
@@ -192,23 +212,35 @@ function AnnotationProps({ node, updateNode }) {
 
 // ---------- Condition builder (the rich one) ----------
 function ConditionBuilder({ node, test }) {
-  const [mode, setMode] = useState("preset"); // preset | builder | custom
+  const [mode, setMode] = useState("preset");
   const [preset, setPreset] = useState("POS");
   const [op, setOp] = useState("AND");
   const [destA, setDestA] = useState("Xpert MTB/RIF Ultra");
   const [destB, setDestB] = useState("TB Unlikely");
+  const [extraClauses, setExtraClauses] = useState([]);
 
-  const presetMeta = window.RULE_PRESETS.find(r => r.id === preset);
+  const allowedPresets = node.type === "parallel"
+    ? ["POS", "NEG", "BOTH_POS", "BOTH_NEG", "DISCORD", "ANY_POS", "ALL_NEG", "CUSTOM"]
+    : ["POS", "NEG", "CUSTOM"];
+
   const naturalText = (() => {
-    if (preset === "POS")      return `If ${test.name} is positive, route to ${destA}. Otherwise, route to ${destB}.`;
-    if (preset === "NEG")      return `If ${test.name} is negative, route to ${destB}. Otherwise, route to ${destA}.`;
-    if (preset === "BOTH_POS") return `If ${test.name} AND the next test are both positive, route to ${destA}.`;
-    if (preset === "BOTH_NEG") return `If ${test.name} AND the next test are both negative, route to ${destB}.`;
-    if (preset === "DISCORD")  return `If ${test.name} and the next test disagree, route to a referee test.`;
-    if (preset === "ANY_POS")  return `If any of the tests in this group is positive, route to ${destA}.`;
-    if (preset === "ALL_NEG")  return `If all tests in this group are negative, route to ${destB}.`;
+    if (preset === "POS") return `If ${test.name} is positive, route to ${destA}. Otherwise, route to ${destB}.`;
+    if (preset === "NEG") return `If ${test.name} is negative, route to ${destB}. Otherwise, route to ${destA}.`;
+    if (preset === "BOTH_POS") return `If both tests are positive, route to ${destA}.`;
+    if (preset === "BOTH_NEG") return `If both tests are negative, route to ${destB}.`;
+    if (preset === "DISCORD") return `If the parallel results disagree, route to a referee test.`;
+    if (preset === "ANY_POS") return `If any test in the group is positive, route to ${destA}.`;
+    if (preset === "ALL_NEG") return `If all tests in the group are negative, route to ${destB}.`;
     return `If a custom Boolean expression evaluates true, route accordingly.`;
   })();
+
+  const addClause = () => {
+    setExtraClauses(items => [...items, {
+      id: `clause-${Date.now()}-${items.length}`,
+      label: `Clause ${items.length + 3}`,
+      target: "Repeat testing",
+    }]);
+  };
 
   return (
     <div className="props__section">
@@ -221,7 +253,7 @@ function ConditionBuilder({ node, test }) {
 
       {mode === "preset" && (
         <div className="cb__presets">
-          {window.RULE_PRESETS.map(r => (
+          {window.RULE_PRESETS.filter(r => allowedPresets.includes(r.id)).map(r => (
             <button key={r.id} className={"cb__preset " + (preset === r.id ? "is-active" : "")}
               onClick={() => setPreset(r.id)}>
               <span className="cb__preset-icon">
@@ -249,7 +281,19 @@ function ConditionBuilder({ node, test }) {
             <span className="cb__chip cb__chip--op">is</span>
             <span className="cb__chip cb__chip--val cb__chip--neg">negative</span>
           </div>
-          <button className="btn btn--xs" style={{marginTop:6}} onClick={() => window.OptiDxActions.comingSoon("Add clause")}><Icon name="plus" size={10}/>Add clause</button>
+          {extraClauses.map(clause => (
+            <div key={clause.id} className="cb__row">
+              <span className="cb__chip cb__chip--var">{clause.label}</span>
+              <span className="cb__chip cb__chip--op">routes to</span>
+              <select className="cb__branch-target" defaultValue={clause.target}>
+                <option>Repeat testing</option>
+                <option>Refer</option>
+                <option>TB, Treat</option>
+                <option>TB Unlikely</option>
+              </select>
+            </div>
+          ))}
+          <button className="btn btn--xs" style={{marginTop:6}} onClick={addClause}><Icon name="plus" size={10}/>Add clause</button>
         </div>
       )}
 
@@ -293,7 +337,6 @@ function ConditionBuilder({ node, test }) {
           </select>
         </div>
       </div>
-      <button className="btn btn--xs" style={{marginTop:8}} onClick={() => window.OptiDxActions.comingSoon("Add discordant / inconclusive branch")}><Icon name="plus" size={10}/>Add discordant / inconclusive branch</button>
     </div>
   );
 }

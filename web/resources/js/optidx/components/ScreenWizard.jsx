@@ -3,11 +3,81 @@ function ScreenWizard({ setScreen }) {
   const [step, setStep] = useState(0);
   const [mode, setMode] = useState(null); // null | "test" | "optimize"
   const [objective, setObjective] = useState("Balanced MCDA");
+  const [optimization, setOptimization] = useState({ status: "idle", progress: 0, stage: "", error: null });
   const steps = ["Disease", "Test library", "Constraints", "Review", "Run"];
 
-  const onContinue = () => {
+  const runOptimization = async () => {
+    if (optimization.status === "running") return;
+
+    const stages = [
+      "Preparing the test library and constraints.",
+      "Enumerating feasible pathway templates.",
+      "Calling the backend optimization engine.",
+      "Ranking the Pareto frontier candidates.",
+      "Packaging the best pathways for review.",
+    ];
+
+    setOptimization({ status: "running", progress: 8, stage: stages[0], error: null });
+    let stageIndex = 0;
+    const timer = window.setInterval(() => {
+      stageIndex = Math.min(stageIndex + 1, stages.length - 1);
+      setOptimization(current => {
+        if (current.status !== "running") return current;
+        return {
+          ...current,
+          progress: Math.min(92, current.progress + (stageIndex < 2 ? 10 : 6)),
+          stage: stages[stageIndex],
+        };
+      });
+    }, 1100);
+
+    try {
+      const payload = {
+        tests: window.SEED_TESTS.map(test => ({
+          id: test.id,
+          name: test.name,
+          sensitivity: test.sens,
+          specificity: test.spec,
+          turnaround_time: test.tat,
+          turnaround_time_unit: test.tatUnit,
+          sample_types: [test.sample],
+          skill_level: test.skill,
+          cost: test.cost,
+        })),
+        constraints: {
+          minimum_sensitivity: 0.85,
+          minimum_specificity: 0.90,
+          maximum_total_cost: 10,
+        },
+        prevalence: 0.08,
+      };
+
+      const result = await window.OptiDxActions.optimizePathways(payload);
+      window.clearInterval(timer);
+      setOptimization({
+        status: "done",
+        progress: 100,
+        stage: `Prepared ${result?.candidate_count ?? 0} candidates.`,
+        error: null,
+      });
+      window.setTimeout(() => {
+        setScreen("scenarios");
+      }, 650);
+    } catch (error) {
+      window.clearInterval(timer);
+      setOptimization({
+        status: "error",
+        progress: 0,
+        stage: "",
+        error: error?.message || "Optimization failed.",
+      });
+      window.OptiDxActions.showToast?.("Optimization failed", "error");
+    }
+  };
+
+  const onContinue = async () => {
     if (step < 4) setStep(step + 1);
-    else if (mode === "optimize") setScreen("scenarios");
+    else if (mode === "optimize") await runOptimization();
     else setScreen("canvas");
   };
 
@@ -18,13 +88,13 @@ function ScreenWizard({ setScreen }) {
         actions={<>
           <button className="btn btn--ghost" onClick={() => setScreen("home")}>Cancel</button>
           <button className="btn btn--primary" onClick={onContinue}
-            disabled={step === 4 && !mode}>
+            disabled={step === 4 && !mode || optimization.status === "running"}>
             {step < 3 ? "Continue" : step === 3 ? "Continue" : (mode === "optimize" ? "Run optimization" : mode === "test" ? "Enter canvas" : "Choose a mode")}
             <Icon name="arrow-right"/>
           </button>
         </>}
       />
-      <div style={{maxWidth:960, margin:"0 auto", padding:"28px 40px 64px"}}>
+      <div style={{maxWidth:960, margin:"0 auto", padding:"16px 40px 56px"}}>
         {/* Stepper */}
         <div className="row" style={{marginBottom:28, gap:0}}>
           {steps.map((s, i) => (
@@ -50,8 +120,51 @@ function ScreenWizard({ setScreen }) {
         {step === 2 && <WizardStep3/>}
         {step === 3 && <WizardStep4/>}
         {step === 4 && <WizardStep5 mode={mode} setMode={setMode}/>}
+        {optimization.status !== "idle" && (
+          <OptimizationOverlay optimization={optimization} />
+        )}
       </div>
     </>
+  );
+}
+
+function OptimizationOverlay({ optimization }) {
+  const currentStage = optimization.stage || "Preparing candidate pathways.";
+  return (
+    <div className="optimization-overlay">
+      <div className={"card optimization-card " + (optimization.status === "running" ? "is-running" : optimization.status === "done" ? "is-done" : optimization.status === "error" ? "is-error" : "")}>
+        <div className="row" style={{alignItems:"flex-start"}}>
+          <div className={"optimization-orb " + (optimization.status === "done" ? "is-done" : optimization.status === "error" ? "is-error" : "")}>
+            <span />
+          </div>
+          <div style={{flex:1}}>
+            <div className="sme-eyebrow" style={{marginBottom:6}}>Backend optimization</div>
+            <h3 style={{fontSize:18, marginBottom:6}}>
+              {optimization.status === "done" ? "Optimization completed" : optimization.status === "error" ? "Optimization failed" : "Finding the optimal pathway"}
+            </h3>
+            <p style={{fontSize:13, color:"var(--fg-2)", lineHeight:1.55, marginBottom:14}}>
+              {currentStage}
+            </p>
+            <div className="optimization-progress" aria-label="Optimization progress">
+              <div
+                className={"optimization-progress__bar " + (optimization.status === "running" ? "is-running" : "")}
+                style={{width: `${optimization.progress}%`}}
+              />
+            </div>
+            <div className="optimization-progress__meta">
+              <span>{optimization.status === "done" ? "Finished" : optimization.status === "error" ? "Stopped" : "Running"}</span>
+              <span>{optimization.progress}%</span>
+            </div>
+            {optimization.error && (
+              <div className="banner banner--err" style={{marginTop:12}}>
+                <Icon name="alert-triangle" size={14} className="banner__icon" />
+                <div>{optimization.error}</div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -110,7 +223,7 @@ function WizardStep5({ mode, setMode }) {
           <div>
             {mode === "test"
               ? "The canvas will open with your selected tests placed on a blank grid."
-              : "The optimizer will search up to 250 configurations and return 6 candidates along the Pareto frontier (typically < 3 seconds)."}
+              : "The optimizer will search the current test library and return the best feasible candidates along the Pareto frontier."}
           </div>
         </div>
       )}
@@ -159,6 +272,13 @@ function WizardStep1({ objective, setObjective }) {
 }
 
 function WizardStep2() {
+  const [, setLibraryRevision] = useState(0);
+  useEffect(() => {
+    const onUpdate = () => setLibraryRevision(v => v + 1);
+    window.addEventListener("optidx-tests-updated", onUpdate);
+    return () => window.removeEventListener("optidx-tests-updated", onUpdate);
+  }, []);
+
   return (
     <div className="card card--pad">
       <div className="sme-eyebrow" style={{marginBottom:6}}>Step 02</div>
@@ -167,7 +287,7 @@ function WizardStep2() {
         Add the tests you want available on the canvas. Import from evidence database or define manually.
       </p>
       <div className="row" style={{marginBottom:12, gap:8}}>
-        <button className="btn btn--primary" onClick={() => window.OptiDxActions.comingSoon("Add test") }><Icon name="plus"/>Add test</button>
+        <button className="btn btn--primary" onClick={() => window.OptiDxActions.addManualTest?.() }><Icon name="plus"/>Add test</button>
         <button className="btn" onClick={() => window.OptiDxActions.comingSoon("Import from evidence")}><Icon name="database"/>Import from evidence</button>
         <div className="spacer"/>
         <span className="u-meta">{window.SEED_TESTS.length} tests in library</span>

@@ -55,6 +55,22 @@ window.SEED_EDGES = [
   { id: "e9", from: "n4", fromPort: "neg", to: "n8", label: "Negative", kind: "inc" },
 ];
 
+window.SEED_PATHWAY = {
+  schema_version: "canvas-v1",
+  start_node: "n1",
+  metadata: {
+    label: "TB Community Screening",
+    disease: "Pulmonary TB",
+    source: "Seed data",
+  },
+  tests: Object.fromEntries(window.SEED_TESTS.map(test => [test.id, { ...test }])),
+  nodes: Object.fromEntries(window.SEED_NODES.map(node => [node.id, {
+    ...node,
+    members: Array.isArray(node.members) ? node.members.map(member => ({ ...member })) : node.members ?? null,
+  }])),
+  edges: window.SEED_EDGES.map(edge => ({ ...edge })),
+};
+
 // Decision rule presets
 window.RULE_PRESETS = [
   { id: "POS",        label: "Test is positive",        natural: "the test is positive" },

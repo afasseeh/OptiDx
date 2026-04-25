@@ -1,5 +1,41 @@
 # Change Log
 
+## 2026-04-25 - Optimization timeout and progress UI polish
+
+- Summary: Reduced optimizer candidate permutations by generating pair templates only once per unordered test pair, added a live animated optimization bar with a single current-action message, and removed the static step checklist and marketing text from the wizard overlay.
+- Files or modules affected: `web/app/Services/OptimizationService.php`, `web/resources/js/optidx/components/ScreenWizard.jsx`, `web/resources/css/optidx/app.css`, `ARCHITECTURE.md`, `FUTURE_TASKS.md`, `CHANGE_LOG.md`.
+- Reason for the change: The optimizer was still timing out on the full seed library because mirrored pair permutations made the synchronous run exceed PHP's 30-second limit, and the overlay felt static instead of reflecting the current backend action.
+- Architecture impact: Kept optimization synchronous for now but bounded the search space, and shifted the wizard from a stage list to a single live status display that mirrors the current backend step.
+- Migration or deployment impact: Rebuild the Laravel app and frontend bundle. No database migration was required.
+- Follow-up notes: `php artisan test --filter PathwayApiTest` passed, `php -l` passed on touched PHP/JS files, and a manual full-library optimize run now completes in about 21.5 seconds instead of timing out.
+
+## 2026-04-25 - Optimization payload canonicalization
+
+- Summary: Normalized wizard-sourced optimization test records inside `OptimizationService` so the backend now translates the UI seed shape into the Python engine contract before generating candidate pathways, and added a regression test for the seed-style optimize request.
+- Files or modules affected: `web/app/Services/OptimizationService.php`, `web/tests/Feature/PathwayApiTest.php`, `ARCHITECTURE.md`, `FUTURE_TASKS.md`, `CHANGE_LOG.md`.
+- Reason for the change: The optimizer was forwarding `sens` / `spec` / `tat` / `sample` / `skill` directly into the Python engine, which caused the `/api/pathways/optimize` request to fail with a 500 when the wizard sent the seed library.
+- Architecture impact: Established a backend canonicalization boundary for optimizer inputs so the browser can continue using UI-oriented fixture fields while the engine still receives the canonical pathway/test schema.
+- Migration or deployment impact: Rebuild the Laravel app and rerun the web test suite; no database migration was required.
+- Follow-up notes: `php artisan test --filter PathwayApiTest` and `php -l` on the touched PHP files both passed.
+
+## 2026-04-25 - Canonical pathway graph serializer and hydration
+
+- Summary: Replaced the Builder save/import/export path with a canonical pathway graph flow, added backend canonicalization and hydration through `PathwayGraphService`, taught the canvas to load imported pathway graphs back into the editor, and kept legacy engine-shaped pathway payloads working for API compatibility.
+- Files or modules affected: `web/app/Http/Controllers/Api/PathwayController.php`, `web/app/Services/PathwayGraphService.php`, `web/resources/js/optidx/actions.js`, `web/resources/js/optidx/components/App.jsx`, `web/resources/js/optidx/components/ScreenCanvas.jsx`, `web/resources/js/optidx/components/ScreenHome.jsx`, `web/resources/js/optidx/data.js`, `web/tests/Feature/PathwayApiTest.php`, `ARCHITECTURE.md`, `FUTURE_TASKS.md`, `CHANGE_LOG.md`.
+- Reason for the change: The Builder still relied on a pragmatic live-canvas snapshot, which risked drift between the visual editor, saved records, imports, and the backend engine contract.
+- Architecture impact: Established a canonical graph boundary between the browser and Laravel, with the backend owning graph canonicalization/engine compilation and the frontend owning serialization/hydration of the visible canvas state.
+- Migration or deployment impact: Rebuilt the Vite frontend bundle. No database migration was required.
+- Follow-up notes: `npm run build` and `php artisan test --filter PathwayApiTest` both passed after the change. The old engine-shaped pathway payloads still validate and evaluate for compatibility.
+
+## 2026-04-25 - Builder canvas routing and optimization wiring
+
+- Summary: Fixed the Builder canvas so single-test nodes no longer show parallel-only presets, branch ports now render as distinct outcome anchors, the optimization wizard calls the Laravel optimizer endpoint with a visible running overlay, save/export use the live canvas snapshot, and several formerly dead builder actions now perform real local behavior.
+- Files or modules affected: `web/resources/js/optidx/actions.js`, `web/resources/js/optidx/components/App.jsx`, `web/resources/js/optidx/components/PropertiesPanel.jsx`, `web/resources/js/optidx/components/ScreenCanvas.jsx`, `web/resources/js/optidx/components/ScreenExtras.jsx`, `web/resources/js/optidx/components/ScreenWizard.jsx`, `web/resources/css/optidx/app.css`, `ARCHITECTURE.md`, `FUTURE_TASKS.md`, `CHANGE_LOG.md`.
+- Reason for the change: The Builder still had mock actions, ambiguous branch routing, and a non-functional optimization flow, which made the canvas feel unfinished and hard to understand.
+- Architecture impact: Introduced a browser-side canvas snapshot boundary for save/export, centralized optimization orchestration in the shared action helper, and documented the runtime path from the wizard into `/api/pathways/optimize` and back into the scenarios screen.
+- Migration or deployment impact: Rebuilt the Vite frontend bundle. No database migration or backend schema change was required.
+- Follow-up notes: `npm run build` and `php artisan test --filter PathwayApiTest` both passed. The current canvas save path persists a pragmatic visual snapshot; the canonical graph serializer/deserializer remains on the future-task list.
+
 ## 2026-04-25 - Chrome password manager hints for auth forms
 
 - Summary: Added explicit `name` and `autocomplete` attributes to the login and registration inputs so browsers can correctly identify the password fields and offer saved/strong password suggestions during account creation.

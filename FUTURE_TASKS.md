@@ -47,3 +47,27 @@
 - **Improvement:** Implement the workspace collaboration backend, role-based permissions, and durable audit logging for those controls.
 - **Benefit:** Makes the Teams surface operational rather than only demonstrative.
 - **Priority:** High
+
+## 7. Optimization candidate canvas handoff
+
+- **Context:** The Builder now uses a canonical pathway graph for save/export/import and the backend can hydrate that graph back into the editor.
+- **Limitation:** Optimization scenarios are still reviewed on the results screen and then manually rebuilt or imported if the user wants to continue editing a specific candidate.
+- **Improvement:** Add one-click scenario-to-canvas loading from the results and compare screens, preserving the current canvas as a recoverable draft.
+- **Benefit:** Shortens the loop from optimizer output back to pathway refinement.
+- **Priority:** Medium
+
+## 8. Shared test-schema normalization
+
+- **Context:** The wizard still emits UI-oriented test records (`sens`, `spec`, `tat`, `sample`, `skill`) while the Python engine consumes canonical fields (`sensitivity`, `specificity`, `turnaround_time`, `sample_types`, `skill_level`).
+- **Limitation:** The backend currently performs the translation inside `OptimizationService`, which keeps the run stable but duplicates schema knowledge that also exists in the browser seed data.
+- **Improvement:** Extract a shared test-schema adapter so the frontend and backend use the same canonical mapping rules for seed data, imported libraries, and optimization payloads.
+- **Benefit:** Reduces drift between UI fixtures and backend contracts and makes future optimizer inputs easier to validate.
+- **Priority:** Medium
+
+## 9. Asynchronous optimization runner
+
+- **Context:** The optimize request now finishes under PHP's 30-second request limit by pruning mirrored pair permutations, but the run is still synchronous and takes noticeable time on the full seed library.
+- **Limitation:** The browser waits on a long HTTP request while the backend evaluates candidate pathways one by one.
+- **Improvement:** Move candidate generation/evaluation into a queued job or workflow endpoint and stream progress updates back to the UI.
+- **Benefit:** Restores the intended snappy optimization experience and removes pressure from the request timeout ceiling as the library grows.
+- **Priority:** High

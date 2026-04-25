@@ -27,6 +27,8 @@ The frontend owns:
 - client-side validation feedback
 - pathway editor state
 - request/response presentation for evaluation and optimization
+- browser-side canonical graph serialization and hydration for save/export/import
+- orchestration of the optimization run UX while the backend search executes
 
 The UI must preserve the Syreon orange/charcoal language, Carlito/Open Sans typography, and the workflow-builder visual style from UI V2.
 
@@ -63,14 +65,21 @@ The initial web integration should preserve the engine contract and extend it in
 4. Laravel invokes the Python bridge for evaluation or benchmark execution.
 5. The bridge returns metrics, warnings, and path traces.
 6. The frontend renders those results without re-deriving the mathematics.
+7. The Builder serializes the live canvas into a canonical pathway graph, and the backend stores and rehydrates that same graph shape so save/export/import stay aligned with the engine contract.
+8. The optimization wizard posts the test library and constraints to `/api/pathways/optimize`, then renders the ranked candidates returned by the Laravel optimizer service.
+9. The optimizer service normalizes the wizard's UI-shaped test records into the Python engine schema before building candidate templates, so the browser can keep using the compact seed-library field names while the backend preserves the canonical engine contract.
 
 Current bridge shape:
 
 - `web/app/Services/PythonEngineBridge.php` executes `python -m optidx_package.optidx.cli`
 - `optidx_package/optidx/cli.py` loads canonical engine payloads, evaluates them, and returns JSON
 - `web/app/Services/PathwayDefinitionService.php` performs Laravel-side graph validation before evaluation
+- `web/app/Services/PathwayGraphService.php` canonicalizes canvas graphs, hydrates saved graphs back into canvas-ready data, and compiles the engine-facing definition
+- `web/app/Services/OptimizationService.php` canonicalizes wizard test-library records into the engine contract, prunes mirrored pair permutations, and then generates/evaluates candidate pathways within the synchronous optimize request
 - `web/app/Http/Controllers/AuthController.php` owns the session-backed auth endpoints used by the React shell
 - `web/resources/js/app.js` bootstraps the browser runtime with Axios, CSRF/session defaults, and the component registry before mounting the React shell
+- `web/resources/js/optidx/actions.js` now owns the shared browser helpers for save, optimize, manual test creation, canonical pathway serialization, import hydration, and canvas export
+- `web/resources/js/optidx/components/ScreenCanvas.jsx` keeps the current canvas state mirrored on `window.OptiDxCanvasState` / `window.OptiDxCurrentPathway` so the shell can persist the live builder graph and restore imported canonical graphs
 
 ### Auth and Email
 
@@ -90,6 +99,7 @@ Important implementation details:
 - Password reset tokens are handled by Laravel's password broker.
 - The React shell reads auth state from `/auth/me` on startup and switches between auth, verified, and reset states based on query parameters.
 - `web/resources/js/optidx/actions.js` exposes a shared browser action helper for clipboard, download, and temporary UX messaging so the UI can progress from mockup screens to functional controls without duplicating logic in every component.
+- The same helper layer now also handles live Builder save/optimize actions, manual test creation, and optimization result normalization for the scenarios screen.
 - During the migration away from the prototype shell, the Vite entry also exposes the React hooks expected by the legacy component modules so the existing JSX structure can boot without a wholesale rewrite.
 
 ## Persistence Model
@@ -127,3 +137,4 @@ Implemented tables in `web/database/migrations`:
 - Docker should be documented later, but it is not the initial local runtime dependency.
 - The browser shell currently uses local file downloads for some export controls; those should be replaced with server-side DOCX/PDF generation when the reporting pipeline is finalized.
 - The signed email-verification flow assumes the app URL matches the live dev host. In local development the host is `http://127.0.0.1:8000`, which keeps signed verification links and redirects consistent during browser testing.
+- The optimization wizard currently runs synchronously in the browser request/response cycle. The optimizer is intentionally bounded by deduplicating mirrored pair templates, but a queue-backed or workflow-backed runner will be needed if the product needs the earlier sub-3-second UX target at larger test-library sizes.

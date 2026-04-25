@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\EvaluationResult;
 use App\Models\Pathway;
 use App\Services\OptimizationService;
+use App\Services\PathwayGraphService;
 use App\Services\PathwayDefinitionService;
 use App\Services\PythonEngineBridge;
 use Illuminate\Http\Request;
@@ -16,6 +17,7 @@ class PathwayController extends Controller
         private readonly PathwayDefinitionService $definitions,
         private readonly PythonEngineBridge $bridge,
         private readonly OptimizationService $optimizer,
+        private readonly PathwayGraphService $graph,
     ) {
     }
 
@@ -33,13 +35,17 @@ class PathwayController extends Controller
             'schema_version' => ['nullable', 'string', 'max:255'],
             'start_node_id' => ['nullable', 'string', 'max:255'],
             'editor_definition' => ['required', 'array'],
-            'engine_definition' => ['nullable', 'array'],
             'validation_status' => ['nullable', 'string', 'max:255'],
             'notes' => ['nullable', 'string'],
             'metadata' => ['nullable', 'array'],
         ]);
 
-        $data['engine_definition'] = $data['engine_definition'] ?? $this->definitions->normalize($data['editor_definition']);
+        $prepared = $this->prepareDefinitions($data['editor_definition'], $data['metadata'] ?? []);
+        $data['schema_version'] = $prepared['schema_version'];
+        $data['start_node_id'] = $prepared['start_node_id'];
+        $data['editor_definition'] = $prepared['editor_definition'];
+        $data['engine_definition'] = $prepared['engine_definition'];
+        $data['metadata'] = $prepared['metadata'];
 
         return response()->json(Pathway::create($data), 201);
     }
@@ -58,14 +64,18 @@ class PathwayController extends Controller
             'schema_version' => ['nullable', 'string', 'max:255'],
             'start_node_id' => ['nullable', 'string', 'max:255'],
             'editor_definition' => ['sometimes', 'array'],
-            'engine_definition' => ['nullable', 'array'],
             'validation_status' => ['nullable', 'string', 'max:255'],
             'notes' => ['nullable', 'string'],
             'metadata' => ['nullable', 'array'],
         ]);
 
         if (isset($data['editor_definition'])) {
-            $data['engine_definition'] = $data['engine_definition'] ?? $this->definitions->normalize($data['editor_definition']);
+            $prepared = $this->prepareDefinitions($data['editor_definition'], $data['metadata'] ?? []);
+            $data['schema_version'] = $prepared['schema_version'];
+            $data['start_node_id'] = $prepared['start_node_id'];
+            $data['editor_definition'] = $prepared['editor_definition'];
+            $data['engine_definition'] = $prepared['engine_definition'];
+            $data['metadata'] = $prepared['metadata'];
         }
 
         $pathway->update($data);
@@ -86,7 +96,9 @@ class PathwayController extends Controller
             'pathway' => ['required', 'array'],
         ]);
 
-        return response()->json($this->definitions->validate($payload['pathway']));
+        $prepared = $this->prepareDefinitions($payload['pathway']);
+
+        return response()->json($this->definitions->validate($prepared['engine_definition']));
     }
 
     public function evaluate(Request $request)
@@ -96,12 +108,13 @@ class PathwayController extends Controller
             'prevalence' => ['nullable', 'numeric', 'between:0,1'],
         ]);
 
-        $pathway = $this->definitions->normalize($payload['pathway']);
+        $prepared = $this->prepareDefinitions($payload['pathway']);
+        $pathway = $prepared['editor_definition'];
         if (array_key_exists('prevalence', $payload)) {
             $pathway['prevalence'] = $payload['prevalence'];
         }
 
-        $result = $this->bridge->evaluate($pathway);
+        $result = $this->bridge->evaluate($prepared['engine_definition'] + ['prevalence' => $payload['prevalence'] ?? null]);
 
         $pathwayRecord = Pathway::create([
             'name' => $pathway['metadata']['label'] ?? 'Untitled pathway',
@@ -109,7 +122,7 @@ class PathwayController extends Controller
             'schema_version' => $pathway['schema_version'] ?? 'v1',
             'start_node_id' => $pathway['start_node'] ?? null,
             'editor_definition' => $pathway,
-            'engine_definition' => $pathway,
+            'engine_definition' => $prepared['engine_definition'],
             'validation_status' => ($result['validation']['valid'] ?? true) ? 'valid' : 'invalid',
             'metadata' => $pathway['metadata'] ?? [],
         ]);
@@ -144,7 +157,8 @@ class PathwayController extends Controller
             'pathway' => ['required', 'array'],
         ]);
 
-        $pathway = $this->definitions->normalize($payload['pathway']);
+        $prepared = $this->prepareDefinitions($payload['pathway']);
+        $pathway = $prepared['editor_definition'];
 
         return response()->json(Pathway::create([
             'name' => $pathway['metadata']['label'] ?? 'Imported pathway',
@@ -152,7 +166,7 @@ class PathwayController extends Controller
             'schema_version' => $pathway['schema_version'] ?? 'v1',
             'start_node_id' => $pathway['start_node'] ?? null,
             'editor_definition' => $pathway,
-            'engine_definition' => $pathway,
+            'engine_definition' => $prepared['engine_definition'],
             'validation_status' => 'draft',
             'metadata' => $pathway['metadata'] ?? [],
         ]), 201);
@@ -160,7 +174,7 @@ class PathwayController extends Controller
 
     public function exportJson(Pathway $pathway)
     {
-        return response()->json($pathway->engine_definition ?? $pathway->editor_definition);
+        return response()->json($pathway->editor_definition ?? $pathway->engine_definition);
     }
 
     public function exportReport(Pathway $pathway)
@@ -173,5 +187,50 @@ class PathwayController extends Controller
             'format' => 'html',
         ]);
     }
-}
 
+    private function prepareDefinitions(array $definition, array $metadata = []): array
+    {
+        if ($this->looksLikeCanvasGraph($definition)) {
+            $prepared = $this->graph->canonicalizeAndCompile($definition);
+            $editorDefinition = $prepared['editor_definition'];
+            $engineDefinition = $prepared['engine_definition'];
+        } else {
+            $editorDefinition = $this->definitions->normalize($definition);
+            $engineDefinition = $editorDefinition;
+        }
+
+        $editorDefinition['metadata'] = array_replace($editorDefinition['metadata'] ?? [], $metadata);
+
+        return [
+            'schema_version' => $editorDefinition['schema_version'] ?? 'v1',
+            'start_node_id' => $editorDefinition['start_node'] ?? null,
+            'editor_definition' => $editorDefinition,
+            'engine_definition' => $engineDefinition,
+            'metadata' => $editorDefinition['metadata'] ?? [],
+        ];
+    }
+
+    private function looksLikeCanvasGraph(array $definition): bool
+    {
+        if (! empty($definition['edges'])) {
+            return true;
+        }
+
+        foreach ($definition['nodes'] ?? [] as $node) {
+            if (! is_array($node)) {
+                continue;
+            }
+
+            if (array_key_exists('testId', $node)
+                || array_key_exists('members', $node)
+                || array_key_exists('x', $node)
+                || array_key_exists('y', $node)
+                || array_key_exists('kind', $node)
+                || array_key_exists('subtype', $node)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+}

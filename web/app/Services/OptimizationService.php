@@ -61,11 +61,11 @@ class OptimizationService
             $candidates[] = $this->singleTestTemplate($id, $tests[$id]);
         }
 
-        foreach ($testIds as $first) {
-            foreach ($testIds as $second) {
-                if ($first === $second) {
-                    continue;
-                }
+        $count = count($testIds);
+        for ($i = 0; $i < $count; $i++) {
+            for ($j = $i + 1; $j < $count; $j++) {
+                $first = $testIds[$i];
+                $second = $testIds[$j];
 
                 $candidates[] = $this->serialConfirmatoryTemplate($first, $second, $tests);
                 $candidates[] = $this->parallelOrTemplate($first, $second, $tests);
@@ -184,24 +184,79 @@ class OptimizationService
 
     private function normalizeTests(array $tests): array
     {
-        if (! array_is_list($tests)) {
-            return $tests;
-        }
-
         $normalized = [];
-        foreach ($tests as $test) {
+        foreach ($tests as $key => $test) {
             if (! is_array($test)) {
                 continue;
             }
 
-            $key = $test['id'] ?? $test['name'] ?? null;
-            if (! $key) {
+            $resolvedKey = $test['id'] ?? (is_string($key) ? $key : $test['name'] ?? null);
+            if (! $resolvedKey) {
                 continue;
             }
 
-            $normalized[$key] = $test;
+            $normalized[(string) $resolvedKey] = $this->normalizeTestRecord($test);
         }
 
         return $normalized;
+    }
+
+    private function normalizeTestRecord(array $test): array
+    {
+        $sampleTypes = $test['sample_types'] ?? null;
+        if (is_string($sampleTypes)) {
+            $sampleTypes = [$sampleTypes];
+        }
+
+        if (! is_array($sampleTypes)) {
+            $sampleTypes = isset($test['sample']) ? [$test['sample']] : [];
+        }
+
+        return [
+            ...$test,
+            'sensitivity' => (float) ($test['sensitivity'] ?? $test['sens'] ?? 0),
+            'specificity' => (float) ($test['specificity'] ?? $test['spec'] ?? 0),
+            'turnaround_time' => $this->numberOrNull($test['turnaround_time'] ?? $test['tat'] ?? null),
+            'turnaround_time_unit' => $test['turnaround_time_unit'] ?? $test['tatUnit'] ?? null,
+            'sample_types' => array_values(array_filter(array_map(
+                static fn ($value) => is_string($value) ? trim($value) : (string) $value,
+                $sampleTypes
+            ), static fn (string $value) => $value !== '')),
+            'skill_level' => $this->skillLevel($test['skill_level'] ?? null, $test['skill_label'] ?? $test['skill'] ?? null),
+        ];
+    }
+
+    private function skillLevel(mixed $value, mixed $label = null): ?int
+    {
+        if (is_int($value)) {
+            return $value;
+        }
+
+        if (is_numeric($value)) {
+            return (int) $value;
+        }
+
+        $source = strtolower(trim((string) ($label ?? $value ?? '')));
+        if ($source === '') {
+            return null;
+        }
+
+        return match (true) {
+            str_contains($source, 'chw'), str_contains($source, 'self') => 1,
+            str_contains($source, 'nurse') => 2,
+            str_contains($source, 'radiographer'), str_contains($source, 'lab tech'), str_contains($source, 'lab technician') => 3,
+            str_contains($source, 'radiologist'), str_contains($source, 'specialist'), str_contains($source, 'cardiology'), str_contains($source, 'gastroenterology'), str_contains($source, 'gi specialist'), str_contains($source, 'bsl-2') => 4,
+            str_contains($source, 'bsl-3') => 5,
+            default => 3,
+        };
+    }
+
+    private function numberOrNull(mixed $value): ?float
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        return is_numeric($value) ? (float) $value : null;
     }
 }

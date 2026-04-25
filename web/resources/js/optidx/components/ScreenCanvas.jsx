@@ -29,7 +29,13 @@ function TestCard({ test, draggable = true, onDragStart }) {
 function TestLibrary({ collapsed, onToggle }) {
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("all");
+  const [, setLibraryRevision] = useState(0);
   const cats = ["all", "clinical", "imaging", "rapid", "molecular", "pathology", "biomarker"];
+  useEffect(() => {
+    const onUpdate = () => setLibraryRevision(v => v + 1);
+    window.addEventListener("optidx-tests-updated", onUpdate);
+    return () => window.removeEventListener("optidx-tests-updated", onUpdate);
+  }, []);
   const filtered = window.SEED_TESTS.filter(t =>
     (cat === "all" || t.category === cat) &&
     (!q || t.name.toLowerCase().includes(q.toLowerCase()))
@@ -40,7 +46,7 @@ function TestLibrary({ collapsed, onToggle }) {
         <div className="side__head">
           <h2>Diagnostic tests</h2>
           <div className="spacer"/>
-          <button className="btn btn--sm btn--icon" title="Add test parameter" onClick={() => window.OptiDxActions.comingSoon("Add test parameter")}><Icon name="plus" size={12}/></button>
+          <button className="btn btn--sm btn--icon" title="Add test parameter" onClick={() => window.OptiDxActions.addManualTest?.()}><Icon name="plus" size={12}/></button>
         </div>
       )}
       {collapsed && (
@@ -228,11 +234,40 @@ function NodeAnnotation({ node, onDragNode }) {
   );
 }
 
+function cloneCanvasNode(node) {
+  return {
+    ...node,
+    members: Array.isArray(node.members) ? node.members.map(member => ({ ...member })) : node.members ?? null,
+  };
+}
+
+function hydrateCanvasGraph(pathway) {
+  const normalized = window.OptiDxActions?.normalizePathwayGraph?.(pathway) || pathway || {};
+  const nodes = Array.isArray(normalized.nodes)
+    ? normalized.nodes.map(cloneCanvasNode)
+    : Object.values(normalized.nodes || {}).map(cloneCanvasNode);
+  const edges = Array.isArray(normalized.edges)
+    ? normalized.edges.map(edge => ({ ...edge }))
+    : Object.values(normalized.edges || {}).map(edge => ({ ...edge }));
+
+  return {
+    schema_version: normalized.schema_version || 'canvas-v1',
+    metadata: normalized.metadata || {},
+    start_node: normalized.start_node || nodes.find(node => node.type !== 'annotation')?.id || 'n1',
+    nodes,
+    edges,
+  };
+}
+
 // ---------- Canvas ----------
 function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
-  const [nodes, _setNodes] = useState(window.SEED_NODES.map(n => ({...n})));
-  const [edges, _setEdges] = useState(window.SEED_EDGES.map(e => ({...e})));
-  const [selected, setSelected] = useState("n3");
+  const initialGraph = hydrateCanvasGraph(window.OptiDxCanvasDraft || window.OptiDxCurrentPathway || window.SEED_PATHWAY || {
+    nodes: window.SEED_NODES,
+    edges: window.SEED_EDGES,
+  });
+  const [nodes, _setNodes] = useState(initialGraph.nodes);
+  const [edges, _setEdges] = useState(initialGraph.edges);
+  const [selected, setSelected] = useState(initialGraph.start_node);
   const [pan, setPan] = useState({ x: 20, y: -40, scale: 0.62 });
   const [rightTab, setRightTab] = useState("props"); // props | paths | validate
   const [libCollapsed, setLibCollapsed] = useState(false);
@@ -242,6 +277,42 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
   const [toast, setToast] = useState(null);
   const panRef = useRef({});
   const canvasRef = useRef(null);
+
+  useEffect(() => {
+    const canonical = window.OptiDxActions?.buildCanonicalPathway?.({
+      schema_version: window.OptiDxCanvasDraft?.schema_version || window.OptiDxCurrentPathway?.schema_version || 'canvas-v1',
+      nodes,
+      edges,
+      metadata: window.OptiDxCanvasMeta || window.OptiDxCanvasDraft?.metadata || window.OptiDxCurrentPathway?.metadata || { label: "TB Community Screening" },
+    }) || null;
+
+    window.OptiDxCanvasState = {
+      nodes: nodes.map(n => ({
+        ...n,
+        members: n.members ? n.members.map(m => ({ ...m })) : undefined,
+      })),
+      edges: edges.map(e => ({ ...e })),
+    };
+    window.OptiDxCanvasMeta = canonical?.metadata || { label: "TB Community Screening" };
+    window.OptiDxCurrentPathway = canonical;
+    window.OptiDxCanvasDraft = canonical;
+    window.SEED_PATHWAY = canonical;
+  }, [nodes, edges]);
+
+  useEffect(() => {
+    const onWorkspaceLoad = event => {
+      const source = event?.detail || window.OptiDxCurrentPathway || window.OptiDxCanvasDraft;
+      if (!source) return;
+      const graph = hydrateCanvasGraph(source);
+      _setNodes(graph.nodes);
+      _setEdges(graph.edges);
+      setSelected(graph.start_node);
+      setPan({ x: 20, y: -40, scale: 0.62 });
+    };
+
+    window.addEventListener('optidx-pathway-loaded', onWorkspaceLoad);
+    return () => window.removeEventListener('optidx-pathway-loaded', onWorkspaceLoad);
+  }, []);
 
   // ---- History (undo/redo) ----
   const historyRef = useRef({ past: [], future: [] });
@@ -359,10 +430,40 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
       const col = cols[d];
       const idx = col.indexOf(n.id);
       const colCount = col.length;
-      const xStep = 290, yStep = 200;
-      return { ...n, x: 20 + d * xStep, y: 100 + idx * yStep - (colCount - 1) * yStep / 2 + 240 };
+      const xStep = 340, yStep = 220;
+      return { ...n, x: 40 + d * xStep, y: 90 + idx * yStep - (colCount - 1) * yStep / 2 + 240 };
     }));
     flash("Auto-laid out");
+  };
+  const addParallelMember = (nodeId, testId) => {
+    const test = window.SEED_TESTS.find(t => t.id === testId);
+    if (!test) {
+      flash("Choose a valid test to add");
+      return;
+    }
+
+    setNodes(ns => ns.map(n => {
+      if (n.id !== nodeId || n.type !== "parallel") return n;
+      const members = n.members ? [...n.members] : [];
+      if (members.some(m => m.testId === testId)) {
+        flash("That test is already in the block");
+        return n;
+      }
+      flash(`Added ${test.name} to the block`);
+      return { ...n, members: [...members, { testId }] };
+    }));
+  };
+  const removeParallelMember = (nodeId, testId) => {
+    setNodes(ns => ns.map(n => {
+      if (n.id !== nodeId || n.type !== "parallel") return n;
+      const members = (n.members || []).filter(m => m.testId !== testId);
+      flash(`Removed ${window.SEED_TESTS.find(t => t.id === testId)?.name || "test"} from the block`);
+      return { ...n, members };
+    }));
+  };
+  const updateParallelRule = (nodeId, rule) => {
+    setNodes(ns => ns.map(n => n.id === nodeId && n.type === "parallel" ? { ...n, rule } : n));
+    flash("Parallel routing updated");
   };
   const groupAsParallel = () => {
     // Pick the two non-referee test nodes adjacent to selected; for the demo, use defaults
@@ -463,15 +564,15 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
     if (n.type === "test") {
       const isRef = n.kind === "referee";
       if (port === "in")  return { x: n.x, y: n.y + NH/2 };
-      if (port === "pos") return { x: n.x + NW, y: n.y + NH - 20 };
-      if (port === "neg") return { x: n.x + NW, y: n.y + NH - 20 };
+      if (port === "pos") return { x: n.x + NW, y: n.y + 92 };
+      if (port === "neg") return { x: n.x + NW, y: n.y + 114 };
       return { x: n.x + NW, y: n.y + NH/2 };
     }
     if (n.type === "parallel") {
       if (port === "in")        return { x: n.x, y: n.y + PH/2 };
-      if (port === "both_pos")  return { x: n.x + PW, y: n.y + PH - 30 };
-      if (port === "discord")   return { x: n.x + PW, y: n.y + PH - 30 };
-      if (port === "both_neg")  return { x: n.x + PW, y: n.y + PH - 30 };
+      if (port === "both_pos")  return { x: n.x + PW, y: n.y + 86 };
+      if (port === "discord")   return { x: n.x + PW, y: n.y + 126 };
+      if (port === "both_neg")  return { x: n.x + PW, y: n.y + 166 };
       return { x: n.x + PW, y: n.y + PH/2 };
     }
     if (n.type === "terminal") return { x: n.x, y: n.y + TH/2 };
@@ -480,9 +581,9 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
 
   // Smart bezier routing — gives discordance branches a visible curve
   const pathD = (a, b, kind) => {
-    const dx = Math.max(60, Math.abs(b.x - a.x) * 0.55);
-    const yOffset = kind === "disc" ? 0 : 0;
-    return `M ${a.x} ${a.y} C ${a.x + dx} ${a.y}, ${b.x - dx} ${b.y + yOffset}, ${b.x} ${b.y}`;
+    const dx = Math.max(110, Math.abs(b.x - a.x) * 0.42);
+    const yOffset = kind === "disc" ? 42 : kind === "inc" ? -26 : 0;
+    return `M ${a.x} ${a.y} C ${a.x + dx} ${a.y + yOffset}, ${b.x - dx} ${b.y - yOffset}, ${b.x} ${b.y}`;
   };
 
   const canvasStyle = variant === "B" ? {
@@ -677,7 +778,9 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
         </div>
         <div className="props__body side__body scroll" style={{padding:0}}>
           {rightTab === "props" && <PropertiesPanel selected={selected} nodes={nodes} setOpenPanel={setOpenPanel}
-            updateNode={updateNode} deleteNode={deleteSelected} duplicateNode={duplicateSelected} ungroupParallel={ungroupParallel}/>}
+            updateNode={updateNode} deleteNode={deleteSelected} duplicateNode={duplicateSelected}
+            ungroupParallel={ungroupParallel} addParallelMember={addParallelMember}
+            removeParallelMember={removeParallelMember} updateParallelRule={updateParallelRule}/>}
           {rightTab === "paths" && <PathExplorer/>}
           {rightTab === "validate" && <ValidationPanel/>}
         </div>

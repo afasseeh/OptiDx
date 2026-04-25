@@ -5,9 +5,16 @@ function ScreenHome({ setScreen }) {
       <TopBar
         crumbs={["OptiDx", "Workspace"]}
         actions={<>
-          <button className="btn" onClick={() => window.OptiDxActions.importJsonFile((pathway) => {
-            window.OptiDxActions.comingSoon("Imported pathway payload");
-          })}><Icon name="upload"/>Import JSON</button>
+          <button className="btn" onClick={async () => {
+            try {
+              await window.OptiDxActions.importJsonFile(async (pathway) => {
+                await window.OptiDxActions.loadPathwayIntoWorkspace?.(pathway);
+                setScreen("canvas");
+              });
+            } catch (error) {
+              window.OptiDxActions.showToast?.(error?.message || "Unable to import pathway", "error");
+            }
+          }}><Icon name="upload"/>Import JSON</button>
           <button className="btn btn--primary" onClick={() => setScreen("wizard")}>
             <Icon name="plus"/>New pathway
           </button>

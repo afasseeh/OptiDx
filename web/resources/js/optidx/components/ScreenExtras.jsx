@@ -5,7 +5,7 @@
 // ---------- SCENARIOS (optimization results view) --------------------------
 function ScreenScenarios({ setScreen }) {
   const [selected, setSelected] = useState(0);
-  const scenarios = [
+  const fallbackScenarios = [
     { id:"A", label:"Cost-optimal", sens:0.812, spec:0.946, cost:4.20, cpdc:51.72, tat:"2.1 h",
       notes:"Cheapest pathway that still meets minimum sensitivity.",
       tests:["WHO-4","CAD4TB","Xpert Ultra"], trade:"-0.03 sens vs balanced", tag:"Recommended for budget-constrained programs"},
@@ -25,6 +25,23 @@ function ScreenScenarios({ setScreen }) {
       notes:"Drops Xpert, uses sputum-smear microscopy only.",
       tests:["WHO-4","Chest exam","Sputum smear"], trade:"-0.07 sens · -$2.77 cost"},
   ];
+  const optimization = window.OptiDxOptimizationResults;
+  const generatedScenarios = window.OptiDxOptimizationScenarios?.length
+    ? window.OptiDxOptimizationScenarios
+    : window.OptiDxActions.buildOptimizationScenarios?.(optimization) || [];
+  const scenarios = generatedScenarios.length ? generatedScenarios : fallbackScenarios;
+  const runLabel = optimization?.candidate_count
+    ? `${optimization.candidate_count} candidates`
+    : "6 candidates";
+  const searchSpaceLabel = optimization?.candidate_count
+    ? `${optimization.feasible_count ?? optimization.candidate_count} feasible`
+    : "142 pathways";
+  const testCountLabel = optimization?.ranked_results?.[0]?.pathway?.tests
+    ? `${Object.keys(optimization.ranked_results[0].pathway.tests).length} tests`
+    : "7 tests";
+  const timeLabel = optimization?.run_ms
+    ? `${(optimization.run_ms / 1000).toFixed(1)}s`
+    : optimization ? "completed just now" : "2.1s";
   const current = scenarios[selected];
 
   return (
@@ -43,19 +60,19 @@ function ScreenScenarios({ setScreen }) {
       <div className="page" style={{maxWidth:1280}}>
         <div className="page__head">
           <div>
-            <div className="sme-eyebrow" style={{marginBottom:6}}>Optimization · 6 candidates</div>
+            <div className="sme-eyebrow" style={{marginBottom:6}}>Optimization · {runLabel}</div>
             <h1>Pathway scenarios</h1>
-            <p>The optimizer searched 142 pathway configurations and surfaced six along the Pareto frontier. Select one to load into the canvas.</p>
+            <p>{optimization ? "Backend optimization results from the latest run. Select a candidate to load it back into the canvas." : "The optimizer searched 142 pathway configurations and surfaced six along the Pareto frontier. Select one to load into the canvas."}</p>
           </div>
           <div className="row" style={{gap:12}}>
             <div style={{textAlign:"right"}}>
               <div className="u-meta">Search space</div>
-              <div style={{fontWeight:700, fontSize:13}}>142 pathways · 7 tests</div>
+              <div style={{fontWeight:700, fontSize:13}}>{searchSpaceLabel} · {testCountLabel}</div>
             </div>
             <div style={{width:1, height:32, background:"var(--edge)"}}/>
             <div style={{textAlign:"right"}}>
               <div className="u-meta">Time</div>
-              <div style={{fontWeight:700, fontSize:13}}>2.1s</div>
+              <div style={{fontWeight:700, fontSize:13}}>{timeLabel}</div>
             </div>
           </div>
         </div>

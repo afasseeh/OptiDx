@@ -103,8 +103,14 @@ function CanvasWrapper({ variant, setVariant, openPanel, setOpenPanel, setScreen
             <button className={"btn btn--sm " + (variant === "A" ? "btn--ink" : "")} onClick={() => setVariant("A")}>Layout A</button>
             <button className={"btn btn--sm " + (variant === "B" ? "btn--ink" : "")} onClick={() => setVariant("B")}>Layout B</button>
           </div>
-          <button className="btn" onClick={() => window.OptiDxActions.comingSoon("Save pathway")}><Icon name="save"/>Save</button>
-          <button className="btn" onClick={() => window.OptiDxActions.downloadJson("optidx-pathway.json", window.SEED_PATHWAY || {})}><Icon name="download"/>Export</button>
+          <button className="btn" onClick={async () => {
+            try {
+              await window.OptiDxActions.savePathway?.();
+            } catch (error) {
+              window.OptiDxActions.showToast?.(error?.message || "Unable to save pathway", "error");
+            }
+          }}><Icon name="save"/>Save</button>
+          <button className="btn" onClick={() => window.OptiDxActions.downloadJson("optidx-pathway.json", window.OptiDxCurrentPathway || window.OptiDxCanvasDraft || window.SEED_PATHWAY || {})}><Icon name="download"/>Export</button>
           <button className="btn btn--primary" onClick={() => setScreen("results")}><Icon name="play"/>Run pathway</button>
         </>}/>
       <ScreenCanvas variant={variant} openPanel={openPanel} setOpenPanel={setOpenPanel}/>
