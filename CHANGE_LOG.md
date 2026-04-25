@@ -17,3 +17,12 @@
 - Architecture impact: Added a Laravel validation layer in front of the canonical Python engine and made the UI V2 prototype compile as a React/Vite app within Laravel.
 - Migration or deployment impact: Frontend build output is generated under `web/public/build`; PHPUnit and `pytest` now cover the new API and engine behavior.
 - Follow-up notes: Optimization currently uses a bounded template generator; PDF/report export is still HTML-first.
+
+## 2026-04-25 - Project README refresh
+
+- Summary: Replaced the generic Laravel README with a project-level OptiDx README that includes the Syreon logo, a UI preview, stack summary, local run steps, and documentation maintenance rules.
+- Files or modules affected: `README.md`, `web/README.md`, `CHANGE_LOG.md`.
+- Reason: The project needed a branded top-level README that reflects the actual OptiDx web tool instead of the default Laravel boilerplate.
+- Architecture impact: None; documentation only.
+- Migration or deployment impact: None.
+- Follow-up notes: Keep the README updated whenever the `web/` app changes materially.
