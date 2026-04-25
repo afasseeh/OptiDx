@@ -1,0 +1,57 @@
+[
+  {
+    "case_id": "tb_cad_xpert_2015",
+    "title": "Pulmonary TB triage with CAD before Xpert",
+    "disease_area": "Tuberculosis",
+    "citation": "Philipsen et al., Scientific Reports 2015",
+    "expected_metrics": {
+      "sensitivity": 0.789,
+      "specificity": 0.981
+    },
+    "notes": "These values are reported for Xpert alone in the review. Use this as a calibration anchor, then compare pathway-level missed cases and cost reduction separately."
+  },
+  {
+    "case_id": "hcc_us_afp_cohort",
+    "title": "Hepatocellular carcinoma surveillance with ultrasound plus AFP",
+    "disease_area": "Hepatocellular carcinoma",
+    "citation": "Yang et al. cohort as summarized in the evidence review",
+    "expected_metrics": {
+      "sensitivity": 0.891,
+      "specificity": 0.945
+    },
+    "notes": "This is a pathway-level benchmark and is well suited for external validation."
+  },
+  {
+    "case_id": "heart_failure_ntprobnp_echo",
+    "title": "Heart failure triage with NT-proBNP before echocardiography",
+    "disease_area": "Heart failure",
+    "citation": "Primary care studies summarized in Taylor et al., BJGP 2023",
+    "expected_metrics": {
+      "sensitivity": 0.990,
+      "specificity": 0.600
+    },
+    "notes": "The review states these as cited prior-study figures. Treat as provisional until replaced by directly abstracted pathway estimates."
+  },
+  {
+    "case_id": "ovarian_rmi",
+    "title": "Ovarian mass triage using RMI I",
+    "disease_area": "Ovarian malignancy",
+    "citation": "Comparative review of RMI, ROMA, ADNEX",
+    "expected_metrics": {
+      "sensitivity": 0.850,
+      "specificity": 0.970
+    },
+    "notes": "This is a triage-model benchmark rather than a multi-step physical testing cascade."
+  },
+  {
+    "case_id": "gas_radt",
+    "title": "GAS pharyngitis with RADT",
+    "disease_area": "Group A streptococcal pharyngitis",
+    "citation": "Evidence summary cited in the review",
+    "expected_metrics": {
+      "sensitivity": 0.884,
+      "specificity": 0.910
+    },
+    "notes": "These are step-level RADT estimates. For the full child pathway, add backup culture and compare operational outcomes."
+  }
+]

@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OptiDx Diagnostic Pathway Definition",
+  "type": "object",
+  "required": ["start_node", "tests", "nodes"],
+  "properties": {
+    "start_node": {"type": "string"},
+    "tests": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["sensitivity", "specificity"],
+        "properties": {
+          "sensitivity": {"type": "number", "minimum": 0, "maximum": 1},
+          "specificity": {"type": "number", "minimum": 0, "maximum": 1},
+          "turnaround_time": {"type": ["number", "null"], "minimum": 0},
+          "sample_types": {"type": "array", "items": {"type": "string"}},
+          "skill_level": {"type": ["integer", "null"], "minimum": 0},
+          "cost": {"type": ["number", "null"], "minimum": 0},
+          "joint_probabilities": {
+            "type": "object",
+            "description": "Maps disease states D and ND to serialized joint tables"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "nodes": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": ["object", "null"],
+            "required": ["test_names"],
+            "properties": {
+              "test_names": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+              "mode": {"type": "string", "enum": ["parallel", "sequential"]},
+              "parallel_time": {"type": "boolean"}
+            },
+            "additionalProperties": false
+          },
+          "branches": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["conditions", "next_node"],
+              "properties": {
+                "conditions": {
+                  "type": "object",
+                  "additionalProperties": {"type": "string", "enum": ["pos", "neg"]}
+                },
+                "next_node": {"type": "string"}
+              },
+              "additionalProperties": false
+            }
+          },
+          "final_classification": {"type": ["string", "null"], "enum": ["positive", "negative", null]},
+          "description": {"type": ["string", "null"]}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

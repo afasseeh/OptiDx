@@ -1,0 +1,61 @@
+{
+  "start_node": "start",
+  "tests": {
+    "A": {
+      "sensitivity": 0.92,
+      "specificity": 0.85,
+      "turnaround_time": 1.0,
+      "sample_types": ["blood"],
+      "skill_level": 1,
+      "cost": 5.0
+    },
+    "B": {
+      "sensitivity": 0.88,
+      "specificity": 0.90,
+      "turnaround_time": 2.0,
+      "sample_types": ["blood"],
+      "skill_level": 2,
+      "cost": 8.0
+    },
+    "C": {
+      "sensitivity": 0.95,
+      "specificity": 0.97,
+      "turnaround_time": 8.0,
+      "sample_types": ["nasal swab"],
+      "skill_level": 3,
+      "cost": 25.0
+    }
+  },
+  "nodes": {
+    "start": {
+      "action": {
+        "test_names": ["A", "B"],
+        "mode": "parallel",
+        "parallel_time": true
+      },
+      "branches": [
+        {"conditions": {"A": "pos", "B": "pos"}, "next_node": "final_positive"},
+        {"conditions": {"A": "neg", "B": "neg"}, "next_node": "final_negative"},
+        {"conditions": {"A": "pos", "B": "neg"}, "next_node": "discordant_c"},
+        {"conditions": {"A": "neg", "B": "pos"}, "next_node": "discordant_c"}
+      ]
+    },
+    "discordant_c": {
+      "action": {
+        "test_names": ["C"],
+        "mode": "sequential",
+        "parallel_time": false
+      },
+      "branches": [
+        {"conditions": {"C": "pos"}, "next_node": "final_positive"},
+        {"conditions": {"C": "neg"}, "next_node": "final_negative"}
+      ]
+    },
+    "final_positive": {
+      "final_classification": "positive"
+    },
+    "final_negative": {
+      "final_classification": "negative"
+    }
+  }
+}

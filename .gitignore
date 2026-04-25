@@ -1,0 +1,17 @@
+# Generated Python artifacts
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Laravel / Vite artifacts
+web/vendor/
+web/node_modules/
+web/public/build/
+web/public/hot
+web/storage/*.key
+web/.phpunit.result.cache
+
+# Local environment files
+.env
+web/.env
+
