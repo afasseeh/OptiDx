@@ -274,7 +274,7 @@ function LoginForm({ onAuthed, onForgot, onNeedVerification }) {
       <div className="stack" style={{gap:14, marginBottom:20}}>
         <div className="field">
           <label className="field__label">Work email</label>
-          <input className="input" type="email" value={email} onChange={e => setEmail(e.target.value)}/>
+          <input className="input" type="email" name="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)}/>
         </div>
         <div className="field">
           <label className="field__label" style={{display:"flex", justifyContent:"space-between"}}>
@@ -283,7 +283,7 @@ function LoginForm({ onAuthed, onForgot, onNeedVerification }) {
               Forgot?
             </button>
           </label>
-          <input className="input" type="password" value={pwd} onChange={e => setPwd(e.target.value)} placeholder="Enter your password"/>
+          <input className="input" type="password" name="password" autoComplete="current-password" value={pwd} onChange={e => setPwd(e.target.value)} placeholder="Enter your password"/>
         </div>
         <label style={{display:"flex", alignItems:"center", gap:8, fontSize:12, color:"var(--fg-2)", cursor:"pointer"}}>
           <input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} style={{accentColor:"var(--sme-orange)"}}/>
@@ -405,21 +405,21 @@ function RegisterForm({ onNeedVerification }) {
         <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:10}}>
           <div className="field">
             <label className="field__label">First name</label>
-            <input className="input" value={form.first} onChange={e => upd("first", e.target.value)} required/>
+            <input className="input" name="first_name" autoComplete="given-name" value={form.first} onChange={e => upd("first", e.target.value)} required/>
           </div>
           <div className="field">
             <label className="field__label">Last name</label>
-            <input className="input" value={form.last} onChange={e => upd("last", e.target.value)} required/>
+            <input className="input" name="last_name" autoComplete="family-name" value={form.last} onChange={e => upd("last", e.target.value)} required/>
           </div>
         </div>
         <div className="field">
           <label className="field__label">Work email</label>
-          <input className="input" type="email" value={form.email} onChange={e => upd("email", e.target.value)} required/>
+          <input className="input" type="email" name="email" autoComplete="email" value={form.email} onChange={e => upd("email", e.target.value)} required/>
           <div className="field__hint">Use your organization email for automatic workspace detection.</div>
         </div>
         <div className="field">
           <label className="field__label">Password</label>
-          <input className="input" type="password" value={form.pwd} onChange={e => upd("pwd", e.target.value)} required minLength={8}/>
+          <input className="input" type="password" name="password" autoComplete="new-password" value={form.pwd} onChange={e => upd("pwd", e.target.value)} required minLength={8}/>
           <PwdMeter pwd={form.pwd}/>
         </div>
       </div>

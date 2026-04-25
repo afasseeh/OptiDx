@@ -1,5 +1,14 @@
 # Change Log
 
+## 2026-04-25 - Chrome password manager hints for auth forms
+
+- Summary: Added explicit `name` and `autocomplete` attributes to the login and registration inputs so browsers can correctly identify the password fields and offer saved/strong password suggestions during account creation.
+- Files or modules affected: `web/resources/js/optidx/components/ScreenAuth.jsx`, `CHANGE_LOG.md`.
+- Reason for the change: The registration password field rendered visually as a password input, but Chrome was not treating it as a discoverable password-creation field.
+- Architecture impact: None; this is a frontend form metadata fix that preserves the existing auth flow and backend contract.
+- Migration or deployment impact: None beyond rebuilding the frontend assets.
+- Follow-up notes: Verified with `npm run build` in `web/`.
+
 ## 2026-04-25 - SendGrid sender and host alignment
 
 - Summary: Aligned the mail sender address with the project domain, switched the local app URL to `127.0.0.1:8000`, and cleared cached config so verification links and SendGrid delivery work correctly in the live browser flow.
