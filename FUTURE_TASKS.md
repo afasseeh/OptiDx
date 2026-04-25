@@ -50,10 +50,10 @@
 
 ## 7. Optimization candidate canvas handoff
 
-- **Context:** The Builder now uses a canonical pathway graph for save/export/import and the backend can hydrate that graph back into the editor.
-- **Limitation:** Optimization scenarios are still reviewed on the results screen and then manually rebuilt or imported if the user wants to continue editing a specific candidate.
-- **Improvement:** Add one-click scenario-to-canvas loading from the results and compare screens, preserving the current canvas as a recoverable draft.
-- **Benefit:** Shortens the loop from optimizer output back to pathway refinement.
+- **Context:** The Builder now uses a canonical pathway graph for save/export/import, the backend can hydrate that graph back into the editor, and optimized candidates can already be loaded into the canvas from the scenarios view.
+- **Limitation:** Loading a candidate still replaces the active canvas state without preserving a recoverable draft of the previous working graph.
+- **Improvement:** Add explicit draft bookmarking or rollback when applying a candidate so authors can compare options without losing in-progress work.
+- **Benefit:** Keeps iterative optimizer review safer and makes it easier to bounce between alternatives.
 - **Priority:** Medium
 
 ## 8. Shared test-schema normalization
@@ -142,3 +142,11 @@
 - **Improvement:** Introduce a dedicated grouping transaction that preserves branch intent, selection state, and undo metadata in a single canonical step.
 - **Benefit:** Makes canvas grouping more deterministic and reduces the chance of subtle edge-state drift as the editor grows.
 - **Priority:** Low
+
+## 19. Optimization metric definitions in product copy
+
+- **Context:** The optimizer now surfaces fixed named buckets such as cost-effective, highest DOR, highest Balanced Accuracy, and highest Youden's J directly in the Run step.
+- **Limitation:** The UI currently exposes these names and values but does not yet provide embedded definitions or formula tooltips for non-technical users.
+- **Improvement:** Add concise inline definitions and help text for each derived optimization metric, ideally sourced from one shared glossary.
+- **Benefit:** Reduces interpretation mistakes during scenario review and keeps stakeholder-facing exports consistent with the optimizer math.
+- **Priority:** Medium

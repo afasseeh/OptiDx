@@ -283,7 +283,24 @@ class PathwayApiTest extends TestCase
         $response
             ->assertOk()
             ->assertJsonPath('candidate_count', 1)
-            ->assertJsonPath('ranked_results.0.label', 'Single test');
+            ->assertJsonPath('ranked_results.0.label', 'Single test')
+            ->assertJsonStructure([
+                'ranked_results' => [[
+                    'metrics' => [
+                        'balanced_accuracy',
+                        'youden_index',
+                        'diagnostic_odds_ratio',
+                        'cost_per_detected_case',
+                    ],
+                ]],
+                'named_rankings' => [[
+                    'key',
+                    'label',
+                    'candidate_index',
+                    'metric_name',
+                    'metric_value',
+                ]],
+            ]);
     }
 
     private function canonicalPathwayPayload(): array

@@ -108,7 +108,7 @@ function ScreenLibrary({ setScreen }) {
 }
 
 // ---------- SCENARIOS (optimization results view) --------------------------
-function ScreenScenarios({ setScreen }) {
+function LegacyScreenScenarios({ setScreen }) {
   const [selected, setSelected] = useState(0);
   const fallbackScenarios = [
     { id:"A", label:"Cost-optimal", sens:0.812, spec:0.946, cost:4.20, cpdc:51.72, tat:"2.1 h",
@@ -334,6 +334,300 @@ function ScreenScenarios({ setScreen }) {
             </button>
           </div>
         </div>
+      </div>
+    </>
+  );
+}
+
+function ScreenScenarios({ setScreen }) {
+  const [selected, setSelected] = useState(0);
+  const [sortKey, setSortKey] = useState("expected_cost_population");
+  const optimization = window.OptiDxOptimizationResults;
+  const scenarios = window.OptiDxOptimizationScenarios?.length
+    ? window.OptiDxOptimizationScenarios
+    : window.OptiDxActions.buildOptimizationScenarios?.(optimization) || [];
+  const candidates = Array.isArray(optimization?.ranked_results) ? optimization.ranked_results : [];
+  const current = scenarios[selected] || scenarios[0] || null;
+  const selectedCandidateIndex = Number(current?.candidateIndex ?? current?.candidate_index ?? -1);
+  const runLabel = optimization?.candidate_count
+    ? `${optimization.candidate_count} candidates`
+    : `${scenarios.length} named scenarios`;
+  const searchSpaceLabel = optimization?.candidate_count
+    ? `${optimization.feasible_count ?? optimization.candidate_count} feasible`
+    : `${scenarios.length} named options`;
+  const testCountLabel = optimization?.ranked_results?.[0]?.pathway?.tests
+    ? `${Object.keys(optimization.ranked_results[0].pathway.tests).length} tests`
+    : "0 tests";
+  const timeLabel = optimization?.run_ms
+    ? `${(optimization.run_ms / 1000).toFixed(1)}s`
+    : optimization ? "completed just now" : "n/a";
+
+  const sortableCandidates = [...candidates].sort((left, right) => {
+    const leftMetrics = left?.metrics || {};
+    const rightMetrics = right?.metrics || {};
+    const ascending = sortKey === "expected_cost_population"
+      || sortKey === "cost_per_detected_case"
+      || sortKey === "expected_turnaround_time_population";
+    const leftValue = Number(leftMetrics[sortKey] ?? (ascending ? Number.MAX_SAFE_INTEGER : Number.MIN_SAFE_INTEGER));
+    const rightValue = Number(rightMetrics[sortKey] ?? (ascending ? Number.MAX_SAFE_INTEGER : Number.MIN_SAFE_INTEGER));
+
+    if (leftValue !== rightValue) {
+      return ascending ? leftValue - rightValue : rightValue - leftValue;
+    }
+
+    const leftCost = Number(leftMetrics.expected_cost_population ?? Number.MAX_SAFE_INTEGER);
+    const rightCost = Number(rightMetrics.expected_cost_population ?? Number.MAX_SAFE_INTEGER);
+    if (leftCost !== rightCost) {
+      return leftCost - rightCost;
+    }
+
+    const leftTat = Number(leftMetrics.expected_turnaround_time_population ?? Number.MAX_SAFE_INTEGER);
+    const rightTat = Number(rightMetrics.expected_turnaround_time_population ?? Number.MAX_SAFE_INTEGER);
+    if (leftTat !== rightTat) {
+      return leftTat - rightTat;
+    }
+
+    return Number(left?.candidate_index ?? 0) - Number(right?.candidate_index ?? 0);
+  });
+
+  const scatterCandidates = Array.isArray(optimization?.pareto_frontier) && optimization.pareto_frontier.length
+    ? optimization.pareto_frontier
+    : candidates;
+  const scatterMaxCpdc = Math.max(
+    ...scatterCandidates.map(candidate => Number(candidate?.metrics?.cost_per_detected_case ?? 0)),
+    1,
+  );
+
+  return (
+    <>
+      <TopBar
+        crumbs={["OptiDx","TB Community Screening","Optimization scenarios"]}
+        actions={<>
+          <button className="btn" onClick={() => setScreen("wizard")}>
+            <Icon name="arrow-left"/>Back to setup
+          </button>
+          <button className="btn btn--primary" onClick={async () => {
+            const scenario = current?.pathway;
+            if (!scenario) {
+              window.OptiDxActions.showToast?.("No optimized pathway is loaded yet.", "info");
+              return;
+            }
+            try {
+              await window.OptiDxActions.loadPathwayIntoWorkspace?.(scenario);
+              setScreen("canvas");
+            } catch (error) {
+              window.OptiDxActions.showToast?.(error?.message || "Unable to open scenario", "error");
+            }
+          }}>
+            <Icon name="git-branch"/>Open scenario {current?.id || "01"}
+          </button>
+        </>}
+      />
+      <div className="page" style={{maxWidth:1280}}>
+        <div className="page__head">
+          <div>
+            <div className="sme-eyebrow" style={{marginBottom:6}}>Optimization · {runLabel}</div>
+            <h1>Pathway scenarios</h1>
+            <p>{optimization ? "Named scenario buckets are selected from the feasible optimization set after project constraints are applied. Review the fixed options first, then inspect the full candidate table and frontier." : "Run the optimizer to populate the named scenario buckets and the sortable feasible-candidate table."}</p>
+          </div>
+          <div className="row" style={{gap:12}}>
+            <div style={{textAlign:"right"}}>
+              <div className="u-meta">Search space</div>
+              <div style={{fontWeight:700, fontSize:13}}>{searchSpaceLabel} · {testCountLabel}</div>
+            </div>
+            <div style={{width:1, height:32, background:"var(--edge)"}}/>
+            <div style={{textAlign:"right"}}>
+              <div className="u-meta">Time</div>
+              <div style={{fontWeight:700, fontSize:13}}>{timeLabel}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid" style={{gridTemplateColumns:"repeat(3, minmax(0, 1fr))", gap:12, marginBottom:16}}>
+          {scenarios.map((scenario, index) => (
+            <button
+              key={scenario.key || scenario.id || index}
+              className="card"
+              onClick={() => setSelected(index)}
+              style={{
+                padding:16,
+                textAlign:"left",
+                borderColor: index === selected ? "var(--sme-orange)" : "var(--edge)",
+                boxShadow: index === selected ? "0 0 0 1px rgba(243, 119, 57, 0.18)" : undefined,
+                background: index === selected ? "var(--sme-orange-050)" : undefined,
+              }}
+            >
+              <div className="row" style={{marginBottom:8}}>
+                <div className="u-meta">{scenario.id}</div>
+                <div className="spacer"/>
+                <span className="chip chip--outline">{scenario.metricDisplay}</span>
+              </div>
+              <div style={{fontWeight:700, fontSize:14, marginBottom:6}}>{scenario.label}</div>
+              <div className="u-meta" style={{marginBottom:10}}>{String(scenario.metricName || "ranked metric").split("_").join(" ")}</div>
+              <div style={{fontSize:12, color:"var(--fg-2)", lineHeight:1.45}}>{scenario.notes}</div>
+            </button>
+          ))}
+          {!scenarios.length && (
+            <div className="card" style={{padding:16, gridColumn:"1 / -1", color:"var(--fg-3)"}}>
+              No optimization scenarios are available yet.
+            </div>
+          )}
+        </div>
+
+        <div className="grid" style={{gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:16}}>
+          <div className="card" style={{padding:16}}>
+            <div className="row" style={{marginBottom:10}}>
+              <h3 style={{fontSize:13}}>Cost per detected case × Sensitivity</h3>
+              <div className="spacer"/>
+              <span className="u-meta">Pareto frontier</span>
+            </div>
+            <svg viewBox="0 0 520 280" width="100%" height="280">
+              <defs>
+                <pattern id="gridp-v2" width="52" height="28" patternUnits="userSpaceOnUse">
+                  <path d="M52 0 L 0 0 0 28" stroke="#E2E4E6" strokeWidth="0.5" fill="none"/>
+                </pattern>
+              </defs>
+              <rect x="40" y="20" width="460" height="220" fill="url(#gridp-v2)"/>
+              <line x1="40" y1="240" x2="500" y2="240" stroke="var(--edge-2)"/>
+              <line x1="40" y1="20" x2="40" y2="240" stroke="var(--edge-2)"/>
+              <text x="270" y="268" textAnchor="middle" fontSize="10" fill="var(--fg-3)" style={{letterSpacing:"0.1em"}}>COST PER DETECTED CASE (USD) →</text>
+              <text x="20" y="130" textAnchor="middle" fontSize="10" fill="var(--fg-3)" transform="rotate(-90 20 130)" style={{letterSpacing:"0.1em"}}>SENSITIVITY →</text>
+              {scatterCandidates.map((candidate, index) => {
+                const metrics = candidate?.metrics || {};
+                const cpdc = Number(metrics.cost_per_detected_case ?? 0);
+                const sens = Number(metrics.sensitivity ?? 0);
+                const x = 40 + (cpdc / scatterMaxCpdc) * 460;
+                const y = 240 - (Math.max(0, Math.min(1, sens)) * 220);
+                const candidateIndex = Number(candidate?.candidate_index ?? index);
+                const isSel = candidateIndex === selectedCandidateIndex;
+                return (
+                  <g key={candidateIndex}>
+                    <circle cx={x} cy={y} r={isSel ? 10 : 7}
+                      fill={isSel ? "var(--sme-orange)" : "#fff"}
+                      stroke={isSel ? "var(--sme-orange)" : "var(--sme-ink-600)"}
+                      strokeWidth="1.5"/>
+                    <text x={x} y={y+3} textAnchor="middle" fontSize="10" fontWeight="700"
+                      fill={isSel ? "#fff" : "var(--sme-ink-900)"}>{candidateIndex + 1}</text>
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+
+          <div className="card" style={{padding:0}}>
+            <div className="row" style={{padding:"12px 16px", borderBottom:"1px solid var(--edge)"}}>
+              <h3 style={{fontSize:13}}>Feasible candidates</h3>
+              <div className="spacer"/>
+              <select className="select" style={{height:24, fontSize:11, width:"auto"}} value={sortKey} onChange={e => setSortKey(e.target.value)}>
+                <option value="expected_cost_population">Rank by cost / patient</option>
+                <option value="cost_per_detected_case">Rank by cost / detected case</option>
+                <option value="sensitivity">Rank by sensitivity</option>
+                <option value="diagnostic_odds_ratio">Rank by DOR</option>
+                <option value="balanced_accuracy">Rank by balanced accuracy</option>
+                <option value="youden_index">Rank by Youden&apos;s J</option>
+                <option value="expected_turnaround_time_population">Rank by turnaround time</option>
+              </select>
+            </div>
+            <table className="table">
+              <thead>
+                <tr><th>#</th><th>Candidate</th><th className="num">Sens</th><th className="num">Spec</th><th className="num">$/case</th><th className="num">TAT</th></tr>
+              </thead>
+              <tbody>
+                {sortableCandidates.map((candidate, index) => {
+                  const metrics = candidate?.metrics || {};
+                  const candidateIndex = Number(candidate?.candidate_index ?? index);
+                  const isSel = candidateIndex === selectedCandidateIndex;
+
+                  return (
+                    <tr key={candidateIndex} style={{background: isSel ? "var(--sme-orange-050)" : undefined}}>
+                      <td className="mono">{candidateIndex + 1}</td>
+                      <td><b>{candidate?.label || `Candidate ${candidateIndex + 1}`}</b></td>
+                      <td className="num mono">{((metrics.sensitivity ?? 0) * 100).toFixed(1)}%</td>
+                      <td className="num mono">{((metrics.specificity ?? 0) * 100).toFixed(1)}%</td>
+                      <td className="num mono">${Number(metrics.cost_per_detected_case ?? 0).toFixed(2)}</td>
+                      <td className="num mono">{window.OptiDxActions.normalizeTAT?.(metrics.expected_turnaround_time_population ?? null, "hr") || "n/a"}</td>
+                    </tr>
+                  );
+                })}
+                {!sortableCandidates.length && (
+                  <tr>
+                    <td colSpan="6" style={{textAlign:"center", color:"var(--fg-3)", padding:"24px 12px"}}>
+                      No feasible candidates returned from the optimizer.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {current && (
+          <div className="card" style={{padding:24, borderLeft:"3px solid var(--sme-orange)"}}>
+            <div className="row" style={{marginBottom:14}}>
+              <div style={{width:36, height:36, borderRadius:6, background:"var(--sme-orange)", color:"#fff",
+                display:"grid", placeItems:"center", fontWeight:700, fontSize:16}}>{current.id}</div>
+              <div>
+                <div className="u-meta">Named scenario {current.id}</div>
+                <h2 style={{fontSize:20, letterSpacing:"-0.01em"}}>{current.label}</h2>
+              </div>
+              <div className="spacer"/>
+              {current.metricDisplay && <span className="chip chip--orange" style={{height:24, padding:"0 10px"}}>{current.metricDisplay}</span>}
+            </div>
+            <p style={{color:"var(--fg-2)", fontSize:14, marginBottom:18, lineHeight:1.55}}>{current.notes}</p>
+
+            <div className="grid" style={{gridTemplateColumns:"repeat(6, 1fr)", gap:12, marginBottom:18}}>
+              <Metric label="Sensitivity" value={(current.sens*100).toFixed(1) + "%"}/>
+              <Metric label="Specificity" value={(current.spec*100).toFixed(1) + "%"}/>
+              <Metric label="Cost / patient" value={"$" + current.cost.toFixed(2)}/>
+              <Metric label="Cost / detected case" value={"$" + current.cpdc.toFixed(2)} accent/>
+              <Metric label="Turnaround" value={current.tat}/>
+              <Metric label="Balanced accuracy" value={(current.balancedAccuracy*100).toFixed(1) + "%"}/>
+            </div>
+
+            <div className="row" style={{gap:24, borderTop:"1px solid var(--edge)", paddingTop:14}}>
+              <div>
+                <div className="u-meta">Tests used</div>
+                <div style={{marginTop:4, display:"flex", gap:6, flexWrap:"wrap"}}>
+                  {current.tests.map(t => <span key={t} className="chip chip--outline">{t}</span>)}
+                </div>
+              </div>
+              <div style={{width:1, height:32, background:"var(--edge)"}}/>
+              <div>
+                <div className="u-meta">Ranking basis</div>
+                <div style={{fontWeight:700, fontSize:13, marginTop:4}}>{current.trade}</div>
+              </div>
+              <div className="spacer"/>
+              <button className="btn" onClick={async () => {
+                if (!current?.pathway) {
+                  window.OptiDxActions.showToast?.("No optimized pathway is loaded yet.", "info");
+                  return;
+                }
+                try {
+                  await window.OptiDxActions.duplicatePathwayRecord?.(current.pathway);
+                  window.OptiDxActions.showToast?.("Scenario duplicated as a new pathway", "success");
+                } catch (error) {
+                  window.OptiDxActions.showToast?.(error?.message || "Unable to duplicate scenario", "error");
+                }
+              }}>
+                <Icon name="copy"/>Duplicate
+              </button>
+              <button className="btn btn--primary" onClick={async () => {
+                if (!current?.pathway) {
+                  window.OptiDxActions.showToast?.("No optimized pathway is loaded yet.", "info");
+                  return;
+                }
+                try {
+                  await window.OptiDxActions.loadPathwayIntoWorkspace?.(current.pathway);
+                  setScreen("canvas");
+                } catch (error) {
+                  window.OptiDxActions.showToast?.(error?.message || "Unable to load scenario into canvas", "error");
+                }
+              }}>
+                <Icon name="git-branch"/>Load in canvas
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </>
   );

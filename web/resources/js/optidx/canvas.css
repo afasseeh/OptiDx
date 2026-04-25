@@ -155,7 +155,7 @@
 .canvas__controls button:hover { background: var(--surface-2); color: var(--fg-1); }
 
 .canvas__minimap {
-  position: absolute; top: 60px; right: 12px;
+  position: absolute; right: 12px; bottom: 60px;
   width: 160px; height: 100px;
   background: rgba(255,255,255,0.95);
   border: 1px solid var(--edge);

@@ -794,6 +794,28 @@ function normalizeGraphItems(value) {
   return [];
 }
 
+function normalizeGraphEntries(value, idKey = 'id') {
+  if (Array.isArray(value)) {
+    return value
+      .filter(item => item && typeof item === 'object')
+      .map((item, index) => ({
+        ...item,
+        [idKey]: item[idKey] ?? item.node_id ?? item.key ?? String(index),
+      }));
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.entries(value)
+      .filter(([, item]) => item && typeof item === 'object')
+      .map(([key, item]) => ({
+        ...item,
+        [idKey]: item[idKey] ?? item.node_id ?? key,
+      }));
+  }
+
+  return [];
+}
+
 function detectStartNode(nodes, edges) {
   const startNode = nodes.find(node => node?.type !== 'annotation' && !edges.some(edge => edge.to === node.id))?.id
     || nodes.find(node => node?.type !== 'annotation')?.id
@@ -862,6 +884,93 @@ function ensureRequiredTerminalNodes(nodes) {
   return nextNodes;
 }
 
+function getRequiredTerminalId(nodes, role) {
+  return nodes.find(node => node?.type === 'terminal' && node.terminalRole === role)?.id || null;
+}
+
+function detectImportedTerminalRole(node) {
+  if (!node || node.type !== 'terminal') {
+    return null;
+  }
+
+  if (node.terminalRole === 'required_positive' || node.terminalRole === 'required_negative') {
+    return node.terminalRole;
+  }
+
+  const id = String(node.id || '').toLowerCase();
+  const label = String(node.label || '').toLowerCase();
+  const subtype = String(node.subtype || '').toLowerCase();
+
+  if (
+    subtype === 'pos'
+    || id.includes('final_positive')
+    || id === 'positive'
+    || label.includes('final positive')
+    || label === 'positive'
+  ) {
+    return 'required_positive';
+  }
+
+  if (
+    subtype === 'neg'
+    || id.includes('final_negative')
+    || id === 'negative'
+    || label.includes('final negative')
+    || label === 'negative'
+  ) {
+    return 'required_negative';
+  }
+
+  return null;
+}
+
+function normalizeImportedTerminalEndpoints(nodes, edges) {
+  const nodesWithRequiredTerminals = ensureRequiredTerminalNodes(nodes);
+  const importedTerminalRoles = new Map();
+
+  nodesWithRequiredTerminals.forEach(node => {
+    const role = detectImportedTerminalRole(node);
+    if (role && !isRequiredTerminalRole(node.terminalRole)) {
+      importedTerminalRoles.set(node.id, role);
+    }
+  });
+
+  if (!importedTerminalRoles.size) {
+    return {
+      nodes: nodesWithRequiredTerminals,
+      edges,
+    };
+  }
+
+  const requiredPositiveId = getRequiredTerminalId(nodesWithRequiredTerminals, 'required_positive');
+  const requiredNegativeId = getRequiredTerminalId(nodesWithRequiredTerminals, 'required_negative');
+  const requiredTerminalTargets = {
+    required_positive: requiredPositiveId,
+    required_negative: requiredNegativeId,
+  };
+
+  const rewrittenEdges = edges.map(edge => {
+    const role = importedTerminalRoles.get(edge.to);
+    const targetId = role ? requiredTerminalTargets[role] : null;
+
+    if (!targetId || edge.to === targetId) {
+      return { ...edge };
+    }
+
+    return {
+      ...edge,
+      to: targetId,
+    };
+  });
+
+  const normalizedNodes = nodesWithRequiredTerminals.filter(node => !importedTerminalRoles.has(node.id));
+
+  return {
+    nodes: normalizedNodes,
+    edges: rewrittenEdges,
+  };
+}
+
 function createStarterCanvasGraph() {
   const nodes = ensureRequiredTerminalNodes([]);
 
@@ -881,9 +990,9 @@ function createStarterCanvasGraph() {
 
 function normalizePathwayGraph(pathway) {
   const graph = pathway?.editor_definition || pathway?.engine_definition || pathway || {};
-  const nodes = normalizeGraphItems(graph.nodes);
-  const edges = normalizeGraphItems(graph.edges);
-  const tests = normalizeGraphItems(graph.tests);
+  const nodes = normalizeGraphEntries(graph.nodes);
+  const edges = normalizeGraphEntries(graph.edges);
+  const tests = normalizeGraphEntries(graph.tests);
 
   return {
     schema_version: graph.schema_version || 'canvas-v1',
@@ -1150,7 +1259,12 @@ function buildCanvasDraftFromPathway(pathway) {
     }
   }
 
-  const laidOutNodes = ensureRequiredTerminalNodes(layoutCanvasGraph(convertedNodes, convertedEdges, normalized.start_node));
+  const normalizedImportedGraph = normalizeImportedTerminalEndpoints(convertedNodes, convertedEdges);
+  const laidOutNodes = layoutCanvasGraph(
+    normalizedImportedGraph.nodes,
+    normalizedImportedGraph.edges,
+    normalized.start_node,
+  );
 
   return {
     schema_version: normalized.schema_version || 'canvas-v1',
@@ -1158,7 +1272,7 @@ function buildCanvasDraftFromPathway(pathway) {
     metadata: normalized.metadata || {},
     tests: normalized.tests || {},
     nodes: laidOutNodes,
-    edges: convertedEdges,
+    edges: normalizedImportedGraph.edges,
   };
 }
 
@@ -1268,8 +1382,76 @@ function scenarioTitle(index, label) {
   return titles[index] || `Candidate ${index + 1}`;
 }
 
+function formatScenarioMetric(metricName, value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return 'n/a';
+  }
+
+  if (metricName === 'sensitivity' || metricName === 'specificity' || metricName === 'balanced_accuracy' || metricName === 'youden_index') {
+    return `${(numeric * 100).toFixed(1)}%`;
+  }
+
+  if (metricName === 'expected_cost_population' || metricName === 'cost_per_detected_case') {
+    return `$${numeric.toFixed(2)}`;
+  }
+
+  if (metricName === 'expected_turnaround_time_population') {
+    return normalizeTAT(numeric, 'hr');
+  }
+
+  if (metricName === 'diagnostic_odds_ratio') {
+    return numeric >= 1_000_000_000 ? 'Very high' : numeric.toFixed(2);
+  }
+
+  return numeric.toFixed(2);
+}
+
 function buildOptimizationScenarios(result) {
-  const ranked = Array.isArray(result?.ranked_results) ? result.ranked_results : [];
+  const namedRankings = Array.isArray(result?.named_rankings) ? result.named_rankings : [];
+  const rankedResults = Array.isArray(result?.ranked_results) ? result.ranked_results : [];
+
+  if (namedRankings.length && rankedResults.length) {
+    return namedRankings.map((ranking, index) => {
+      const candidate = rankedResults[ranking?.candidate_index] || null;
+      const metrics = candidate?.metrics || {};
+      const pathway = candidate?.pathway?.editor_definition
+        || candidate?.pathway?.engine_definition
+        || candidate?.pathway
+        || {};
+      const testNames = Object.keys(pathway.tests || {});
+      const metricName = ranking?.metric_name || 'expected_cost_population';
+      const metricValue = metrics[metricName] ?? ranking?.metric_value ?? null;
+
+      return {
+        id: String(index + 1).padStart(2, '0'),
+        key: ranking?.key || `ranking_${index + 1}`,
+        label: ranking?.label || scenarioTitle(index, candidate?.label),
+        metricName,
+        metricValue,
+        metricDisplay: formatScenarioMetric(metricName, metricValue),
+        candidateIndex: ranking?.candidate_index ?? index,
+        sens: Number(metrics.sensitivity ?? 0),
+        spec: Number(metrics.specificity ?? 0),
+        cost: Number(metrics.expected_cost_population ?? metrics.expected_cost_given_disease ?? 0),
+        cpdc: Number(metrics.cost_per_detected_case ?? 0),
+        balancedAccuracy: Number(metrics.balanced_accuracy ?? 0),
+        youdenIndex: Number(metrics.youden_index ?? 0),
+        diagnosticOddsRatio: Number(metrics.diagnostic_odds_ratio ?? 0),
+        tatHours: Number(metrics.expected_turnaround_time_population ?? metrics.expected_turnaround_time_given_disease ?? 0),
+        tat: normalizeTAT(metrics.expected_turnaround_time_population ?? metrics.expected_turnaround_time_given_disease ?? null, 'hr'),
+        notes: candidate?.warnings?.[0] || `${ranking?.label || 'Scenario'} selected from feasible candidates that satisfy the active project constraints.`,
+        tests: testNames.map(id => window.SEED_TESTS?.find(test => test.id === id)?.name || id),
+        trade: `${ranking?.label || 'Scenario'} ranked by ${metricName.replaceAll('_', ' ')}`,
+        tag: ranking?.label || 'Optimizer output',
+        pathway: pathway && Object.keys(pathway).length ? buildCanvasDraftFromPathway(pathway) : null,
+      };
+    });
+  }
+
+  const ranked = Array.isArray(result?.pareto_frontier) && result.pareto_frontier.length
+    ? result.pareto_frontier
+    : Array.isArray(result?.ranked_results) ? result.ranked_results : [];
   return ranked.slice(0, 6).map((entry, index) => {
     const metrics = entry?.metrics || {};
     const sens = Number(metrics.sensitivity ?? 0);
@@ -1277,7 +1459,10 @@ function buildOptimizationScenarios(result) {
     const cost = Number(metrics.expected_cost_population ?? metrics.expected_cost_given_disease ?? 0);
     const tat = metrics.expected_turnaround_time_population ?? metrics.expected_turnaround_time_given_disease ?? null;
     const cpdc = sens > 0 ? cost / Math.max(sens * 0.08, 0.001) : cost;
-    const pathway = entry?.pathway || {};
+    const pathway = entry?.pathway?.editor_definition
+      || entry?.pathway?.engine_definition
+      || entry?.pathway
+      || {};
     const testNames = Object.keys(pathway.tests || {});
 
     return {
@@ -1404,7 +1589,7 @@ async function evaluatePathway(pathway = null, prevalence = null) {
 
 async function loadPathwayIntoWorkspace(pathway) {
   const response = await request('post', '/api/pathways/import', { pathway });
-  const canvasDraft = buildCanvasDraftFromPathway(pathway);
+  const canvasDraft = buildCanvasDraftFromPathway(response?.editor_definition || response?.engine_definition || pathway);
   window.OptiDxImportedPathway = response;
   window.OptiDxCurrentPathwayRecord = normalizePathwayRecord(response);
   setActivePathwayDraft(canvasDraft);
@@ -1597,6 +1782,7 @@ window.OptiDxActions = {
   setActivePathwayDraft,
   createStarterCanvasGraph,
   showToast,
+  normalizeTAT,
   copyText,
   copyShareLink,
   ensureBlobDownload,

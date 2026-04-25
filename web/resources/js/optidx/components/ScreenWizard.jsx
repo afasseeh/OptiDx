@@ -1,4 +1,12 @@
 // Wizard — New pathway setup (4 steps)
+const OPTIMIZATION_STAGES = [
+  "Preparing the test library and constraints.",
+  "Enumerating feasible pathway templates.",
+  "Calling the backend optimization engine.",
+  "Ranking the Pareto frontier candidates.",
+  "Packaging the best pathways for review.",
+];
+
 function ScreenWizard({ setScreen }) {
   const [step, setStep] = useState(() => Number(window.OptiDxWizardStep ?? 0) || 0);
   const [mode, setMode] = useState(null); // null | "test" | "optimize"
@@ -14,27 +22,21 @@ function ScreenWizard({ setScreen }) {
   const runOptimization = async () => {
     if (optimization.status === "running") return;
 
-    const stages = [
-      "Preparing the test library and constraints.",
-      "Enumerating feasible pathway templates.",
-      "Calling the backend optimization engine.",
-      "Ranking the Pareto frontier candidates.",
-      "Packaging the best pathways for review.",
-    ];
-
-    setOptimization({ status: "running", progress: 8, stage: stages[0], error: null });
+    const startedAt = performance.now();
+    const minimumVisibleMs = 1200;
+    setOptimization({ status: "running", progress: 12, stage: OPTIMIZATION_STAGES[0], error: null });
     let stageIndex = 0;
     const timer = window.setInterval(() => {
-      stageIndex = Math.min(stageIndex + 1, stages.length - 1);
+      stageIndex = Math.min(stageIndex + 1, OPTIMIZATION_STAGES.length - 1);
       setOptimization(current => {
         if (current.status !== "running") return current;
         return {
           ...current,
-          progress: Math.min(92, current.progress + (stageIndex < 2 ? 10 : 6)),
-          stage: stages[stageIndex],
+          progress: Math.min(92, current.progress + (stageIndex < 2 ? 12 : 8)),
+          stage: OPTIMIZATION_STAGES[stageIndex],
         };
       });
-    }, 1100);
+    }, 850);
 
     try {
       const payload = {
@@ -59,11 +61,15 @@ function ScreenWizard({ setScreen }) {
       };
 
       const result = await window.OptiDxActions.optimizePathways(payload);
+      const elapsed = performance.now() - startedAt;
+      if (elapsed < minimumVisibleMs) {
+        await new Promise(resolve => window.setTimeout(resolve, minimumVisibleMs - elapsed));
+      }
       window.clearInterval(timer);
       setOptimization({
         status: "done",
         progress: 100,
-        stage: `Prepared ${result?.candidate_count ?? 0} candidates.`,
+        stage: `Prepared ${result?.pareto_frontier?.length ?? result?.candidate_count ?? 0} candidates.`,
         error: null,
       });
       window.setTimeout(() => {
@@ -139,6 +145,7 @@ function ScreenWizard({ setScreen }) {
 
 function OptimizationOverlay({ optimization }) {
   const currentStage = optimization.stage || "Preparing candidate pathways.";
+  const currentStageIndex = Math.max(0, OPTIMIZATION_STAGES.findIndex(stage => stage === currentStage));
   return (
     <div className="optimization-overlay">
       <div className={"card optimization-card " + (optimization.status === "running" ? "is-running" : optimization.status === "done" ? "is-done" : optimization.status === "error" ? "is-error" : "")}>
@@ -154,7 +161,17 @@ function OptimizationOverlay({ optimization }) {
             <p style={{fontSize:13, color:"var(--fg-2)", lineHeight:1.55, marginBottom:14}}>
               {currentStage}
             </p>
-            <div className="optimization-progress" aria-label="Optimization progress">
+            <div className="optimization-progress__steps" aria-hidden="true">
+              {OPTIMIZATION_STAGES.map((stage, index) => (
+                <span
+                  key={stage}
+                  className={"optimization-progress__step" + (index <= currentStageIndex ? " is-active" : "")}
+                >
+                  {index + 1}
+                </span>
+              ))}
+            </div>
+            <div className="optimization-progress" aria-label="Optimization progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(optimization.progress || 0)}>
               <div
                 className={"optimization-progress__bar " + (optimization.status === "running" ? "is-running" : "")}
                 style={{width: `${optimization.progress}%`}}

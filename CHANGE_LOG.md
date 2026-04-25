@@ -1,5 +1,14 @@
 # Change Log
 
+## 2026-04-26 - Optimization grammar expansion and canvas hydration fix
+
+- Summary: Expanded the Laravel optimizer from a narrow pair-only search into a bounded diagnostic grammar covering single-test, serial, parallel, and discordant-referee candidates, ranked the feasible set with a Pareto frontier, preserved node ids when hydrating engine-style pathway payloads into canvas drafts, and replaced the wizard's thin loading state with a fixed orange-accented progress overlay.
+- Files or modules affected: `web/app/Services/OptimizationService.php`, `web/resources/js/optidx/actions.js`, `web/resources/js/optidx/components/ScreenWizard.jsx`, `web/resources/js/optidx/app.css`, `web/tests/Unit/OptimizationServiceTest.php`, `ARCHITECTURE.md`, `FUTURE_TASKS.md`, `CHANGE_LOG.md`.
+- Reason for the change: The optimizer was returning too few candidates, the load-in-canvas action could hydrate to an empty graph when the source payload used keyed node maps, and the run-state UI did not look like a deliberate optimization progress indicator.
+- Architecture impact: The optimization service now owns a bounded grammar search plus Pareto ranking, the browser hydration layer now preserves pathway ids when rebuilding canvas drafts from engine-style payloads, and the wizard now presents a proper fixed overlay while the synchronous search is in flight.
+- Migration or deployment impact: Rebuild the Laravel app and Vite frontend bundle. No database migration was required.
+- Follow-up notes: Verified with `php artisan test --filter=OptimizationServiceTest`, `php artisan test --filter=PathwayApiTest`, `php -l` on touched PHP files, and `npm run build`.
+
 ## 2026-04-26 - Parallel-only pathway serialization and live canvas geometry sync
 
 - Summary: Fixed the builder so parallel-member snapshots are written back into the canonical pathway test catalog, which prevents parallel-only graphs from tripping false missing-test validation when the workspace catalog is stale, and updated the canvas to measure rendered port centers and minimap viewport geometry from the live DOM instead of hardcoded offsets.
@@ -314,3 +323,11 @@
 - Architecture impact: None; documentation only.
 - Migration or deployment impact: None.
 - Follow-up notes: Keep the README updated whenever the `web/` app changes materially.
+## 2026-04-26 - Named optimization buckets and endpoint-safe canvas imports
+
+- Summary: Added derived optimizer metrics and fixed named scenario buckets to the optimize API, rewired engine-style positive/negative finals onto the required canvas endpoints during import, updated the scenarios screen to render named buckets plus a sortable feasible-candidate table, and moved the canvas minimap to the bottom-right above the legend.
+- Files or modules affected: `web/app/Services/OptimizationService.php`, `web/resources/js/optidx/actions.js`, `web/resources/js/optidx/components/ScreenExtras.jsx`, `web/resources/js/optidx/canvas.css`, `web/tests/Unit/OptimizationServiceTest.php`, `web/tests/Feature/PathwayApiTest.php`, `ARCHITECTURE.md`, `FUTURE_TASKS.md`, `CHANGE_LOG.md`.
+- Reason for the change: The Run step was still using placeholder scenario ranking logic, generated pathways were loading with dummy terminal nodes instead of the required considered-positive/considered-negative endpoints, and the minimap was overlapping the canvas status ribbon.
+- Architecture impact: Promoted optimizer-derived metrics to a first-class API contract for the scenarios screen, and formalized a frontend import-normalization step that rewrites generated terminal endpoints onto the builder's required endpoint model before layout.
+- Migration or deployment impact: Rebuild the Laravel frontend bundle and rerun the Laravel test suite. No database migration was required.
+- Follow-up notes: Validation was rerun after the change; metric help text remains on the future-task list.

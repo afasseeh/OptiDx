@@ -35,6 +35,8 @@ The frontend owns:
 - shared workspace bootstrap state for persisted pathways, diagnostic tests, and scoped settings
 - current-pathway record selection, duplication, and hydration into the live canvas
 - request/response presentation for evaluation and optimization
+- optimization candidate imports now preserve engine-style node ids during frontend hydration, so optimized pathways and imported records can render in the builder even when the source payload uses keyed object maps
+- the optimization overlay uses a fixed orange-accented progress card with staged feedback while the synchronous search runs
 - results analysis now collapses disease-present and disease-absent cohort outputs into unique human-readable pathways, then renders probability-weighted cost and turnaround summaries from that deduplicated path set
 - browser-side canonical graph serialization and hydration for save/export/import
 - the new-project wizard now owns the diagnostic test library step, including a shared modal-backed create/update/delete editor and evidence imports that preserve the source test name
@@ -56,7 +58,9 @@ The backend owns:
 - API responses
 - user authentication, session state, email verification, and password reset flows
 - optimization orchestration
+- bounded grammar expansion for single-test, serial, parallel, and discordant-referee optimization candidates, followed by dominance ranking of the feasible set and Pareto frontier
 - optimization candidate filtering, synchronous batching, and ranking within the optimize request
+- derived optimization metrics and fixed named scenario buckets, including cost per detected case, Balanced Accuracy, Youden's J, and DOR-based ranking over the feasible candidate set
 - report generation jobs and export-file assembly for PDF/DOCX downloads
 - bridge calls to the Python evaluator
 - canonical compilation of parallel-block member occurrences into unique aliases so duplicate tests in the same block survive engine compilation without collapsing onto a single result key
@@ -86,12 +90,12 @@ The initial web integration should preserve the engine contract and extend it in
 7. The shared browser action layer stores the latest evaluation payload and a normalized evaluation view on `window.OptiDxLatestEvaluationResult` / `window.OptiDxLatestEvaluationView`, and the Results and Trace screens render from that live state instead of the bundled seed example once a run has completed.
 - The results view layer now deduplicates disease-present and disease-absent path cohorts into unique pathway signatures, rewrites alias keys into human test names, and computes weighted cost/TAT summaries from the resulting unique path set.
 8. The Builder serializes the live canvas into a canonical pathway graph, and the backend stores and rehydrates that same graph shape so save/export/import stay aligned with the engine contract.
-9. The optimization wizard posts the test library and constraints to `/api/pathways/optimize`, and Laravel prunes ineligible test samples, batches candidate evaluation through the Python bridge in a single process, then renders the ranked candidates returned by the optimizer service.
-10. The optimizer service normalizes the wizard's UI-shaped test records into the Python engine schema before building candidate templates, then sends the validated template set through one Python batch call so the browser can keep using the compact seed-library field names while the backend preserves the canonical engine contract.
+9. The optimization wizard posts the test library and constraints to `/api/pathways/optimize`, and Laravel prunes ineligible test samples, expands a bounded diagnostic grammar, batches candidate evaluation through the Python bridge in a single process, then renders the ranked candidates and Pareto frontier returned by the optimizer service.
+10. The optimizer service normalizes the wizard's UI-shaped test records into the Python engine schema before building single-test, serial, parallel, and discordant-referee templates, then sends the validated template set through one Python batch call so the browser can keep using the compact seed-library field names while the backend preserves the canonical engine contract.
 11. On authenticated load, the browser action layer fetches `/api/pathways`, `/api/evidence/tests`, and `/api/settings` once, then keeps the normalized workspace snapshot on `window.OptiDxWorkspace` so the Home, Wizard, Library, Evidence, Scenario, and Settings screens operate from persisted records instead of static seed arrays.
 12. The Builder and Results actions treat the active pathway record as first-class state; when a saved pathway is opened or re-evaluated, the backend preserves the existing pathway row and attaches the new evaluation to that record instead of creating a disconnected duplicate.
 13. Report exports are server-generated on demand: the controller materializes a real PDF or DOCX download from the current pathway and its latest evaluation payload rather than streaming browser-generated text files.
-14. Optimization candidates and imported engine-style pathway records are converted into canvas-ready builder graphs in the browser before they are mounted, so the canvas always receives node types, edge ports, and layout coordinates instead of a raw engine template.
+14. Optimization candidates and imported engine-style pathway records are converted into canvas-ready builder graphs in the browser before they are mounted, with keyed object maps preserving their node ids during hydration so the canvas always receives node types, edge ports, and layout coordinates instead of a raw engine template or an empty graph.
 
 Current bridge shape:
 
@@ -99,14 +103,17 @@ Current bridge shape:
 - `optidx_package/optidx/cli.py` loads canonical engine payloads, evaluates them, and returns JSON
 - `web/app/Services/PathwayDefinitionService.php` performs Laravel-side graph validation before evaluation
 - `web/app/Services/PathwayGraphService.php` canonicalizes canvas graphs, hydrates saved graphs back into canvas-ready data, and compiles the engine-facing definition
-- `web/app/Services/OptimizationService.php` canonicalizes wizard test-library records into the engine contract, prunes mirrored pair permutations, and then generates/evaluates candidate pathways within the synchronous optimize request
+- `web/app/Services/OptimizationService.php` canonicalizes wizard test-library records into the engine contract, expands the bounded diagnostic grammar across serial, parallel, and discordant-referee motifs, and then generates/evaluates candidate pathways within the synchronous optimize request before returning both the ranked set and Pareto frontier
+- `web/app/Services/OptimizationService.php` also enriches each feasible candidate with derived ranking metrics and emits a `named_rankings` payload so the scenarios screen can render deterministic fixed buckets instead of relying on placeholder titles or array position
 - `web/app/Http/Controllers/AuthController.php` owns the session-backed auth endpoints used by the React shell
 - `web/app/Http/Controllers/AuthController.php` resolves the authenticated user from the guard after a successful login attempt so verified accounts are not misclassified as guests inside the same request
 - `web/resources/js/app.js` bootstraps the browser runtime with Axios, CSRF/session defaults, and the component registry before mounting the React shell
 - `web/resources/js/optidx/actions.js` now owns the shared browser helpers for save, optimize, manual test creation, canonical pathway serialization, import hydration, evaluation normalization, and canvas export
 - `web/resources/js/optidx/actions.js` also bootstraps the workspace snapshot from `/api/pathways`, `/api/evidence/tests`, and `/api/settings`, tracks the active pathway record, and routes report/share/file-download interactions through the real backend endpoints
 - `web/resources/js/optidx/actions.js` also converts imported records and optimization templates into canvas-ready drafts with node types, edge ports, and layout coordinates before the builder mounts them
+- `web/resources/js/optidx/actions.js` also preserves node ids when hydrating engine-style pathway objects into canvas-ready drafts, which prevents optimized imports from collapsing into empty canvases when the source payload uses keyed object maps
 - `web/resources/js/optidx/actions.js` also injects and preserves the required builder terminal nodes (`required_positive`, `required_negative`) so every canvas draft, saved graph, and imported graph keeps the mandatory final endpoints
+- `web/resources/js/optidx/actions.js` now rewrites imported optimizer-style positive/negative terminal nodes onto those required terminal endpoints before layout, which prevents generated pathways from keeping dummy final nodes alongside the hard-coded considered-positive/considered-negative endpoints
 - `web/resources/js/optidx/actions.js` also owns the shared diagnostic-test persistence path, which normalizes manual form submissions and evidence imports into the evidence-test API schema, treats seed-library ids as non-persisted records, and refreshes the workspace library snapshot after create, update, or delete operations
 - `web/resources/js/optidx/components/ScreenResults.jsx` and `web/resources/js/optidx/components/ScreenOther.jsx` read the latest live evaluation view from shared browser state so each run can surface its own pathway metrics, path trace, and trace export
 - `web/resources/js/optidx/components/ScreenHome.jsx` renders persisted pathway records defensively, using placeholder values when summary metrics have not been populated yet so the authenticated shell stays stable while workspace records hydrate
