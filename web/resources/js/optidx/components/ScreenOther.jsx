@@ -19,7 +19,11 @@ function ScreenTrace({ setScreen }) {
   ].map(row => row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(",")).join("\n");
   return (
     <>
-      <TopBar crumbs={["OptiDx", pathwayLabel, "Path-level trace"]}
+      <TopBar crumbs={[
+        { label: "OptiDx", onClick: () => setScreen("home"), title: "Back to home" },
+        { label: pathwayLabel, onClick: () => setScreen("results"), title: "Back to results" },
+        { label: "Path-level trace" },
+      ]}
         actions={<><button className="btn" onClick={() => window.OptiDxActions.downloadText("optidx-path-trace.csv", csv)}><Icon name="download"/>CSV</button><button className="btn btn--primary" onClick={() => setScreen("results")}>Back to dashboard</button></>}/>
       <div className="page" style={{maxWidth:1440}}>
         <div className="page__head">
@@ -79,7 +83,11 @@ function ScreenCompare({ setScreen }) {
   const scenarios = window.OptiDxOptimizationScenarios?.length ? window.OptiDxOptimizationScenarios : window.SEED_COMPARE;
   return (
     <>
-      <TopBar crumbs={["OptiDx", "TB Community Screening", "Compare"]}
+      <TopBar crumbs={[
+        { label: "OptiDx", onClick: () => setScreen("home"), title: "Back to home" },
+        { label: "TB Community Screening", onClick: () => setScreen("results"), title: "Back to results" },
+        { label: "Compare" },
+      ]}
         actions={<><button className="btn" onClick={() => window.OptiDxActions.downloadJson("optidx-compare-candidates.json", scenarios)}><Icon name="download"/>Export</button><button className="btn btn--primary" onClick={async () => {
           const candidate = window.OptiDxOptimizationScenarios?.find(item => item.pathway) || null;
           if (!candidate?.pathway) {

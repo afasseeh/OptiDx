@@ -10,7 +10,6 @@ function App() {
   const [screen, setScreen] = useState("home");
   const [variant, setVariant] = useState({ canvas: "A", results: "A" });
   const [openPanel, setOpenPanel] = useState(null);
-  const [showSpec, setShowSpec] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [showTestEditor, setShowTestEditor] = useState(false);
   const [testEditorSeed, setTestEditorSeed] = useState(null);
@@ -117,18 +116,6 @@ function App() {
       />}
       {showShare && <ShareModal onClose={() => setShowShare(false)}/>}
       {showTweaks && <OptiTweaks variant={variant} setVariant={setVariant} onClose={() => { setShowTweaks(false); window.parent.postMessage({type:"__edit_mode_dismissed"},"*"); }}/>}
-
-      <button
-        onClick={() => setShowSpec(true)}
-        title="Design specification"
-        style={{position:"fixed", bottom:16, right:16, zIndex:50,
-          width:44, height:44, borderRadius:"50%", border:0,
-          background:"var(--sme-ink-900)", color:"#fff",
-          boxShadow:"var(--shadow-3)", cursor:"pointer",
-          display:"grid", placeItems:"center"}}>
-        <Icon name="file-text" size={18}/>
-      </button>
-      {showSpec && <SpecModal onClose={() => setShowSpec(false)}/>}
     </div>
   );
 }
@@ -137,7 +124,11 @@ function CanvasWrapper({ variant, setVariant, openPanel, setOpenPanel, setScreen
   return (
     <Frame fullBleed>
       <TopBar
-        crumbs={["OptiDx","TB Community Screening","Builder"]}
+        crumbs={[
+          { label: "OptiDx", onClick: () => setScreen("home"), title: "Back to home" },
+          { label: "TB Community Screening", onClick: () => setScreen("wizard"), title: "Back to project setup" },
+          { label: "Builder" },
+        ]}
         actions={<>
           <div className="btn-group" style={{marginRight:6}}>
             <button className={"btn btn--sm " + (variant === "A" ? "btn--ink" : "")} onClick={() => setVariant("A")}>Layout A</button>

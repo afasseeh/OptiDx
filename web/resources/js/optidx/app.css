@@ -247,6 +247,23 @@ input, select, textarea { font-family: inherit; font-size: inherit; color: inher
 .top__crumbs { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--fg-3); }
 .top__crumbs b { color: var(--fg-1); font-weight: 700; }
 .top__crumbs .sep { color: var(--fg-4); }
+.top__crumb-btn {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.top__crumb-btn:hover {
+  color: var(--fg-1);
+  text-decoration: underline;
+}
+.top__crumb-btn:focus-visible {
+  outline: 2px solid var(--sme-orange);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
 .top__spacer { flex: 1; }
 .top__actions { display: flex; align-items: center; gap: 8px; }
 

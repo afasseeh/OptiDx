@@ -134,3 +134,11 @@
 - **Improvement:** Sweep remaining user-facing copy and comments so the new creation flow consistently says project while reserved pathway wording stays only where it refers to the actual graph/result model.
 - **Benefit:** Keeps the product language aligned with the project-level workflow and reduces future copy drift.
 - **Priority:** Low
+
+## 18. Canvas grouping transaction hardening
+
+- **Context:** Dropping a test onto another test now promotes the target node into a parallel block, and dropping onto an existing parallel block appends a member directly.
+- **Limitation:** The current implementation uses a pragmatic in-place node conversion and simple branch remapping, which is enough for the current workflow but still heuristic for more complex graph topologies.
+- **Improvement:** Introduce a dedicated grouping transaction that preserves branch intent, selection state, and undo metadata in a single canonical step.
+- **Benefit:** Makes canvas grouping more deterministic and reduces the chance of subtle edge-state drift as the editor grows.
+- **Priority:** Low

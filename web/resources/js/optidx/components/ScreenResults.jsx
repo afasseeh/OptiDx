@@ -44,7 +44,11 @@ function ScreenResults({ variant = "A", setVariant, setScreen, onShare }) {
   return (
     <>
       <TopBar
-        crumbs={["OptiDx", pathwayLabel, "Results"]}
+        crumbs={[
+          { label: "OptiDx", onClick: () => setScreen("home"), title: "Back to home" },
+          { label: pathwayLabel, onClick: () => setScreen("canvas"), title: "Back to builder" },
+          { label: "Results" },
+        ]}
         actions={<>
         <div className="btn-group" style={{marginRight:6}}>
           <button className={"btn btn--sm " + (variant === "A" ? "btn--ink" : "")} onClick={() => setVariant && setVariant("A")}>Compact</button>

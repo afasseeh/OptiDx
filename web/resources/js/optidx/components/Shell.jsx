@@ -37,12 +37,30 @@ function TopBar({ crumbs, actions }) {
   return (
     <header className="app__top">
       <div className="top__crumbs">
-        {crumbs.map((c, i) => (
-          <React.Fragment key={i}>
-            {i > 0 && <Icon name="chevron-right" size={12} className="sep"/>}
-            <span className={i === crumbs.length - 1 ? "u-strong" : ""}>{c}</span>
-          </React.Fragment>
-        ))}
+        {crumbs.map((crumb, i) => {
+          const item = typeof crumb === "string" ? { label: crumb } : crumb;
+          const isLast = i === crumbs.length - 1;
+          const label = item?.label ?? "";
+          const canNavigate = !isLast && typeof item?.onClick === "function";
+
+          return (
+            <React.Fragment key={i}>
+              {i > 0 && <Icon name="chevron-right" size={12} className="sep"/>}
+              {canNavigate ? (
+                <button
+                  type="button"
+                  className={"top__crumb-btn" + (isLast ? " u-strong" : "")}
+                  onClick={item.onClick}
+                  title={item.title || label}
+                >
+                  {label}
+                </button>
+              ) : (
+                <span className={isLast ? "u-strong" : ""}>{label}</span>
+              )}
+            </React.Fragment>
+          );
+        })}
       </div>
       <div className="top__spacer"/>
       <div className="top__actions">{actions}</div>

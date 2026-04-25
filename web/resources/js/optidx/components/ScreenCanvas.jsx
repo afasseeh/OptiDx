@@ -36,7 +36,7 @@ function TestLibrary({ collapsed, onToggle }) {
     window.addEventListener("optidx-tests-updated", onUpdate);
     return () => window.removeEventListener("optidx-tests-updated", onUpdate);
   }, []);
-  const filtered = window.SEED_TESTS.filter(t =>
+  const filtered = getTestCatalog().filter(t =>
     (cat === "all" || t.category === cat) &&
     (!q || t.name.toLowerCase().includes(q.toLowerCase()))
   );
@@ -128,9 +128,10 @@ function NodeTestCard({ node, test, selected, onSelect, onDragNode, onDragNodeSt
 function NodeParallel({ node, selected, onSelect, onDragNode, onDragNodeStart, invalid, onPortDown, onAddMember, onRemoveMember }) {
   const drag = useRef({});
   const [isDropActive, setIsDropActive] = useState(false);
+  const testCatalog = getTestCatalog();
   const memberRows = (node.members || [])
     .map((member, index) => {
-      const test = window.SEED_TESTS.find(t => t.id === member.testId);
+      const test = testCatalog.find(t => t.id === member.testId);
       if (!test) return null;
       return {
         member,
@@ -167,7 +168,6 @@ function NodeParallel({ node, selected, onSelect, onDragNode, onDragNodeStart, i
     handleAddTest(testId);
   };
   const handleDragOver = (e) => {
-    if (!e.dataTransfer.types?.includes("text/testId")) return;
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = "copy";
@@ -319,8 +319,12 @@ function hydrateCanvasGraph(pathway) {
   };
 }
 
+function getTestCatalog() {
+  return window.OptiDxActions?.getWorkspaceTests?.() || window.SEED_TESTS || [];
+}
+
 function getNodeTest(node) {
-  return window.SEED_TESTS.find(test => test.id === node?.testId) || null;
+  return getTestCatalog().find(test => test.id === node?.testId) || null;
 }
 
 function getNodeLabel(node) {
@@ -362,6 +366,19 @@ function getEdgeForPort(edges, nodeId, port) {
 function formatMetricValue(value, formatter = null) {
   if (value == null || value === "") return "n/a";
   return formatter ? formatter(value) : String(value);
+}
+
+function formatPathMetric(value, formatter = null) {
+  if (value == null || value === "") {
+    return "n/a";
+  }
+
+  const numeric = Number(value);
+  if (Number.isNaN(numeric)) {
+    return String(value);
+  }
+
+  return formatter ? formatter(numeric) : numeric.toFixed(2);
 }
 
 function buildStructuralPaths(nodes, edges, startNode) {
@@ -541,7 +558,7 @@ function buildLiveValidation(nodes, edges, startNode, activeEvaluationView) {
   const sampleTypes = [...new Set(activeNodes.flatMap(node => {
     if (node.type === "parallel") {
       return (node.members || [])
-        .map(member => window.SEED_TESTS.find(test => test.id === member.testId)?.sample)
+        .map(member => getTestCatalog().find(test => test.id === member.testId)?.sample)
         .filter(Boolean);
     }
 
@@ -604,6 +621,7 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
   const [toast, setToast] = useState(null);
   const panRef = useRef({});
   const canvasRef = useRef(null);
+  const stageRef = useRef(null);
   const canonicalPathway = useMemo(() => window.OptiDxActions?.buildCanonicalPathway?.({
     schema_version: 'canvas-v1',
     nodes,
@@ -870,7 +888,7 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
     testId,
   });
   const addParallelMember = (nodeId, testId) => {
-    const test = window.SEED_TESTS.find(t => t.id === testId);
+    const test = getTestCatalog().find(t => t.id === testId);
     if (!test) {
       flash("Choose a valid test to add");
       return;
@@ -890,7 +908,7 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
       if (removeIndex < 0) return n;
       const removed = members[removeIndex];
       const nextMembers = [...members.slice(0, removeIndex), ...members.slice(removeIndex + 1)];
-      flash(`Removed ${window.SEED_TESTS.find(t => t.id === removed.testId)?.name || "test"} from the block`);
+      flash(`Removed ${getTestCatalog().find(t => t.id === removed.testId)?.name || "test"} from the block`);
       return { ...n, members: nextMembers };
     }));
   };
@@ -939,7 +957,12 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
   };
   const screenToStage = (clientX, clientY) => {
     const rect = canvasRef.current.getBoundingClientRect();
-    return { x: (clientX - rect.left - pan.x) / pan.scale, y: (clientY - rect.top - pan.y) / pan.scale };
+    const stageOffsetX = stageRef.current?.offsetLeft || 0;
+    const stageOffsetY = stageRef.current?.offsetTop || 0;
+    return {
+      x: (clientX - rect.left - stageOffsetX - pan.x) / pan.scale,
+      y: (clientY - rect.top - stageOffsetY - pan.y) / pan.scale,
+    };
   };
   const dragNode = (id, x, y) => {
     if (snap) { x = Math.round(x / 20) * 20; y = Math.round(y / 20) * 20; }
@@ -952,7 +975,62 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
     e.preventDefault();
     const testId = e.dataTransfer.getData("text/testId");
     if (!testId) return;
+    const catalog = getTestCatalog();
+    const droppedTest = catalog.find(test => test.id === testId);
     const { x, y } = screenToStage(e.clientX, e.clientY);
+
+    const getBounds = node => {
+      if (!node) return null;
+      if (node.type === "parallel") return { left: node.x, top: node.y, right: node.x + PW, bottom: node.y + PH };
+      if (node.type === "terminal") return { left: node.x, top: node.y, right: node.x + TW, bottom: node.y + TH };
+      if (node.type === "test") return { left: node.x, top: node.y, right: node.x + NW, bottom: node.y + NH };
+      return null;
+    };
+
+    const target = [...nodes].reverse().find(node => {
+      const bounds = getBounds(node);
+      return bounds && x >= bounds.left && x <= bounds.right && y >= bounds.top && y <= bounds.bottom;
+    });
+
+    if (target?.type === "parallel") {
+      addParallelMember(target.id, testId);
+      setSelected(target.id);
+      return;
+    }
+
+    if (target?.type === "test") {
+      const targetTest = catalog.find(test => test.id === target.testId);
+      if (!targetTest) {
+        flash("The target test is no longer available");
+        return;
+      }
+
+      setNodes(ns => ns.map(node => {
+        if (node.id !== target.id) return node;
+        return {
+          ...node,
+          type: "parallel",
+          label: node.label || "Parallel block",
+          rule: node.rule || "BOTH_POS",
+          members: [
+            makeParallelMember(target.testId),
+            makeParallelMember(testId),
+          ],
+        };
+      }));
+
+      setEdges(es => es.map(edge => {
+        if (edge.from !== target.id) return edge;
+        if (edge.fromPort === "pos") return { ...edge, fromPort: "both_pos", kind: "pos", label: "Both positive" };
+        if (edge.fromPort === "neg") return { ...edge, fromPort: "both_neg", kind: "neg", label: "Both negative" };
+        return edge;
+      }));
+
+      setSelected(target.id);
+      flash(`Grouped ${droppedTest?.name || "test"} with ${targetTest.name}`);
+      return;
+    }
+
     const newId = "n" + (Date.now() % 100000);
     setNodes(ns => [...ns, { id: newId, type:"test", testId, x: x - 100, y: y - 40 }]);
     setSelected(newId);
@@ -1097,7 +1175,7 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
           <span className="legend-item"><span className="legend-swatch legend-swatch--ref"/>Referee</span>
         </div>
 
-        <div className="canvas__stage" style={{transform:`translate(${pan.x}px, ${pan.y}px) scale(${pan.scale})`}}>
+        <div ref={stageRef} className="canvas__stage" style={{transform:`translate(${pan.x}px, ${pan.y}px) scale(${pan.scale})`}}>
           <svg className="canvas__edges" style={{width: 2400, height: 1400}}>
             <defs>
               {["pos","neg","disc","inc"].map(k => (
@@ -1146,7 +1224,7 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
           {nodes.map(n => {
             const inv = invalidIds[n.id] || (n.id === "n3" ? "info" : null);
             if (n.type === "test") {
-              const test = window.SEED_TESTS.find(t => t.id === n.testId);
+              const test = getTestCatalog().find(t => t.id === n.testId);
               if (!test) return null;
               return <NodeTestCard key={n.id} node={n} test={test}
                 selected={selected === n.id}
@@ -1266,10 +1344,10 @@ function LivePathExplorer({ paths }) {
             ))}
           </div>
           <div className="path-row__metrics">
-            <div><span>P( · | D⁺ )</span><b className="mono">{p.pIfD.toFixed(2)}</b></div>
-            <div><span>P( · | D⁻ )</span><b className="mono">{p.pIfND.toFixed(2)}</b></div>
-            <div><span>E[cost]</span><b className="mono">${p.cost.toFixed(2)}</b></div>
-            <div><span>E[TAT]</span><b className="mono">{p.tat}</b></div>
+            <div><span>P( · | D⁺ )</span><b className="mono">{formatPathMetric(p.pIfD)}</b></div>
+            <div><span>P( · | D⁻ )</span><b className="mono">{formatPathMetric(p.pIfND)}</b></div>
+            <div><span>E[cost]</span><b className="mono">${formatPathMetric(p.cost)}</b></div>
+            <div><span>E[TAT]</span><b className="mono">{formatPathMetric(p.tat)}</b></div>
           </div>
           <div className="path-row__foot">
             <span className="chip chip--outline">{p.samples}</span>

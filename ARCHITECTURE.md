@@ -24,6 +24,7 @@ The frontend owns:
 
 - screen composition
 - workflow canvas interaction
+- stage-relative drag/drop hit testing on the builder canvas, including automatic promotion of test-on-test drops into parallel blocks and member insertion when a test is dropped onto an existing parallel block
 - client-side validation feedback
 - pathway editor state
 - required terminal-endpoint enforcement for considered-positive and considered-negative outcomes, with optional inconclusive endpoints
@@ -38,6 +39,7 @@ The frontend owns:
 - parallel block member management in the Builder, including drag/drop from the diagnostic library, explicit picker controls in the inspector, and repeated use of the same diagnostic test in one block
 - orchestration of the optimization run UX while the backend search executes
 - the authenticated shell layout, which uses a beta banner row plus a single content row; page top bars live inside the screen body so the shell does not reserve an empty middle track, and the full-bleed builder/report screens use an intrinsic-height top bar with a body that fills the remaining main area
+- the shared top bar now accepts clickable crumb descriptors so screens can expose a real previous-step navigation path instead of static directory text
 
 The UI must preserve the Syreon orange/charcoal language, Carlito/Open Sans typography, and the workflow-builder visual style from UI V2.
 
@@ -106,7 +108,9 @@ Current bridge shape:
 - `web/resources/js/optidx/components/ScreenHome.jsx` renders persisted pathway records defensively, using placeholder values when summary metrics have not been populated yet so the authenticated shell stays stable while workspace records hydrate
 - `web/resources/js/optidx/components/ScreenCanvas.jsx` keeps the current canvas state mirrored on `window.OptiDxCanvasState` / `window.OptiDxCurrentPathway` so the shell can persist the live builder graph and restore imported canonical graphs
 - `web/resources/js/optidx/components/ScreenCanvas.jsx` now derives the Builder `Paths` and `Validate` tabs from the live canonical graph instead of the bundled seed fixtures, and it reuses the latest evaluation payload only when that payload matches the current graph signature
+- `web/resources/js/optidx/components/ScreenCanvas.jsx` also performs stage-relative drop hit testing so dropped tests can either become standalone nodes, be added directly into an existing parallel block, or promote an existing test node into a parallel block in place
 - `web/resources/js/optidx/components/ScreenCanvas.jsx` exposes an explicit endpoint-creation action, starts new pathway authoring sessions with the required positive/negative endpoints already placed, and prevents those required endpoints from being deleted in the builder UI
+- `web/resources/js/optidx/components/Shell.jsx` now renders clickable breadcrumb items when a screen provides navigation callbacks, which keeps the visible top-bar directory view aligned with actual screen transitions
 - `web/resources/js/optidx/components/PropertiesPanel.jsx` now binds outgoing branch selectors to the real edge graph, so changing a branch target mutates the underlying canvas edge instead of editing placeholder copy
 - `web/resources/js/optidx/components/PropertiesPanel.jsx` restricts terminal editing to the supported endpoint classes (positive, negative, inconclusive) and locks the required positive/negative endpoints so their outcome role cannot drift
 - `web/app/Http/Controllers/Api/PathwayController.php` validates the compiled engine definition before invoking Python for evaluation and returns a structured `422` validation payload when the current graph cannot be evaluated, rather than surfacing a generic bridge `500`

@@ -1,5 +1,14 @@
 # Change Log
 
+## 2026-04-26 - Builder drop grouping, safe path explorer, and breadcrumb navigation
+
+- Summary: Fixed the builder canvas drop coordinate mapping so dropped tests land in the visible stage, added hit-testing so dropping a test onto another test promotes it into a parallel block and dropping onto an existing parallel block adds a member, hardened the Paths panel so missing evaluation metrics no longer white-screen the builder, made the top ribbon breadcrumbs clickable for real back-navigation, and removed the floating design-handoff button from the shell.
+- Files or modules affected: `web/resources/js/optidx/components/ScreenCanvas.jsx`, `web/resources/js/optidx/components/Shell.jsx`, `web/resources/js/optidx/components/App.jsx`, `web/resources/js/optidx/components/ScreenResults.jsx`, `web/resources/js/optidx/components/ScreenOther.jsx`, `web/resources/js/optidx/app.css`, `ARCHITECTURE.md`, `FUTURE_TASKS.md`, `CHANGE_LOG.md`.
+- Reason for the change: The builder was accepting drops but rendering them off the visible stage or not grouping them at all, the path explorer crashed when it tried to render fallback rows without numeric metrics, the breadcrumb ribbon was static text, and the design-handoff affordance was no longer wanted across the site.
+- Architecture impact: The canvas now resolves drop targets relative to the actual stage surface and can promote or extend parallel blocks directly from drag-and-drop, while the shell top bar now supports clickable crumb descriptors instead of purely decorative directory text.
+- Migration or deployment impact: Rebuild the Vite frontend bundle so the stage hit-testing, navigation crumbs, and shell cleanup are active. No backend or database migration was required.
+- Follow-up notes: Verified with `npm run build`; the grouping transaction is documented as a low-priority follow-up in `FUTURE_TASKS.md`.
+
 ## 2026-04-26 - Wizard test library list now shows all rows
 
 - Summary: Removed the seven-row cap from the project wizard's diagnostic test table so newly added tests remain visible as the library grows.
