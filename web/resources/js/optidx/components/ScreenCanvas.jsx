@@ -4,7 +4,17 @@
 function TestCard({ test, draggable = true, onDragStart }) {
   return (
     <div className="test-card" draggable={draggable}
-      onDragStart={e => { e.dataTransfer.setData("text/testId", test.id); onDragStart && onDragStart(test); }}>
+      onDragStart={e => {
+        const payload = snapshotTestRecord(test);
+        e.dataTransfer.setData("text/testId", payload.id);
+        e.dataTransfer.setData("text/plain", payload.id);
+        e.dataTransfer.effectAllowed = "copy";
+        window.OptiDxDraggingTest = payload;
+        onDragStart && onDragStart(payload);
+      }}
+      onDragEnd={() => {
+        window.OptiDxDraggingTest = null;
+      }}>
       <div className="test-card__head">
         <div className="test-card__icon"><Icon name={test.icon} size={14}/></div>
         <div style={{flex:1, minWidth:0}}>
@@ -117,9 +127,9 @@ function NodeTestCard({ node, test, selected, onSelect, onDragNode, onDragNodeSt
         <div className="spacer"/>
         <div className="node__output neg"><span className="branch-dot branch-dot--neg"/>Negative</div>
       </div>
-      <div className="port port--in"/>
-      <div className="port port--out pos" title="Drag to wire positive branch" onMouseDown={onPortDown && onPortDown(node.id, "pos", "pos")}/>
-      <div className="port port--out neg" title="Drag to wire negative branch" onMouseDown={onPortDown && onPortDown(node.id, "neg", "neg")}/>
+      <div className="port port--in" data-port="in"/>
+      <div className="port port--out pos" data-port="pos" title="Drag to wire positive branch" onMouseDown={onPortDown && onPortDown(node.id, "pos", "pos")}/>
+      <div className="port port--out neg" data-port="neg" title="Drag to wire negative branch" onMouseDown={onPortDown && onPortDown(node.id, "neg", "neg")}/>
     </div>
   );
 }
@@ -128,11 +138,9 @@ function NodeTestCard({ node, test, selected, onSelect, onDragNode, onDragNodeSt
 function NodeParallel({ node, selected, onSelect, onDragNode, onDragNodeStart, invalid, onPortDown, onAddMember, onRemoveMember }) {
   const drag = useRef({});
   const [isDropActive, setIsDropActive] = useState(false);
-  const testCatalog = getTestCatalog();
   const memberRows = (node.members || [])
     .map((member, index) => {
-      const test = testCatalog.find(t => t.id === member.testId);
-      if (!test) return null;
+      const test = getRenderableTest(member.testId, member);
       return {
         member,
         test,
@@ -160,12 +168,13 @@ function NodeParallel({ node, selected, onSelect, onDragNode, onDragNodeStart, i
     onAddMember?.(node.id, testId);
   };
   const handleDrop = (e) => {
-    const testId = e.dataTransfer.getData("text/testId");
+    const draggedTest = window.OptiDxDraggingTest || null;
+    const testId = e.dataTransfer.getData("text/testId") || e.dataTransfer.getData("text/plain") || draggedTest?.id || "";
     if (!testId) return;
     e.preventDefault();
     e.stopPropagation();
     setIsDropActive(false);
-    handleAddTest(testId);
+    handleAddTest(draggedTest || testId);
   };
   const handleDragOver = (e) => {
     e.preventDefault();
@@ -234,10 +243,10 @@ function NodeParallel({ node, selected, onSelect, onDragNode, onDragNodeStart, i
         <div className="node__output disc"><span className="branch-dot branch-dot--disc"/>Discordant</div>
         <div className="node__output neg"><span className="branch-dot branch-dot--neg"/>Both −</div>
       </div>
-      <div className="port port--in"/>
-      <div className="port port--out pos parallel__port--bp" onMouseDown={onPortDown && onPortDown(node.id, "both_pos", "pos")}/>
-      <div className="port port--out disc parallel__port--d" onMouseDown={onPortDown && onPortDown(node.id, "discord", "disc")}/>
-      <div className="port port--out neg parallel__port--bn" onMouseDown={onPortDown && onPortDown(node.id, "both_neg", "neg")}/>
+      <div className="port port--in" data-port="in"/>
+      <div className="port port--out pos parallel__port--bp" data-port="both_pos" onMouseDown={onPortDown && onPortDown(node.id, "both_pos", "pos")}/>
+      <div className="port port--out disc parallel__port--d" data-port="discord" onMouseDown={onPortDown && onPortDown(node.id, "discord", "disc")}/>
+      <div className="port port--out neg parallel__port--bn" data-port="both_neg" onMouseDown={onPortDown && onPortDown(node.id, "both_neg", "neg")}/>
     </div>
   );
 }
@@ -272,7 +281,7 @@ function NodeTerminal({ node, selected, onSelect, onDragNode, onDragNodeStart, i
           <div className="node__meta">{subLabel} · terminal</div>
         </div>
       </div>
-      <div className="port port--in"/>
+      <div className="port port--in" data-port="in"/>
     </div>
   );
 }
@@ -323,8 +332,48 @@ function getTestCatalog() {
   return window.OptiDxActions?.getWorkspaceTests?.() || window.SEED_TESTS || [];
 }
 
+function snapshotTestRecord(test, fallbackLabel = null) {
+  const source = typeof test === "string"
+    ? getTestCatalog().find(item => item.id === test) || null
+    : test && typeof test === "object"
+      ? test
+      : null;
+
+  const fallback = source || {};
+  const id = String(fallback.id ?? test ?? fallbackLabel ?? "test");
+  const name = fallback.name || fallback.label || fallback.test || fallback.testId || fallbackLabel || id;
+  const sens = Number(fallback.sens ?? fallback.sensitivity ?? 0);
+  const spec = Number(fallback.spec ?? fallback.specificity ?? 0);
+  const cost = Number(fallback.cost ?? 0);
+  const tat = Number(fallback.tat ?? fallback.turnaround_time ?? 0);
+
+  return {
+    id,
+    name,
+    icon: fallback.icon || "flask-conical",
+    category: fallback.category || "clinical",
+    sens: Number.isFinite(sens) ? sens : 0,
+    spec: Number.isFinite(spec) ? spec : 0,
+    cost: Number.isFinite(cost) ? cost : 0,
+    tat: Number.isFinite(tat) ? tat : 0,
+    tatUnit: fallback.tatUnit || fallback.turnaround_time_unit || "min",
+    sample: fallback.sample || "n/a",
+    skill: fallback.skill || "n/a",
+  };
+}
+
+function getRenderableTest(testId, fallbackLabel = null) {
+  const catalog = getTestCatalog();
+  const found = catalog.find(test => String(test.id) === String(testId));
+  if (found) {
+    return found;
+  }
+
+  return snapshotTestRecord(testId, fallbackLabel);
+}
+
 function getNodeTest(node) {
-  return getTestCatalog().find(test => test.id === node?.testId) || null;
+  return getRenderableTest(node?.testId, node);
 }
 
 function getNodeLabel(node) {
@@ -622,6 +671,9 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
   const panRef = useRef({});
   const canvasRef = useRef(null);
   const stageRef = useRef(null);
+  const portCentersRef = useRef({});
+  const portCentersSignatureRef = useRef("");
+  const [, setPortLayoutRevision] = useState(0);
   const canonicalPathway = useMemo(() => window.OptiDxActions?.buildCanonicalPathway?.({
     schema_version: 'canvas-v1',
     nodes,
@@ -728,6 +780,76 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
     window.addEventListener("resize", fit);
     return () => { clearTimeout(t); window.removeEventListener("resize", fit); };
   }, [libCollapsed, propsCollapsed]);
+
+  useEffect(() => {
+    const canvasEl = canvasRef.current;
+    if (!canvasEl) {
+      return undefined;
+    }
+
+    const onNativeWheel = event => {
+      if (!event.ctrlKey && !event.metaKey) {
+        return;
+      }
+
+      event.preventDefault();
+      const delta = event.deltaY || 0;
+      const scaleDelta = delta < 0 ? 0.08 : -0.08;
+      setPan(p => ({ ...p, scale: Math.max(0.4, Math.min(2, p.scale + scaleDelta)) }));
+    };
+
+    canvasEl.addEventListener("wheel", onNativeWheel, { passive: false });
+    return () => canvasEl.removeEventListener("wheel", onNativeWheel);
+  }, []);
+
+  useLayoutEffect(() => {
+    const canvasEl = canvasRef.current;
+    if (!canvasEl) {
+      return;
+    }
+
+    const rect = canvasEl.getBoundingClientRect();
+    const stageOffsetX = stageRef.current?.offsetLeft || 0;
+    const stageOffsetY = stageRef.current?.offsetTop || 0;
+    const next = {};
+
+    const toStagePoint = (clientX, clientY) => ({
+      x: (clientX - rect.left - stageOffsetX - pan.x) / pan.scale,
+      y: (clientY - rect.top - stageOffsetY - pan.y) / pan.scale,
+    });
+
+    for (const node of nodes) {
+      const nodeEl = canvasEl.querySelector(`[data-node-id="${node.id}"]`);
+      if (!nodeEl) {
+        continue;
+      }
+
+      const portMap = {};
+      const ports = ["in", ...getPortDefinitions(node).map(port => port.port)];
+      for (const port of ports) {
+        const portEl = nodeEl.querySelector(`[data-port="${port}"]`);
+        if (!portEl) {
+          continue;
+        }
+
+        const portRect = portEl.getBoundingClientRect();
+        const clientX = portRect.left + portRect.width / 2;
+        const clientY = portRect.top + portRect.height / 2;
+        portMap[port] = toStagePoint(clientX, clientY);
+      }
+
+      if (Object.keys(portMap).length) {
+        next[node.id] = portMap;
+      }
+    }
+
+    const nextSignature = JSON.stringify(next);
+    if (nextSignature !== portCentersSignatureRef.current) {
+      portCentersSignatureRef.current = nextSignature;
+      portCentersRef.current = next;
+      setPortLayoutRevision(v => v + 1);
+    }
+  }, [nodes, pan.x, pan.y, pan.scale]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -888,7 +1010,7 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
     testId,
   });
   const addParallelMember = (nodeId, testId) => {
-    const test = getTestCatalog().find(t => t.id === testId);
+    const test = snapshotTestRecord(testId);
     if (!test) {
       flash("Choose a valid test to add");
       return;
@@ -897,7 +1019,22 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
     setNodes(ns => ns.map(n => {
       if (n.id !== nodeId || n.type !== "parallel") return n;
       flash(`Added ${test.name} to the block`);
-      return { ...n, members: [...(n.members || []), makeParallelMember(testId)] };
+      return {
+        ...n,
+        members: [...(n.members || []), {
+          ...makeParallelMember(test.id),
+          label: test.name,
+          icon: test.icon,
+          category: test.category,
+          sens: test.sens,
+          spec: test.spec,
+          cost: test.cost,
+          tat: test.tat,
+          tatUnit: test.tatUnit,
+          sample: test.sample,
+          skill: test.skill,
+        }],
+      };
     }));
   };
   const removeParallelMember = (nodeId, memberRef) => {
@@ -908,7 +1045,7 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
       if (removeIndex < 0) return n;
       const removed = members[removeIndex];
       const nextMembers = [...members.slice(0, removeIndex), ...members.slice(removeIndex + 1)];
-      flash(`Removed ${getTestCatalog().find(t => t.id === removed.testId)?.name || "test"} from the block`);
+      flash(`Removed ${snapshotTestRecord(removed, removed).name || "test"} from the block`);
       return { ...n, members: nextMembers };
     }));
   };
@@ -922,7 +1059,7 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
     setNodes(ns => [...ns, {
       id, type: "parallel", x: 700, y: 600,
       label: "New parallel block",
-      members: [ makeParallelMember("t_xpert"), makeParallelMember("t_smear") ],
+      members: [],
       rule: "BOTH_POS"
     }]);
     setSelected(id);
@@ -933,8 +1070,21 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
     const n = nodes.find(x => x.id === id);
     if (!n || n.type !== "parallel") return;
     const newNodes = (n.members || []).map((m, i) => ({
-      id: id + "_m" + i, type: "test", testId: m.testId,
-      x: n.x + i * 280, y: n.y - 40
+      id: id + "_m" + i,
+      type: "test",
+      testId: m.testId,
+      label: m.label || snapshotTestRecord(m, m).name,
+      icon: m.icon || snapshotTestRecord(m, m).icon,
+      category: m.category || snapshotTestRecord(m, m).category,
+      sens: m.sens ?? snapshotTestRecord(m, m).sens,
+      spec: m.spec ?? snapshotTestRecord(m, m).spec,
+      cost: m.cost ?? snapshotTestRecord(m, m).cost,
+      tat: m.tat ?? snapshotTestRecord(m, m).tat,
+      tatUnit: m.tatUnit || snapshotTestRecord(m, m).tatUnit,
+      sample: m.sample || snapshotTestRecord(m, m).sample,
+      skill: m.skill || snapshotTestRecord(m, m).skill,
+      x: n.x + i * 280,
+      y: n.y - 40
     }));
     setNodes(ns => [...ns.filter(x => x.id !== id), ...newNodes]);
     _setEdges(es => es.filter(e => e.from !== id && e.to !== id));
@@ -973,10 +1123,10 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
   const dragNodeStart = () => { pushHistory(); };
   const onDrop = e => {
     e.preventDefault();
-    const testId = e.dataTransfer.getData("text/testId");
+    const draggedTest = window.OptiDxDraggingTest || null;
+    const testId = e.dataTransfer.getData("text/testId") || e.dataTransfer.getData("text/plain") || draggedTest?.id || "";
     if (!testId) return;
-    const catalog = getTestCatalog();
-    const droppedTest = catalog.find(test => test.id === testId);
+    const droppedTest = snapshotTestRecord(draggedTest || testId);
     const { x, y } = screenToStage(e.clientX, e.clientY);
 
     const getBounds = node => {
@@ -993,17 +1143,13 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
     });
 
     if (target?.type === "parallel") {
-      addParallelMember(target.id, testId);
+      addParallelMember(target.id, droppedTest);
       setSelected(target.id);
       return;
     }
 
     if (target?.type === "test") {
-      const targetTest = catalog.find(test => test.id === target.testId);
-      if (!targetTest) {
-        flash("The target test is no longer available");
-        return;
-      }
+      const targetTest = snapshotTestRecord(target.testId, target);
 
       setNodes(ns => ns.map(node => {
         if (node.id !== target.id) return node;
@@ -1013,8 +1159,32 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
           label: node.label || "Parallel block",
           rule: node.rule || "BOTH_POS",
           members: [
-            makeParallelMember(target.testId),
-            makeParallelMember(testId),
+            {
+              ...makeParallelMember(targetTest.id),
+              label: targetTest.name,
+              icon: targetTest.icon,
+              category: targetTest.category,
+              sens: targetTest.sens,
+              spec: targetTest.spec,
+              cost: targetTest.cost,
+              tat: targetTest.tat,
+              tatUnit: targetTest.tatUnit,
+              sample: targetTest.sample,
+              skill: targetTest.skill,
+            },
+            {
+              ...makeParallelMember(droppedTest.id),
+              label: droppedTest.name,
+              icon: droppedTest.icon,
+              category: droppedTest.category,
+              sens: droppedTest.sens,
+              spec: droppedTest.spec,
+              cost: droppedTest.cost,
+              tat: droppedTest.tat,
+              tatUnit: droppedTest.tatUnit,
+              sample: droppedTest.sample,
+              skill: droppedTest.skill,
+            },
           ],
         };
       }));
@@ -1027,12 +1197,28 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
       }));
 
       setSelected(target.id);
-      flash(`Grouped ${droppedTest?.name || "test"} with ${targetTest.name}`);
+      flash(`Grouped ${droppedTest.name} with ${targetTest.name}`);
       return;
     }
 
     const newId = "n" + (Date.now() % 100000);
-    setNodes(ns => [...ns, { id: newId, type:"test", testId, x: x - 100, y: y - 40 }]);
+    setNodes(ns => [...ns, {
+      id: newId,
+      type: "test",
+      testId: droppedTest.id,
+      label: droppedTest.name,
+      icon: droppedTest.icon,
+      category: droppedTest.category,
+      sens: droppedTest.sens,
+      spec: droppedTest.spec,
+      cost: droppedTest.cost,
+      tat: droppedTest.tat,
+      tatUnit: droppedTest.tatUnit,
+      sample: droppedTest.sample,
+      skill: droppedTest.skill,
+      x: x - 100,
+      y: y - 40,
+    }]);
     setSelected(newId);
     flash("Test added — wire it up via the output ports");
   };
@@ -1069,21 +1255,31 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
   };
 
   const NW = 240, NH = 130, PW = 280, PH = 220, TW = 180, TH = 80;
+  const STAGE_WIDTH = 2400;
+  const STAGE_HEIGHT = 1400;
+  const TEST_PORT_POS_Y = NH - 68;
+  const TEST_PORT_NEG_Y = NH - 12;
+  const PARALLEL_PORT_POS_Y = PH - 92;
+  const PARALLEL_PORT_DISC_Y = PH - 48;
+  const PARALLEL_PORT_NEG_Y = PH - 4;
   const nodePoint = (id, port) => {
     const n = nodes.find(x => x.id === id);
     if (!n) return { x: 0, y: 0 };
+    const measuredPoint = portCentersRef.current?.[id]?.[port];
+    if (measuredPoint) {
+      return measuredPoint;
+    }
     if (n.type === "test") {
-      const isRef = n.kind === "referee";
       if (port === "in")  return { x: n.x, y: n.y + NH/2 };
-      if (port === "pos") return { x: n.x + NW, y: n.y + 92 };
-      if (port === "neg") return { x: n.x + NW, y: n.y + 114 };
+      if (port === "pos") return { x: n.x + NW, y: n.y + TEST_PORT_POS_Y };
+      if (port === "neg") return { x: n.x + NW, y: n.y + TEST_PORT_NEG_Y };
       return { x: n.x + NW, y: n.y + NH/2 };
     }
     if (n.type === "parallel") {
       if (port === "in")        return { x: n.x, y: n.y + PH/2 };
-      if (port === "both_pos")  return { x: n.x + PW, y: n.y + 86 };
-      if (port === "discord")   return { x: n.x + PW, y: n.y + 126 };
-      if (port === "both_neg")  return { x: n.x + PW, y: n.y + 166 };
+      if (port === "both_pos")  return { x: n.x + PW, y: n.y + PARALLEL_PORT_POS_Y };
+      if (port === "discord")   return { x: n.x + PW, y: n.y + PARALLEL_PORT_DISC_Y };
+      if (port === "both_neg")  return { x: n.x + PW, y: n.y + PARALLEL_PORT_NEG_Y };
       return { x: n.x + PW, y: n.y + PH/2 };
     }
     if (n.type === "terminal") return { x: n.x, y: n.y + TH/2 };
@@ -1115,7 +1311,7 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
       <div className="canvas" ref={canvasRef}
         style={canvasStyle}
         onMouseDown={onCanvasMouseDown}
-        onWheel={onWheel}
+        onWheel={e => { if (e.ctrlKey || e.metaKey) e.preventDefault(); }}
         onDragOver={e => e.preventDefault()}
         onDrop={onDrop}>
 
@@ -1176,7 +1372,7 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
         </div>
 
         <div ref={stageRef} className="canvas__stage" style={{transform:`translate(${pan.x}px, ${pan.y}px) scale(${pan.scale})`}}>
-          <svg className="canvas__edges" style={{width: 2400, height: 1400}}>
+          <svg className="canvas__edges" style={{width: STAGE_WIDTH, height: STAGE_HEIGHT}}>
             <defs>
               {["pos","neg","disc","inc"].map(k => (
                 <marker key={k} id={"arrow-"+k} viewBox="0 0 10 10" refX="9" refY="5"
@@ -1224,8 +1420,7 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
           {nodes.map(n => {
             const inv = invalidIds[n.id] || (n.id === "n3" ? "info" : null);
             if (n.type === "test") {
-              const test = getTestCatalog().find(t => t.id === n.testId);
-              if (!test) return null;
+              const test = getRenderableTest(n.testId, n.label);
               return <NodeTestCard key={n.id} node={n} test={test}
                 selected={selected === n.id}
                 invalid={inv === "error"}
@@ -1264,7 +1459,7 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
         </div>
 
         <div className="canvas__minimap">
-          <svg viewBox="-50 100 1500 700" width="100%" height="100%">
+          <svg viewBox={`0 0 ${STAGE_WIDTH} ${STAGE_HEIGHT}`} width="100%" height="100%">
             {edges.map(e => {
               const a = nodePoint(e.from, e.fromPort);
               const b = nodePoint(e.to, "in");
@@ -1277,8 +1472,31 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
                 fill={n.type === "terminal" ? "var(--branch-pos-050)" : n.type === "parallel" ? "var(--sme-orange-050)" : "#fff"}
                 stroke="#4A5056" strokeWidth="2" rx="4"/>;
             })}
+            {(() => {
+              const canvasRect = canvasRef.current?.getBoundingClientRect();
+              if (!canvasRect || !pan.scale) {
+                return null;
+              }
+
+              const viewport = {
+                x: Math.max(0, (-pan.x) / pan.scale),
+                y: Math.max(0, (-pan.y) / pan.scale),
+                width: Math.min(STAGE_WIDTH, canvasRect.width / pan.scale),
+                height: Math.min(STAGE_HEIGHT, canvasRect.height / pan.scale),
+              };
+
+              return (
+                <rect
+                  className="minimap__viewport"
+                  x={viewport.x}
+                  y={viewport.y}
+                  width={viewport.width}
+                  height={viewport.height}
+                  rx="3"
+                />
+              );
+            })()}
           </svg>
-          <div className="minimap__viewport" style={{left:20,top:30,width:80,height:50}}/>
         </div>
       </div>
 
@@ -1472,4 +1690,4 @@ Object.assign(window, {
   PathExplorer: LivePathExplorer,
   ValidationPanel: LiveValidationPanel,
 });
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect } from 'react';

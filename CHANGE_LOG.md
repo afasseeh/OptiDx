@@ -1,11 +1,29 @@
 # Change Log
 
+## 2026-04-26 - Parallel-only pathway serialization and live canvas geometry sync
+
+- Summary: Fixed the builder so parallel-member snapshots are written back into the canonical pathway test catalog, which prevents parallel-only graphs from tripping false missing-test validation when the workspace catalog is stale, and updated the canvas to measure rendered port centers and minimap viewport geometry from the live DOM instead of hardcoded offsets.
+- Files or modules affected: `web/resources/js/optidx/actions.js`, `web/resources/js/optidx/components/ScreenCanvas.jsx`, `web/resources/js/optidx/canvas.css`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: Running a pathway that only contained a parallel block was still producing missing-test validation errors, connector lines were visibly offset from the ports, the ports were still too tightly grouped, the minimap viewport no longer matched the live visible area, and the status ribbon needed to sit below the toolbar on narrower layouts.
+- Architecture impact: The canvas now serializes member snapshots into the pathway test catalog so parallel blocks remain evaluable even when the workspace library snapshot lags, the branch renderer anchors edges to measured DOM port centers, the minimap reflects the live pan/zoom window, and the status ribbon is positioned as a lower overlay row instead of competing with the toolbar.
+- Migration or deployment impact: Rebuild the Vite frontend bundle so the new canvas geometry, minimap, and serialization behavior are active. No backend or database migration was required.
+- Follow-up notes: Verified with `npm run build`.
+
+## 2026-04-26 - Canvas drag snapshot, port spacing, and wheel zoom hardening
+
+- Summary: Reworked canvas drag/drop so a dragged test carries a live snapshot into the canvas, dropped test nodes persist the snapshot data alongside `testId`, parallel blocks start empty instead of seeding invalid placeholder tests, port positions are spaced farther apart and aligned to the rendered circles, and pinch/ctrl zoom is intercepted on the canvas so zoom-in no longer escapes to the whole page.
+- Files or modules affected: `web/resources/js/optidx/components/ScreenCanvas.jsx`, `web/resources/js/optidx/canvas.css`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: Dropped tests were sometimes rendering with missing metadata, the default parallel block members were invalid for the current library, the ports were still too tight, and browser zoom was stealing the canvas pinch gesture on zoom-in.
+- Architecture impact: The builder now treats dragged tests as snapshot-bearing objects during authoring, which keeps the visible node metadata stable even when the catalog refresh lags behind the drop interaction.
+- Migration or deployment impact: Rebuild the Vite frontend bundle so the new drag snapshot, port geometry, and wheel interception are active. No backend or database migration was required.
+- Follow-up notes: Verified with `npm run build`.
+
 ## 2026-04-26 - Builder drop grouping, safe path explorer, and breadcrumb navigation
 
 - Summary: Fixed the builder canvas drop coordinate mapping so dropped tests land in the visible stage, added hit-testing so dropping a test onto another test promotes it into a parallel block and dropping onto an existing parallel block adds a member, hardened the Paths panel so missing evaluation metrics no longer white-screen the builder, made the top ribbon breadcrumbs clickable for real back-navigation, and removed the floating design-handoff button from the shell.
 - Files or modules affected: `web/resources/js/optidx/components/ScreenCanvas.jsx`, `web/resources/js/optidx/components/Shell.jsx`, `web/resources/js/optidx/components/App.jsx`, `web/resources/js/optidx/components/ScreenResults.jsx`, `web/resources/js/optidx/components/ScreenOther.jsx`, `web/resources/js/optidx/app.css`, `ARCHITECTURE.md`, `FUTURE_TASKS.md`, `CHANGE_LOG.md`.
 - Reason for the change: The builder was accepting drops but rendering them off the visible stage or not grouping them at all, the path explorer crashed when it tried to render fallback rows without numeric metrics, the breadcrumb ribbon was static text, and the design-handoff affordance was no longer wanted across the site.
-- Architecture impact: The canvas now resolves drop targets relative to the actual stage surface and can promote or extend parallel blocks directly from drag-and-drop, while the shell top bar now supports clickable crumb descriptors instead of purely decorative directory text.
+- Architecture impact: The canvas now resolves drop targets relative to the actual stage surface, can promote or extend parallel blocks directly from drag-and-drop, and anchors its rendered connection lines to the same visible port geometry used in the CSS.
 - Migration or deployment impact: Rebuild the Vite frontend bundle so the stage hit-testing, navigation crumbs, and shell cleanup are active. No backend or database migration was required.
 - Follow-up notes: Verified with `npm run build`; the grouping transaction is documented as a low-priority follow-up in `FUTURE_TASKS.md`.
 

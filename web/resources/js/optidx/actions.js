@@ -700,44 +700,81 @@ function buildEvaluationView(result) {
   };
 }
 
+function snapshotCanvasTestRecord(test, fallbackLabel = null) {
+  const source = typeof test === 'string'
+    ? getWorkspaceTests().find(item => String(item.id) === String(test)) || null
+    : test && typeof test === 'object'
+      ? test
+      : null;
+
+  const fallback = source || {};
+  const resolvedId = String(
+    fallback.testId
+    ?? fallback.id
+    ?? test
+    ?? fallbackLabel
+    ?? 'test'
+  );
+  const name = fallback.name || fallback.label || fallback.test || fallbackLabel || resolvedId;
+  const sensitivity = Number(fallback.sens ?? fallback.sensitivity ?? 0);
+  const specificity = Number(fallback.spec ?? fallback.specificity ?? 0);
+  const turnaroundTime = Number(fallback.tat ?? fallback.turnaround_time ?? 0);
+  const cost = Number(fallback.cost ?? 0);
+
+  return {
+    id: resolvedId,
+    name,
+    sensitivity: Number.isFinite(sensitivity) ? sensitivity : 0,
+    specificity: Number.isFinite(specificity) ? specificity : 0,
+    turnaround_time: Number.isFinite(turnaroundTime) ? turnaroundTime : 0,
+    turnaround_time_unit: fallback.tatUnit || fallback.turnaround_time_unit || 'min',
+    sample_types: [fallback.sample || 'n/a'],
+    skill_level: fallback.skill || fallback.skill_level || 'n/a',
+    cost: Number.isFinite(cost) ? cost : 0,
+    category: fallback.category || 'clinical',
+  };
+}
+
 function collectCanvasTests(pathway) {
   const nodes = Array.isArray(pathway?.nodes) ? pathway.nodes : [];
   const tests = new Map();
 
+  const addTest = (testRecord, aliases = []) => {
+    if (!testRecord?.id) {
+      return;
+    }
+
+    const payload = {
+      id: testRecord.id,
+      name: testRecord.name,
+      sensitivity: testRecord.sensitivity,
+      specificity: testRecord.specificity,
+      turnaround_time: testRecord.turnaround_time,
+      turnaround_time_unit: testRecord.turnaround_time_unit,
+      sample_types: testRecord.sample_types,
+      skill_level: testRecord.skill_level,
+      cost: testRecord.cost,
+      category: testRecord.category,
+    };
+
+    tests.set(testRecord.id, payload);
+    for (const alias of aliases) {
+      if (!alias || alias === testRecord.id) {
+        continue;
+      }
+      tests.set(alias, { ...payload, id: alias });
+    }
+  };
+
   for (const node of nodes) {
     if (node?.type === 'test' && node.testId) {
-      const test = window.SEED_TESTS?.find(item => item.id === node.testId);
-      if (!test) continue;
-      tests.set(test.id, {
-        id: test.id,
-        name: test.name,
-        sensitivity: test.sens,
-        specificity: test.spec,
-        turnaround_time: test.tat,
-        turnaround_time_unit: test.tatUnit,
-        sample_types: [test.sample],
-        skill_level: test.skill,
-        cost: test.cost,
-        category: test.category,
-      });
+      addTest(snapshotCanvasTestRecord(node, node.label || node.testId), [node.testId]);
     }
 
     if (node?.type === 'parallel') {
       for (const member of node.members || []) {
-        const test = window.SEED_TESTS?.find(item => item.id === member?.testId);
-        if (!test) continue;
-        tests.set(test.id, {
-          id: test.id,
-          name: test.name,
-          sensitivity: test.sens,
-          specificity: test.spec,
-          turnaround_time: test.tat,
-          turnaround_time_unit: test.tatUnit,
-          sample_types: [test.sample],
-          skill_level: test.skill,
-          cost: test.cost,
-          category: test.category,
-        });
+        const testRecord = snapshotCanvasTestRecord(member, member?.label || member?.testId || member?.id);
+        addTest(testRecord, [member?.id, member?.testId]);
       }
     }
   }

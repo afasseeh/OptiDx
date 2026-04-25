@@ -25,6 +25,10 @@ The frontend owns:
 - screen composition
 - workflow canvas interaction
 - stage-relative drag/drop hit testing on the builder canvas, including automatic promotion of test-on-test drops into parallel blocks and member insertion when a test is dropped onto an existing parallel block
+- the builder now keeps its SVG branch anchors aligned to the visible port circles with shared port geometry constants, and it falls back to a synthetic diagnostic-test card when the workspace catalog is temporarily stale so dropped nodes still render
+- dragged diagnostic tests now carry a browser-side snapshot into the canvas, and dropped nodes persist that snapshot alongside the canonical `testId` so the builder can render names and metrics even if the catalog has not refreshed yet
+- the canvas now serializes parallel-member snapshot data back into the pathway test catalog so a parallel-only graph still validates and evaluates even when the workspace library is temporarily stale
+- the builder measures port centers from the rendered DOM before drawing branch paths, which keeps SVG connectors pinned to the visible port centers instead of relying on hardcoded geometry
 - client-side validation feedback
 - pathway editor state
 - required terminal-endpoint enforcement for considered-positive and considered-negative outcomes, with optional inconclusive endpoints
@@ -109,6 +113,7 @@ Current bridge shape:
 - `web/resources/js/optidx/components/ScreenCanvas.jsx` keeps the current canvas state mirrored on `window.OptiDxCanvasState` / `window.OptiDxCurrentPathway` so the shell can persist the live builder graph and restore imported canonical graphs
 - `web/resources/js/optidx/components/ScreenCanvas.jsx` now derives the Builder `Paths` and `Validate` tabs from the live canonical graph instead of the bundled seed fixtures, and it reuses the latest evaluation payload only when that payload matches the current graph signature
 - `web/resources/js/optidx/components/ScreenCanvas.jsx` also performs stage-relative drop hit testing so dropped tests can either become standalone nodes, be added directly into an existing parallel block, or promote an existing test node into a parallel block in place
+- `web/resources/js/optidx/components/ScreenCanvas.jsx` now measures rendered port centers from the canvas DOM before drawing branch paths and also computes the minimap viewport from the live pan/zoom state
 - `web/resources/js/optidx/components/ScreenCanvas.jsx` exposes an explicit endpoint-creation action, starts new pathway authoring sessions with the required positive/negative endpoints already placed, and prevents those required endpoints from being deleted in the builder UI
 - `web/resources/js/optidx/components/Shell.jsx` now renders clickable breadcrumb items when a screen provides navigation callbacks, which keeps the visible top-bar directory view aligned with actual screen transitions
 - `web/resources/js/optidx/components/PropertiesPanel.jsx` now binds outgoing branch selectors to the real edge graph, so changing a branch target mutates the underlying canvas edge instead of editing placeholder copy

@@ -121,8 +121,8 @@
 .canvas__toolbar .btn { box-shadow: var(--shadow-2); }
 
 .canvas__status {
-  position: absolute; top: 12px; right: 12px;
-  display: flex; gap: 8px; align-items: center;
+  position: absolute; top: 58px; right: 12px;
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
   z-index: 5;
   background: var(--surface);
   border: 1px solid var(--edge);
@@ -130,6 +130,7 @@
   padding: 6px 12px 6px 8px;
   box-shadow: var(--shadow-2);
   font-size: 12px;
+  max-width: calc(100% - 24px);
 }
 
 .canvas__controls {
@@ -172,10 +173,9 @@
   .canvas__minimap { display: none; }
 }
 .minimap__viewport {
-  position: absolute;
-  border: 2px solid var(--sme-orange);
-  background: rgba(243, 119, 57, 0.08);
-  border-radius: 2px;
+  fill: rgba(243, 119, 57, 0.08);
+  stroke: var(--sme-orange);
+  stroke-width: 8;
 }
 
 .canvas__stage {
@@ -296,15 +296,15 @@
 /* Connection ports */
 .port {
   position: absolute;
-  width: 10px; height: 10px; border-radius: 50%;
+  width: 14px; height: 14px; border-radius: 50%;
   background: var(--surface);
   border: 2px solid var(--edge-2);
   cursor: crosshair;
   transition: all 120ms var(--ease-standard);
 }
 .port:hover { border-color: var(--sme-orange); background: var(--sme-orange); }
-.port--in { left: -5px; top: 50%; transform: translateY(-50%); }
-.port--out { right: -5px; cursor: crosshair; }
+.port--in { left: -7px; top: 50%; transform: translateY(-50%); }
+.port--out { right: -7px; cursor: crosshair; }
 .port--out::before { content: ""; position: absolute; inset: -8px; }
 .port--out.pos { border-color: var(--branch-pos); }
 .port--out.neg { border-color: var(--branch-neg); }
@@ -400,7 +400,7 @@
 }
 
 .branch-dot {
-  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
   display: inline-block;
 }
 .branch-dot--pos  { background: var(--branch-pos); }
@@ -493,8 +493,8 @@
 .node__output.neg  { color: var(--branch-neg); }
 
 /* port positions for test nodes */
-.node .port--out.pos { right: -5px; top: calc(100% - 38px); }
-.node .port--out.neg { right: -5px; top: calc(100% - 16px); }
+.node .port--out.pos { right: -7px; top: calc(100% - 68px); }
+.node .port--out.neg { right: -7px; top: calc(100% - 12px); }
 
 /* =========================================================================
    Parallel block — distinct visual container
@@ -614,9 +614,9 @@
   background: transparent;
 }
 
-.parallel__port--bp { right: -5px; top: calc(100% - 42px); }
-.parallel__port--d  { right: -5px; top: calc(100% - 24px); }
-.parallel__port--bn { right: -5px; top: calc(100% - 6px); }
+.parallel__port--bp { right: -7px; top: calc(100% - 92px); }
+.parallel__port--d  { right: -7px; top: calc(100% - 48px); }
+.parallel__port--bn { right: -7px; top: calc(100% - 4px); }
 
 /* Decision rule chips for parallel rules */
 .node--parallel .parallel__rule-chip {
