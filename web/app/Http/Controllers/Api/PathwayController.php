@@ -113,6 +113,14 @@ class PathwayController extends Controller
         ]);
 
         $prepared = $this->prepareDefinitions($payload['pathway']);
+        $validation = $this->definitions->validate($prepared['engine_definition']);
+        if (! ($validation['valid'] ?? false)) {
+            return response()->json([
+                'message' => 'Pathway validation failed.',
+                'validation' => $validation,
+            ], 422);
+        }
+
         $pathway = $prepared['editor_definition'];
         if (array_key_exists('prevalence', $payload)) {
             $pathway['prevalence'] = $payload['prevalence'];
@@ -164,6 +172,13 @@ class PathwayController extends Controller
             'constraints' => ['nullable', 'array'],
             'prevalence' => ['nullable', 'numeric', 'between:0,1'],
         ]);
+
+        // Optimization still runs synchronously in this release, so lift the
+        // default execution ceiling for this one endpoint instead of letting a
+        // long candidate search die at the 30-second PHP limit.
+        if (function_exists('set_time_limit')) {
+            @set_time_limit(0);
+        }
 
         return response()->json(
             $this->optimizer->optimize($payload['tests'], $payload['constraints'] ?? [], $payload['prevalence'] ?? null)

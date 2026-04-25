@@ -64,6 +64,27 @@ class AuthFlowTest extends TestCase
         Notification::assertSentTo($user, VerifyEmailNotification::class);
     }
 
+    public function test_login_allows_verified_accounts_to_sign_in(): void
+    {
+        $user = User::create([
+            'name' => 'Verified User',
+            'email' => 'verified@example.com',
+            'password' => Hash::make('password123'),
+        ]);
+        $user->forceFill(['email_verified_at' => now()])->save();
+
+        $response = $this->postJson('/auth/login', [
+            'email' => $user->email,
+            'password' => 'password123',
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('message', 'Signed in successfully.')
+            ->assertJsonPath('user.email', $user->email);
+
+        $this->assertAuthenticatedAs($user);
+    }
+
     public function test_verify_email_marks_the_user_as_verified(): void
     {
         $user = User::create([

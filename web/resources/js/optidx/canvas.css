@@ -306,9 +306,9 @@
 .port--in { left: -5px; top: 50%; transform: translateY(-50%); }
 .port--out { right: -5px; cursor: crosshair; }
 .port--out::before { content: ""; position: absolute; inset: -8px; }
-.port--out.pos { border-color: var(--pos); }
-.port--out.neg { border-color: var(--neg); }
-.port--out.disc { border-color: var(--discord); }
+.port--out.pos { border-color: var(--branch-pos); }
+.port--out.neg { border-color: var(--branch-neg); }
+.port--out.disc { border-color: var(--branch-disc); }
 
 /* Edges (SVG overlay) */
 .canvas__edges {
@@ -493,8 +493,8 @@
 .node__output.neg  { color: var(--branch-neg); }
 
 /* port positions for test nodes */
-.node .port--out.pos { right: -5px; top: calc(100% - 18px); }
-.node .port--out.neg { right: -5px; top: calc(100% - 18px); }
+.node .port--out.pos { right: -5px; top: calc(100% - 38px); }
+.node .port--out.neg { right: -5px; top: calc(100% - 16px); }
 
 /* =========================================================================
    Parallel block — distinct visual container
@@ -559,9 +559,9 @@
   background: transparent;
 }
 
-.parallel__port--bp { right: -5px; top: calc(100% - 22px); }
-.parallel__port--d  { right: -5px; top: calc(100% - 22px); }
-.parallel__port--bn { right: -5px; top: calc(100% - 22px); }
+.parallel__port--bp { right: -5px; top: calc(100% - 42px); }
+.parallel__port--d  { right: -5px; top: calc(100% - 24px); }
+.parallel__port--bn { right: -5px; top: calc(100% - 6px); }
 
 /* Decision rule chips for parallel rules */
 .node--parallel .parallel__rule-chip {

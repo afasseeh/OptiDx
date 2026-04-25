@@ -199,7 +199,9 @@ function NodeTerminal({ node, selected, onSelect, onDragNode, onDragNodeStart, i
     window.addEventListener("mousemove", move); window.addEventListener("mouseup", up);
   };
   const iconName = node.subtype === "pos" ? "check" : node.subtype === "neg" ? "x" : node.subtype === "inc" ? "help" : "arrow-right";
-  const subLabel = node.subtype === "pos" ? "Final positive" : node.subtype === "neg" ? "Final negative" : node.subtype === "inc" ? "Inconclusive" : "Refer";
+  const subLabel = isRequiredTerminalNode(node)
+    ? (node.subtype === "pos" ? "Required positive endpoint" : "Required negative endpoint")
+    : node.subtype === "pos" ? "Final positive" : node.subtype === "neg" ? "Final negative" : node.subtype === "inc" ? "Inconclusive" : "Refer";
   return (
     <div className={"node node--terminal " + (node.subtype === "neg" ? "is-neg" : node.subtype === "inc" ? "is-inc" : node.subtype === "ref" ? "is-ref" : "") + (selected ? " is-selected" : "") + (invalid ? " is-invalid" : "")}
       data-node-id={node.id}
@@ -242,7 +244,7 @@ function cloneCanvasNode(node) {
 }
 
 function hydrateCanvasGraph(pathway) {
-  const normalized = window.OptiDxActions?.normalizePathwayGraph?.(pathway) || pathway || {};
+  const normalized = window.OptiDxActions?.buildCanvasDraftFromPathway?.(pathway) || window.OptiDxActions?.normalizePathwayGraph?.(pathway) || pathway || {};
   const nodes = Array.isArray(normalized.nodes)
     ? normalized.nodes.map(cloneCanvasNode)
     : Object.values(normalized.nodes || {}).map(cloneCanvasNode);
@@ -259,12 +261,279 @@ function hydrateCanvasGraph(pathway) {
   };
 }
 
+function getNodeTest(node) {
+  return window.SEED_TESTS.find(test => test.id === node?.testId) || null;
+}
+
+function getNodeLabel(node) {
+  if (!node) return "Unknown node";
+  if (node.type === "test") return node.label || getNodeTest(node)?.name || node.id;
+  if (node.type === "parallel") return node.label || "Parallel block";
+  if (node.type === "terminal") return node.label || (node.subtype === "pos" ? "Positive" : node.subtype === "neg" ? "Negative" : "Inconclusive");
+  return node.label || node.id;
+}
+
+function isRequiredTerminalNode(node) {
+  return node?.type === "terminal" && (node.terminalRole === "required_positive" || node.terminalRole === "required_negative");
+}
+
+function getPortDefinitions(node) {
+  if (!node) return [];
+  if (node.type === "parallel") {
+    return [
+      { port: "both_pos", label: "Both positive", kind: "pos" },
+      { port: "discord", label: "Discordant", kind: "disc" },
+      { port: "both_neg", label: "Both negative", kind: "neg" },
+    ];
+  }
+
+  if (node.type === "test") {
+    return [
+      { port: "pos", label: "Positive", kind: "pos" },
+      { port: "neg", label: "Negative", kind: "neg" },
+    ];
+  }
+
+  return [];
+}
+
+function getEdgeForPort(edges, nodeId, port) {
+  return edges.find(edge => edge.from === nodeId && edge.fromPort === port) || null;
+}
+
+function formatMetricValue(value, formatter = null) {
+  if (value == null || value === "") return "n/a";
+  return formatter ? formatter(value) : String(value);
+}
+
+function buildStructuralPaths(nodes, edges, startNode) {
+  const nodeMap = new Map(nodes.map(node => [node.id, node]));
+  const outgoing = new Map();
+
+  edges.forEach(edge => {
+    if (!outgoing.has(edge.from)) {
+      outgoing.set(edge.from, []);
+    }
+    outgoing.get(edge.from).push(edge);
+  });
+
+  const paths = [];
+  const walk = (nodeId, sequence, visited) => {
+    const node = nodeMap.get(nodeId);
+    if (!node || visited.has(nodeId)) return;
+
+    if (node.type === "terminal") {
+      paths.push({
+        id: `P${paths.length + 1}`,
+        sequence,
+        terminal: getNodeLabel(node),
+        terminalKind: node.subtype === "pos" ? "pos" : node.subtype === "neg" ? "neg" : "inc",
+        pIfD: null,
+        pIfND: null,
+        cost: null,
+        tat: null,
+        samples: null,
+        skill: null,
+      });
+      return;
+    }
+
+    const nextVisited = new Set(visited);
+    nextVisited.add(nodeId);
+
+    for (const edge of outgoing.get(nodeId) || []) {
+      const port = getPortDefinitions(node).find(item => item.port === edge.fromPort);
+      walk(edge.to, [...sequence, {
+        label: edge.label || port?.label || edge.fromPort,
+        kind: edge.kind || port?.kind || "pos",
+      }], nextVisited);
+    }
+  };
+
+  if (startNode) {
+    walk(startNode, [], new Set());
+  }
+
+  return paths;
+}
+
+function buildLiveValidation(nodes, edges, startNode, activeEvaluationView) {
+  const items = [];
+  const nodeMap = new Map(nodes.map(node => [node.id, node]));
+  const activeNodes = nodes.filter(node => node.type !== "annotation");
+  const terminals = nodes.filter(node => node.type === "terminal");
+
+  if (!activeNodes.length) {
+    return [{
+      id: "pathway-empty",
+      level: "error",
+      title: "Pathway is empty",
+      detail: "Add at least one pathway node before validating or running the pathway.",
+      fix: "Drag a diagnostic test onto the canvas to start building the graph.",
+      target: "pathway",
+    }];
+  }
+
+  if (!startNode || !nodeMap.has(startNode)) {
+    items.push({
+      id: "start-node-missing",
+      level: "error",
+      title: "Start node is missing",
+      detail: "The canonical pathway does not currently resolve to a valid start node.",
+      fix: "Ensure the graph contains a connected entry node.",
+      target: "pathway",
+    });
+  }
+
+  if (!terminals.some(node => node.subtype === "pos")) {
+    items.push({
+      id: "positive-terminal-missing",
+      level: "error",
+      title: "Positive terminal is missing",
+      detail: "The pathway must end in at least one positive outcome terminal.",
+      fix: "Add a positive terminal node and connect at least one branch to it.",
+      target: "pathway",
+    });
+  }
+
+  if (!terminals.some(node => node.subtype === "neg")) {
+    items.push({
+      id: "negative-terminal-missing",
+      level: "error",
+      title: "Negative terminal is missing",
+      detail: "The pathway must end in at least one negative outcome terminal.",
+      fix: "Add a negative terminal node and connect at least one branch to it.",
+      target: "pathway",
+    });
+  }
+
+  for (const node of activeNodes) {
+    if (node.type === "test" && !getNodeTest(node)) {
+      items.push({
+        id: `missing-test-${node.id}`,
+        level: "error",
+        title: "Test node references a missing test",
+        detail: `${getNodeLabel(node)} does not resolve to a current diagnostic test.`,
+        fix: "Reassign the node to a valid test or import the missing one.",
+        target: node.id,
+      });
+    }
+
+    if (node.type === "parallel" && !(node.members || []).length) {
+      items.push({
+        id: `parallel-empty-${node.id}`,
+        level: "error",
+        title: "Parallel block has no member tests",
+        detail: `${getNodeLabel(node)} cannot evaluate because it has no member tests.`,
+        fix: "Add tests to the parallel block before running the pathway.",
+        target: node.id,
+      });
+    }
+
+    if (node.type === "test" || node.type === "parallel") {
+      for (const port of getPortDefinitions(node)) {
+        const edge = getEdgeForPort(edges, node.id, port.port);
+        if (!edge) {
+          items.push({
+            id: `branch-missing-${node.id}-${port.port}`,
+            level: "warn",
+            title: `${getNodeLabel(node)} is missing a ${port.label.toLowerCase()} branch`,
+            detail: `The ${port.label.toLowerCase()} output is visible but not connected to another node.`,
+            fix: `Connect the ${port.label.toLowerCase()} port to the appropriate downstream node.`,
+            target: node.id,
+          });
+          continue;
+        }
+
+        if (!nodeMap.has(edge.to)) {
+          items.push({
+            id: `branch-target-missing-${edge.id}`,
+            level: "error",
+            title: "Branch target is missing",
+            detail: `A branch from ${getNodeLabel(node)} points to a node that no longer exists.`,
+            fix: "Reconnect the branch to a valid node.",
+            target: node.id,
+          });
+        }
+      }
+    }
+  }
+
+  const reachable = new Set();
+  const visit = nodeId => {
+    if (!nodeId || reachable.has(nodeId) || !nodeMap.has(nodeId)) return;
+    reachable.add(nodeId);
+    edges.filter(edge => edge.from === nodeId).forEach(edge => visit(edge.to));
+  };
+  visit(startNode);
+
+  activeNodes
+    .filter(node => !reachable.has(node.id))
+    .forEach(node => {
+      items.push({
+        id: `unreachable-${node.id}`,
+        level: "warn",
+        title: "Node is unreachable from the start",
+        detail: `${getNodeLabel(node)} is not reachable from the current canonical start path.`,
+        fix: "Connect it to the graph or remove it if it is no longer needed.",
+        target: node.id,
+      });
+    });
+
+  const sampleTypes = [...new Set(activeNodes.flatMap(node => {
+    if (node.type === "parallel") {
+      return (node.members || [])
+        .map(member => window.SEED_TESTS.find(test => test.id === member.testId)?.sample)
+        .filter(Boolean);
+    }
+
+    if (node.type === "test") {
+      const sample = getNodeTest(node)?.sample;
+      return sample ? [sample] : [];
+    }
+
+    return [];
+  }))];
+
+  if (sampleTypes.length > 1) {
+    items.push({
+      id: "sample-types-multiple",
+      level: "info",
+      title: "Multiple sample types are required",
+      detail: `The current pathway uses ${sampleTypes.join(", ")} across its connected test nodes.`,
+      fix: "Keep this if the site can handle it, or simplify the pathway to reduce operational burden.",
+      target: "pathway",
+    });
+  }
+
+  if (activeEvaluationView?.warnings?.length) {
+    activeEvaluationView.warnings.forEach((warning, index) => {
+      items.push({
+        id: `evaluation-warning-${index}`,
+        level: warning.kind === "warn" ? "warn" : "info",
+        title: warning.kind === "warn" ? "Evaluation warning" : "Evaluation note",
+        detail: warning.text,
+        fix: "Adjust the graph or test assumptions, then run the pathway again.",
+        target: "pathway",
+      });
+    });
+  }
+
+  return items;
+}
+
 // ---------- Canvas ----------
 function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
-  const initialGraph = hydrateCanvasGraph(window.OptiDxCanvasDraft || window.OptiDxCurrentPathway || window.SEED_PATHWAY || {
-    nodes: window.SEED_NODES,
-    edges: window.SEED_EDGES,
-  });
+  const initialGraph = hydrateCanvasGraph(
+    window.OptiDxCanvasDraft
+    || window.OptiDxCurrentPathway
+    || window.SEED_PATHWAY
+    || window.OptiDxActions?.createStarterCanvasGraph?.()
+    || {
+      nodes: window.SEED_NODES,
+      edges: window.SEED_EDGES,
+    }
+  );
   const [nodes, _setNodes] = useState(initialGraph.nodes);
   const [edges, _setEdges] = useState(initialGraph.edges);
   const [selected, setSelected] = useState(initialGraph.start_node);
@@ -277,15 +546,44 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
   const [toast, setToast] = useState(null);
   const panRef = useRef({});
   const canvasRef = useRef(null);
+  const canonicalPathway = useMemo(() => window.OptiDxActions?.buildCanonicalPathway?.({
+    schema_version: 'canvas-v1',
+    nodes,
+    edges,
+    metadata: window.OptiDxCanvasMeta || window.OptiDxCanvasDraft?.metadata || window.OptiDxCurrentPathway?.metadata || { label: "TB Community Screening" },
+  }) || null, [nodes, edges]);
+  const canonicalSignature = useMemo(
+    () => window.OptiDxActions?.buildPathwaySignature?.(canonicalPathway) || "",
+    [canonicalPathway]
+  );
+  const activeEvaluationView = useMemo(() => (
+    canonicalSignature && canonicalSignature === window.OptiDxLatestEvaluationSignature
+      ? window.OptiDxLatestEvaluationView || null
+      : null
+  ), [canonicalSignature]);
+  const livePaths = useMemo(() => {
+    if (activeEvaluationView?.paths?.length) {
+      return activeEvaluationView.paths.map((path, index) => ({
+        ...path,
+        id: path.id || `P${index + 1}`,
+        sequence: Array.isArray(path.sequence)
+          ? path.sequence
+          : String(path.sequence || "")
+              .split("→")
+              .map(item => item.trim())
+              .filter(Boolean)
+              .map(label => ({ label, kind: /discord/i.test(label) ? "disc" : /negative|−|neg/i.test(label) ? "neg" : "pos" })),
+      }));
+    }
+
+    return buildStructuralPaths(nodes, edges, canonicalPathway?.start_node || initialGraph.start_node);
+  }, [activeEvaluationView, nodes, edges, canonicalPathway, initialGraph.start_node]);
+  const validations = useMemo(
+    () => buildLiveValidation(nodes, edges, canonicalPathway?.start_node || initialGraph.start_node, activeEvaluationView),
+    [nodes, edges, canonicalPathway, initialGraph.start_node, activeEvaluationView]
+  );
 
   useEffect(() => {
-    const canonical = window.OptiDxActions?.buildCanonicalPathway?.({
-      schema_version: window.OptiDxCanvasDraft?.schema_version || window.OptiDxCurrentPathway?.schema_version || 'canvas-v1',
-      nodes,
-      edges,
-      metadata: window.OptiDxCanvasMeta || window.OptiDxCanvasDraft?.metadata || window.OptiDxCurrentPathway?.metadata || { label: "TB Community Screening" },
-    }) || null;
-
     window.OptiDxCanvasState = {
       nodes: nodes.map(n => ({
         ...n,
@@ -293,11 +591,11 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
       })),
       edges: edges.map(e => ({ ...e })),
     };
-    window.OptiDxCanvasMeta = canonical?.metadata || { label: "TB Community Screening" };
-    window.OptiDxCurrentPathway = canonical;
-    window.OptiDxCanvasDraft = canonical;
-    window.SEED_PATHWAY = canonical;
-  }, [nodes, edges]);
+    window.OptiDxCanvasMeta = canonicalPathway?.metadata || { label: "TB Community Screening" };
+    window.OptiDxCurrentPathway = canonicalPathway;
+    window.OptiDxCanvasDraft = canonicalPathway;
+    window.SEED_PATHWAY = canonicalPathway;
+  }, [nodes, edges, canonicalPathway]);
 
   useEffect(() => {
     const onWorkspaceLoad = event => {
@@ -372,9 +670,9 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
 
   const invalidIds = useMemo(() => {
     const m = {};
-    window.SEED_VALIDATIONS.forEach(v => { if (v.target && v.target !== "pathway") m[v.target] = v.level; });
+    validations.forEach(v => { if (v.target && v.target !== "pathway") m[v.target] = v.level; });
     return m;
-  }, []);
+  }, [validations]);
   const focusValidationTarget = (target) => {
     if (!target) return;
     setSelected(target);
@@ -385,8 +683,42 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
 
   // ---- Node + edge mutation helpers ----
   const updateNode = (id, patch) => setNodes(ns => ns.map(n => n.id === id ? { ...n, ...patch } : n));
+  const upsertEdge = (fromId, fromPort, toId) => {
+    const node = nodes.find(item => item.id === fromId);
+    const portMeta = getPortDefinitions(node).find(item => item.port === fromPort);
+
+    setEdges(es => {
+      const existing = es.find(edge => edge.from === fromId && edge.fromPort === fromPort);
+      if (!toId) {
+        return es.filter(edge => !(edge.from === fromId && edge.fromPort === fromPort));
+      }
+
+      if (existing) {
+        return es.map(edge => edge.id === existing.id ? {
+          ...edge,
+          to: toId,
+          kind: portMeta?.kind || edge.kind,
+          label: portMeta?.label || edge.label,
+        } : edge);
+      }
+
+      return [...es, {
+        id: "e" + (Date.now() % 100000) + "-" + fromPort,
+        from: fromId,
+        fromPort,
+        to: toId,
+        kind: portMeta?.kind || "pos",
+        label: portMeta?.label || fromPort,
+      }];
+    });
+  };
   const deleteSelected = () => {
     if (!selected) return;
+    const node = nodes.find(item => item.id === selected);
+    if (isRequiredTerminalNode(node)) {
+      flash("Required pathway endpoints cannot be deleted");
+      return;
+    }
     setNodes(ns => ns.filter(n => n.id !== selected));
     _setEdges(es => es.filter(e => e.from !== selected && e.to !== selected));
     setSelected(null);
@@ -407,6 +739,46 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
     setNodes(ns => [...ns, { id: newId, type: "test", testId: "t_cult", x: 1100, y: 600, kind: "referee", label: "Referee on discordance" }]);
     setSelected(newId);
     flash("Referee added");
+  };
+  const addTerminalNode = () => {
+    const picked = window.prompt(
+      "Add endpoint type:\n- positive\n- negative\n- inconclusive",
+      "inconclusive"
+    );
+    if (!picked) return;
+
+    const normalized = picked.trim().toLowerCase();
+    const subtype = normalized === "positive" || normalized === "pos"
+      ? "pos"
+      : normalized === "negative" || normalized === "neg"
+        ? "neg"
+        : normalized === "inconclusive" || normalized === "inc"
+          ? "inc"
+          : null;
+
+    if (!subtype) {
+      flash("Choose positive, negative, or inconclusive");
+      return;
+    }
+
+    const newId = "n" + (Date.now() % 100000);
+    const terminalCount = nodes.filter(node => node.type === "terminal").length;
+    const label = subtype === "pos"
+      ? "Considered Positive"
+      : subtype === "neg"
+        ? "Considered Negative"
+        : "Inconclusive";
+
+    setNodes(ns => [...ns, {
+      id: newId,
+      type: "terminal",
+      subtype,
+      label,
+      x: 1120,
+      y: 220 + terminalCount * 120,
+    }]);
+    setSelected(newId);
+    flash("Endpoint added");
   };
   const autoLayout = () => {
     // Topological column layout: BFS from entry, group by depth
@@ -591,10 +963,11 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
     backgroundSize: "24px 24px", backgroundColor: "#FBFBFC"
   } : undefined;
 
-  const validations = window.SEED_VALIDATIONS;
   const errCount = validations.filter(v => v.level === "error").length;
   const warnCount = validations.filter(v => v.level === "warn").length;
   const infoCount = validations.filter(v => v.level === "info").length;
+  const selectedNode = nodes.find(node => node.id === selected) || null;
+  const selectedNodeLocked = isRequiredTerminalNode(selectedNode);
 
   return (
     <div className={"canvas-layout" + (libCollapsed ? " is-lib-collapsed" : "") + (propsCollapsed ? " is-props-collapsed" : "")}>
@@ -622,8 +995,17 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
           <button className="btn btn--sm" onClick={addReferee}>
             <Icon name="git-branch" size={12}/>Add referee test
           </button>
+          <button className="btn btn--sm" onClick={addTerminalNode}>
+            <Icon name="plus" size={12}/>Add endpoint
+          </button>
           {selected && (
-            <button className="btn btn--sm" onClick={deleteSelected} title="Delete selected (Del)" style={{marginLeft:"auto"}}>
+            <button
+              className="btn btn--sm"
+              onClick={deleteSelected}
+              disabled={selectedNodeLocked}
+              title={selectedNodeLocked ? "Required endpoints cannot be deleted" : "Delete selected (Del)"}
+              style={{marginLeft:"auto", opacity: selectedNodeLocked ? 0.55 : 1}}
+            >
               <Icon name="trash" size={12}/>Delete
             </button>
           )}
@@ -634,7 +1016,7 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
           <b>{errCount ? "Invalid" : warnCount ? "Valid with warnings" : "Valid"}</b>
           <span className="canvas__status-sep"/>
           <span className="canvas__status-meta">
-            {nodes.length} nodes · {edges.length} edges · {window.SEED_PATHS.length} terminal paths
+            {nodes.length} nodes · {edges.length} edges · {livePaths.length} terminal paths
           </span>
           {toast && (
             <span style={{
@@ -769,7 +1151,7 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
           </button>
           <button className={"props__tab " + (rightTab==="paths"?"is-active":"")} onClick={()=>setRightTab("paths")}>
             <Icon name="git-branch" size={11}/>Paths
-            <span className="props__tab-badge">{window.SEED_PATHS.length}</span>
+            <span className="props__tab-badge">{livePaths.length}</span>
           </button>
           <button className={"props__tab " + (rightTab==="validate"?"is-active":"")} onClick={()=>setRightTab("validate")}>
             <Icon name="alert-triangle" size={11}/>Validate
@@ -777,12 +1159,12 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
           </button>
         </div>
         <div className="props__body side__body scroll" style={{padding:0}}>
-          {rightTab === "props" && <PropertiesPanel selected={selected} nodes={nodes} setOpenPanel={setOpenPanel}
+          {rightTab === "props" && <PropertiesPanel selected={selected} nodes={nodes} edges={edges} setOpenPanel={setOpenPanel}
             updateNode={updateNode} deleteNode={deleteSelected} duplicateNode={duplicateSelected}
             ungroupParallel={ungroupParallel} addParallelMember={addParallelMember}
-            removeParallelMember={removeParallelMember} updateParallelRule={updateParallelRule}/>}
-          {rightTab === "paths" && <PathExplorer/>}
-          {rightTab === "validate" && <ValidationPanel/>}
+            removeParallelMember={removeParallelMember} updateParallelRule={updateParallelRule} upsertEdge={upsertEdge}/>}
+          {rightTab === "paths" && <LivePathExplorer paths={livePaths}/>}
+          {rightTab === "validate" && <LiveValidationPanel validations={validations} focusValidationTarget={focusValidationTarget}/>}
         </div>
         <button className="panel-collapse panel-collapse--props" onClick={() => setPropsCollapsed(c => !c)}
           title={propsCollapsed ? "Expand inspector" : "Collapse inspector"}>
@@ -794,8 +1176,7 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
 }
 
 // ---------- Path Explorer ----------
-function PathExplorer() {
-  const paths = window.SEED_PATHS;
+function LivePathExplorer({ paths }) {
   return (
     <div>
       <div className="props__section">
@@ -870,5 +1251,84 @@ function ValidationPanel() {
   );
 }
 
-Object.assign(window, { ScreenCanvas, TestCard, TestLibrary, PathExplorer, ValidationPanel });
+function PathExplorer({ paths }) {
+  return (
+    <div>
+      <div className="props__section">
+        <h4>Path explorer</h4>
+        <div style={{fontSize:11.5, color:"var(--fg-3)", lineHeight:1.5, marginTop:-4}}>
+          Every root-to-terminal path in the live canonical pathway. Metrics populate after a successful run.
+        </div>
+      </div>
+      {paths.map(p => (
+        <div key={p.id} className="path-row">
+          <div className="path-row__head">
+            <div className="path-row__id">{p.id}</div>
+            <div className={"path-row__terminal path-row__terminal--" + p.terminalKind}>
+              <Icon name={p.terminalKind === "pos" ? "check" : p.terminalKind === "inc" ? "help" : "x"} size={10}/>
+              {p.terminal}
+            </div>
+          </div>
+          <div className="path-row__seq">
+            {p.sequence.map((s,i) => (
+              <React.Fragment key={i}>
+                <span className={"path-step path-step--" + s.kind}>{s.label}</span>
+                {i < p.sequence.length - 1 && <Icon name="arrow-right" size={9} style={{color:"var(--fg-4)"}}/>}
+              </React.Fragment>
+            ))}
+          </div>
+          <div className="path-row__metrics">
+            <div><span>P( · | D+ )</span><b className="mono">{formatMetricValue(p.pIfD, value => Number(value).toFixed(3))}</b></div>
+            <div><span>P( · | D- )</span><b className="mono">{formatMetricValue(p.pIfND, value => Number(value).toFixed(3))}</b></div>
+            <div><span>E[cost]</span><b className="mono">{formatMetricValue(p.cost, value => `$${Number(value).toFixed(2)}`)}</b></div>
+            <div><span>E[TAT]</span><b className="mono">{formatMetricValue(p.tat)}</b></div>
+          </div>
+          <div className="path-row__foot">
+            <span className="chip chip--outline">{formatMetricValue(p.samples)}</span>
+            <span className="chip chip--outline">{formatMetricValue(p.skill)}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function LiveValidationPanel({ validations, focusValidationTarget }) {
+  const errs = validations.filter(x => x.level === "error");
+  const warns = validations.filter(x => x.level === "warn");
+  const infos = validations.filter(x => x.level === "info");
+  return (
+    <div>
+      <div className="props__section">
+        <h4>Pathway validation</h4>
+        <div className="valid-summary">
+          <div className="valid-summary__cell"><span className="valid-dot valid-dot--err"/><b>{errs.length}</b><span>errors</span></div>
+          <div className="valid-summary__cell"><span className="valid-dot valid-dot--warn"/><b>{warns.length}</b><span>warnings</span></div>
+          <div className="valid-summary__cell"><span className="valid-dot valid-dot--info"/><b>{infos.length}</b><span>notes</span></div>
+        </div>
+      </div>
+      {[...errs, ...warns, ...infos].map(item => (
+        <div key={item.id} className={"valid-card valid-card--" + item.level}>
+          <div className="valid-card__head">
+            <Icon name={item.level === "error" ? "alert-circle" : item.level === "warn" ? "alert-triangle" : "info"} size={12}/>
+            <span>{item.title}</span>
+          </div>
+          <div className="valid-card__detail">{item.detail}</div>
+          <div className="valid-card__fix"><b>Suggested fix.</b> {item.fix}</div>
+          {item.target && item.target !== "pathway" && (
+            <button className="valid-card__locate" onClick={() => focusValidationTarget(item.target)}><Icon name="crosshair" size={10}/>Locate on canvas</button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+Object.assign(window, {
+  ScreenCanvas,
+  TestCard,
+  TestLibrary,
+  PathExplorer: LivePathExplorer,
+  ValidationPanel: LiveValidationPanel,
+});
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';

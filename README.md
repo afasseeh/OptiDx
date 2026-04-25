@@ -58,6 +58,8 @@ Open:
 - `http://127.0.0.1:8000`
 - `http://127.0.0.1:8000/api/health`
 
+After signing in, the workspace home loads persisted pathways, evidence tests, and settings from the API. Pathways that have not been evaluated yet will render with placeholder summary values instead of crashing the shell.
+
 ## Validation
 
 ```bash

@@ -66,8 +66,8 @@
 
 ## 9. Asynchronous optimization runner
 
-- **Context:** The optimize request now finishes under PHP's 30-second request limit by pruning mirrored pair permutations, but the run is still synchronous and takes noticeable time on the full seed library.
-- **Limitation:** The browser waits on a long HTTP request while the backend evaluates candidate pathways one by one.
+- **Context:** The optimize request now batches candidate evaluation inside one Python bridge call and no longer relies on a per-candidate process loop for the current seed library.
+- **Limitation:** The browser still waits on a long synchronous HTTP request while the backend evaluates candidate pathways during the same request.
 - **Improvement:** Move candidate generation/evaluation into a queued job or workflow endpoint and stream progress updates back to the UI.
 - **Benefit:** Restores the intended snappy optimization experience and removes pressure from the request timeout ceiling as the library grows.
 - **Priority:** High
@@ -79,3 +79,35 @@
 - **Improvement:** Persist the latest evaluation payload and normalized view alongside the current pathway so the UI can restore the last real run after refresh or screen reload.
 - **Benefit:** Makes the results experience feel stable and keeps the last evaluated pathway visible during iterative review.
 - **Priority:** Low
+
+## 11. Persisted pathway summaries in workspace home
+
+- **Context:** The authenticated workspace home now loads persisted pathways directly from `/api/pathways`.
+- **Limitation:** Saved pathways can exist before any evaluation has been run, so their list cards currently render placeholder summary values.
+- **Improvement:** Store and hydrate a small summary payload for each pathway, ideally from the latest evaluation result, so the home screen can show real cost, sensitivity, specificity, and turnaround values without guessing.
+- **Benefit:** Gives the workspace list meaningful status at a glance and reduces the gap between saved records and the evaluated canvas state.
+- **Priority:** Medium
+
+## 12. Compare-screen candidate targeting
+
+- **Context:** The compare screen can surface live optimization candidates alongside the scenarios view.
+- **Limitation:** The current apply action still targets the first available candidate instead of an explicitly selected row.
+- **Improvement:** Add candidate selection state to the compare screen and wire the apply action to the chosen candidate.
+- **Benefit:** Prevents accidental loading of the wrong optimization option when reviewing multiple candidates.
+- **Priority:** Low
+
+## 13. Unify builder-side validation with engine validation
+
+- **Context:** The Builder now shows live validation based on the current canonical graph and prevents invalid runs from reaching the Python bridge.
+- **Limitation:** The in-browser validation panel is still a structural heuristic and does not yet call the same canonical validation path the backend uses for every engine run.
+- **Improvement:** Add a debounced `/api/pathways/validate` round-trip for the active graph and merge those results into the Builder validation tab.
+- **Benefit:** Keeps the visible Builder warnings perfectly aligned with the backend evaluator contract.
+- **Priority:** Medium
+
+## 14. Backend enforcement for required terminal endpoint roles
+
+- **Context:** The Builder now injects non-deletable positive and negative endpoints into every canvas draft and lets authors add optional inconclusive endpoints from the UI.
+- **Limitation:** Required endpoint presence and role locking are currently enforced in the browser serialization/hydration layer, not as a dedicated backend graph invariant.
+- **Improvement:** Teach the Laravel pathway graph validation layer to require and preserve explicit terminal roles for mandatory positive/negative endpoints.
+- **Benefit:** Prevents malformed graphs from bypassing the UI and keeps imports, API writes, and future editor clients aligned with the same endpoint contract.
+- **Priority:** Medium

@@ -53,18 +53,18 @@ function ScreenHome({ setScreen }) {
                 style={{cursor:"pointer"}}>
                 <div style={{padding:"14px 16px 10px", borderBottom:"1px solid var(--edge)"}}>
                   <div className="row" style={{marginBottom:8}}>
-                    <span className={"chip " + (p.status === "Active" ? "chip--pos" : p.status === "Draft" ? "chip--orange" : "chip--outline")}>{p.status}</span>
+                    <span className={"chip " + (p.status === "Active" ? "chip--pos" : p.status === "Draft" ? "chip--orange" : "chip--outline")}>{p.status || "Draft"}</span>
                     <div className="spacer"/>
                     <Icon name="more" size={14} style={{color:"var(--fg-3)"}}/>
                   </div>
-                  <h3 style={{fontSize:15, marginBottom:2}}>{p.name}</h3>
-                  <div className="u-meta">{p.disease}</div>
+                  <h3 style={{fontSize:15, marginBottom:2}}>{p.name || "Untitled pathway"}</h3>
+                  <div className="u-meta">{p.disease || "No summary metrics yet"}</div>
                 </div>
                 <div style={{padding:"10px 16px 14px", display:"grid", gridTemplateColumns:"1fr 1fr", gap:"6px 12px", fontSize:12}}>
-                  <div><span className="u-meta">Sens</span> <b className="mono">{(p.sens*100).toFixed(1)}%</b></div>
-                  <div><span className="u-meta">Spec</span> <b className="mono">{(p.spec*100).toFixed(1)}%</b></div>
-                  <div><span className="u-meta">Cost</span> <b className="mono">${p.cost.toFixed(2)}</b></div>
-                  <div><span className="u-meta">TAT</span> <b className="mono">{p.tat}</b></div>
+                  <div><span className="u-meta">Sens</span> <b className="mono">{formatPercent(p.sens)}</b></div>
+                  <div><span className="u-meta">Spec</span> <b className="mono">{formatPercent(p.spec)}</b></div>
+                  <div><span className="u-meta">Cost</span> <b className="mono">{formatCurrency(p.cost)}</b></div>
+                  <div><span className="u-meta">TAT</span> <b className="mono">{formatText(p.tat, "—")}</b></div>
                 </div>
                 <div style={{padding:"8px 16px", background:"var(--surface-2)", borderTop:"1px solid var(--edge)", fontSize:11, color:"var(--fg-3)"}}>
                   Updated {p.updated} · {p.owner}
@@ -128,6 +128,40 @@ function ScreenHome({ setScreen }) {
       </div>
     </>
   );
+}
+
+function formatPercent(value, fallback = "—") {
+  if (value === null || value === undefined || value === "") {
+    return fallback;
+  }
+
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return fallback;
+  }
+
+  return `${(numeric * 100).toFixed(1)}%`;
+}
+
+function formatCurrency(value, fallback = "—") {
+  if (value === null || value === undefined || value === "") {
+    return fallback;
+  }
+
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return fallback;
+  }
+
+  return `$${numeric.toFixed(2)}`;
+}
+
+function formatText(value, fallback = "—") {
+  if (value === null || value === undefined || value === "") {
+    return fallback;
+  }
+
+  return String(value);
 }
 
 Object.assign(window, { ScreenHome });

@@ -171,10 +171,10 @@ async function loadWorkspaceData() {
     if (!window.OptiDxCurrentPathwayRecord) {
       const latest = normalizedPathways[0];
       window.OptiDxCurrentPathwayRecord = latest;
-      window.OptiDxCurrentPathway = latest._canonical || normalizePathwayGraph(latest.editor_definition || latest.engine_definition || latest);
-      window.OptiDxCanvasDraft = window.OptiDxCurrentPathway;
-      window.SEED_PATHWAY = window.OptiDxCurrentPathway;
+      setActivePathwayDraft(latest._canonical || latest.editor_definition || latest.engine_definition || latest);
     }
+  } else {
+    setActivePathwayDraft(createStarterCanvasGraph());
   }
 
   if (normalizedTests.length) {
@@ -216,8 +216,22 @@ async function copyText(text) {
 }
 
 async function request(method, url, data = undefined) {
-  const response = await api.request({ method, url, data });
-  return response.data;
+  try {
+    const response = await api.request({ method, url, data });
+    return response.data;
+  } catch (error) {
+    const payload = error?.response?.data;
+    const validationErrors = payload?.validation?.errors;
+    const message = Array.isArray(validationErrors) && validationErrors.length
+      ? validationErrors.join(' ')
+      : payload?.message || error?.message || 'Request failed.';
+
+    const wrapped = new Error(message);
+    wrapped.cause = error;
+    wrapped.response = error?.response;
+    wrapped.payload = payload;
+    throw wrapped;
+  }
 }
 
 function showToast(message, tone = 'info') {
@@ -428,6 +442,83 @@ function detectStartNode(nodes, edges) {
   return startNode;
 }
 
+function isRequiredTerminalRole(role) {
+  return role === 'required_positive' || role === 'required_negative';
+}
+
+function buildRequiredTerminalNode(role, existingNodes = []) {
+  const subtype = role === 'required_positive' ? 'pos' : 'neg';
+  const label = role === 'required_positive' ? 'Considered Positive' : 'Considered Negative';
+  const fallbackId = role === 'required_positive' ? '__terminal_positive__' : '__terminal_negative__';
+  const y = role === 'required_positive' ? 260 : 420;
+  let candidateId = fallbackId;
+  let suffix = 1;
+
+  while (existingNodes.some(node => node?.id === candidateId)) {
+    candidateId = `${fallbackId}_${suffix}`;
+    suffix += 1;
+  }
+
+  return {
+    id: candidateId,
+    type: 'terminal',
+    subtype,
+    label,
+    terminalRole: role,
+    x: 1120,
+    y,
+  };
+}
+
+function ensureRequiredTerminalNodes(nodes) {
+  const nextNodes = Array.isArray(nodes)
+    ? nodes.map(node => ({ ...node }))
+    : [];
+
+  ['required_positive', 'required_negative'].forEach(role => {
+    const subtype = role === 'required_positive' ? 'pos' : 'neg';
+    const fallbackId = role === 'required_positive' ? '__terminal_positive__' : '__terminal_negative__';
+    const existingIndex = nextNodes.findIndex(node =>
+      node?.type === 'terminal'
+      && (node.terminalRole === role || (node.terminalRole == null && node.id === fallbackId))
+    );
+
+    if (existingIndex >= 0) {
+      nextNodes[existingIndex] = {
+        ...nextNodes[existingIndex],
+        type: 'terminal',
+        subtype,
+        terminalRole: role,
+        label: nextNodes[existingIndex].label || (role === 'required_positive' ? 'Considered Positive' : 'Considered Negative'),
+        x: Number.isFinite(Number(nextNodes[existingIndex].x)) ? Number(nextNodes[existingIndex].x) : 1120,
+        y: Number.isFinite(Number(nextNodes[existingIndex].y)) ? Number(nextNodes[existingIndex].y) : (role === 'required_positive' ? 260 : 420),
+      };
+      return;
+    }
+
+    nextNodes.push(buildRequiredTerminalNode(role, nextNodes));
+  });
+
+  return nextNodes;
+}
+
+function createStarterCanvasGraph() {
+  const nodes = ensureRequiredTerminalNodes([]);
+
+  return {
+    schema_version: 'canvas-v1',
+    start_node: detectStartNode(nodes, []),
+    metadata: {
+      label: 'New pathway',
+      source: 'Builder canvas',
+      disease: null,
+    },
+    tests: {},
+    nodes,
+    edges: [],
+  };
+}
+
 function normalizePathwayGraph(pathway) {
   const graph = pathway?.editor_definition || pathway?.engine_definition || pathway || {};
   const nodes = normalizeGraphItems(graph.nodes);
@@ -441,12 +532,278 @@ function normalizePathwayGraph(pathway) {
     tests: Object.fromEntries(tests.filter(test => test.id).map(test => [test.id, { ...test }])),
     nodes: Object.fromEntries(nodes.filter(node => node.id).map(node => [node.id, {
       ...node,
+      terminalRole: node.terminalRole ?? null,
       members: Array.isArray(node.members) ? node.members.map(member => ({ ...member })) : node.members ?? null,
     }])),
     edges: edges
       .filter(edge => edge.from && edge.to)
       .map(edge => ({ ...edge })),
   };
+}
+
+function normalizeCanvasNode(node, fallbackId) {
+  const members = Array.isArray(node.members)
+    ? node.members.map(member => ({ ...member }))
+    : null;
+
+  return {
+    id: node.id || fallbackId,
+    type: node.type || 'test',
+    testId: node.testId ?? null,
+    label: node.label ?? null,
+    kind: node.kind ?? null,
+    subtype: node.subtype ?? null,
+    terminalRole: node.terminalRole ?? null,
+    members,
+    text: node.text ?? null,
+    x: Number.isFinite(Number(node.x)) ? Number(node.x) : 0,
+    y: Number.isFinite(Number(node.y)) ? Number(node.y) : 0,
+    rule: node.rule ?? null,
+  };
+}
+
+function inferCanvasNodeType(node) {
+  if (node?.type === 'annotation') {
+    return 'annotation';
+  }
+
+  if (node?.type === 'parallel') {
+    return 'parallel';
+  }
+
+  if (node?.type === 'terminal' || node?.final_classification) {
+    return 'terminal';
+  }
+
+  const testNames = Array.isArray(node?.action?.test_names)
+    ? node.action.test_names.filter(Boolean)
+    : [];
+
+  if (testNames.length > 1 && (node?.action?.mode === 'parallel' || node?.action?.parallel_time)) {
+    return 'parallel';
+  }
+
+  if (testNames.length > 0 || node?.action) {
+    return 'test';
+  }
+
+  return 'test';
+}
+
+function inferTerminalSubtype(node) {
+  if (node?.subtype) {
+    return node.subtype;
+  }
+
+  return node?.final_classification === 'positive'
+    ? 'pos'
+    : node?.final_classification === 'negative'
+      ? 'neg'
+      : 'inc';
+}
+
+function inferBranchPort(node, branch) {
+  if (!branch || typeof branch !== 'object') {
+    return 'pos';
+  }
+
+  const conditions = branch.conditions || {};
+  const testNames = Array.isArray(node?.action?.test_names) ? node.action.test_names.filter(Boolean) : [];
+  const conditionEntries = Object.entries(conditions).filter(([, value]) => value != null);
+
+  if (node?.type === 'parallel' || (testNames.length > 1 && (node?.action?.mode === 'parallel' || node?.action?.parallel_time))) {
+    if (conditionEntries.length > 0 && conditionEntries.every(([, value]) => value === 'pos')) {
+      return 'both_pos';
+    }
+
+    if (conditionEntries.length > 0 && conditionEntries.every(([, value]) => value === 'neg')) {
+      return 'both_neg';
+    }
+
+    return 'disc';
+  }
+
+  const firstOutcome = conditionEntries[0]?.[1];
+  return firstOutcome === 'neg' ? 'neg' : 'pos';
+}
+
+function inferBranchKind(port) {
+  return port === 'neg'
+    ? 'neg'
+    : port === 'disc'
+      ? 'disc'
+      : port === 'both_neg'
+        ? 'neg'
+        : 'pos';
+}
+
+function layoutCanvasGraph(nodes, edges, startNode) {
+  const nodeIds = nodes.map(node => node.id);
+  const incoming = Object.fromEntries(nodeIds.map(id => [id, 0]));
+  const outgoing = new Map();
+
+  for (const edge of edges) {
+    if (!edge?.from || !edge?.to) {
+      continue;
+    }
+
+    if (incoming[edge.to] !== undefined) {
+      incoming[edge.to] += 1;
+    }
+
+    if (!outgoing.has(edge.from)) {
+      outgoing.set(edge.from, []);
+    }
+
+    outgoing.get(edge.from).push(edge.to);
+  }
+
+  const rootId = nodeIds.includes(startNode) ? startNode : nodeIds.find(id => incoming[id] === 0) || nodeIds[0] || null;
+  const depth = {};
+  const queue = rootId ? [rootId] : [];
+
+  if (rootId) {
+    depth[rootId] = 0;
+  }
+
+  while (queue.length) {
+    const currentId = queue.shift();
+    const currentDepth = depth[currentId] ?? 0;
+    for (const nextId of outgoing.get(currentId) || []) {
+      const nextDepth = currentDepth + 1;
+      if (depth[nextId] === undefined || nextDepth > depth[nextId]) {
+        depth[nextId] = nextDepth;
+        queue.push(nextId);
+      }
+    }
+  }
+
+  const columns = new Map();
+  for (const node of nodes) {
+    const nodeDepth = depth[node.id] ?? 0;
+    if (!columns.has(nodeDepth)) {
+      columns.set(nodeDepth, []);
+    }
+    columns.get(nodeDepth).push(node.id);
+  }
+
+  const xStep = 340;
+  const yStep = 220;
+  const baseX = 40;
+  const baseY = 330;
+
+  return nodes.map(node => {
+    const nodeDepth = depth[node.id] ?? 0;
+    const column = columns.get(nodeDepth) || [node.id];
+    const index = column.indexOf(node.id);
+    const height = column.length;
+
+    return {
+      ...node,
+      x: baseX + nodeDepth * xStep,
+      y: baseY + index * yStep - ((height - 1) * yStep) / 2,
+    };
+  });
+}
+
+function buildCanvasDraftFromPathway(pathway) {
+  const normalized = normalizePathwayGraph(pathway);
+  const rawNodes = Object.entries(normalized.nodes || {});
+  const isCanvasGraph = rawNodes.some(([, node]) => {
+    if (!node || typeof node !== 'object') {
+      return false;
+    }
+
+    return node.type || node.testId || node.members || node.x !== undefined || node.y !== undefined || node.text !== undefined;
+  });
+
+  if (isCanvasGraph) {
+    const nodes = ensureRequiredTerminalNodes(rawNodes.map(([nodeId, node]) => normalizeCanvasNode(node, nodeId)));
+    const edges = (normalized.edges || []).map(edge => ({ ...edge }));
+
+    return {
+      schema_version: normalized.schema_version || 'canvas-v1',
+      start_node: normalized.start_node || nodes.find(node => node.type !== 'annotation')?.id || 'n1',
+      metadata: normalized.metadata || {},
+      tests: normalized.tests || {},
+      nodes,
+      edges,
+    };
+  }
+
+  const convertedNodes = rawNodes.map(([nodeId, node]) => {
+    const type = inferCanvasNodeType(node);
+    const testNames = Array.isArray(node?.action?.test_names) ? node.action.test_names.filter(Boolean) : [];
+    const subtype = inferTerminalSubtype(node);
+
+    if (type === 'parallel') {
+      return normalizeCanvasNode({
+        id: nodeId,
+        type: 'parallel',
+        label: node.label ?? node.description ?? 'Parallel block',
+        members: testNames.map(testId => ({ testId })),
+      }, nodeId);
+    }
+
+    if (type === 'terminal') {
+      return normalizeCanvasNode({
+        id: nodeId,
+        type: 'terminal',
+        subtype,
+        label:
+          node.label
+          || node.description
+          || (subtype === 'pos' ? 'Positive' : subtype === 'neg' ? 'Negative' : subtype === 'inc' ? 'Inconclusive' : 'Refer'),
+      }, nodeId);
+    }
+
+    return normalizeCanvasNode({
+      id: nodeId,
+      type: 'test',
+      testId: testNames[0] ?? null,
+      label: node.label ?? node.description ?? null,
+      kind: node.kind ?? null,
+    }, nodeId);
+  });
+
+  const convertedEdges = [];
+  for (const [nodeId, node] of rawNodes) {
+    if (!Array.isArray(node?.branches)) {
+      continue;
+    }
+
+    for (const branch of node.branches) {
+      const nextNode = branch?.next_node;
+      if (!nextNode) {
+        continue;
+      }
+
+      const port = inferBranchPort(node, branch);
+      convertedEdges.push({
+        id: branch.id || `${nodeId}->${nextNode}:${port}:${convertedEdges.length}`,
+        from: nodeId,
+        fromPort: port,
+        to: nextNode,
+        kind: inferBranchKind(port),
+        label: branch.label || (port === 'both_pos' ? 'Positive' : port === 'both_neg' ? 'Negative' : port === 'disc' ? 'Discordant' : port === 'neg' ? 'Negative' : 'Positive'),
+      });
+    }
+  }
+
+  const laidOutNodes = ensureRequiredTerminalNodes(layoutCanvasGraph(convertedNodes, convertedEdges, normalized.start_node));
+
+  return {
+    schema_version: normalized.schema_version || 'canvas-v1',
+    start_node: normalized.start_node || laidOutNodes.find(node => node.type !== 'annotation')?.id || 'n1',
+    metadata: normalized.metadata || {},
+    tests: normalized.tests || {},
+    nodes: laidOutNodes,
+    edges: convertedEdges,
+  };
+}
+
+function buildPathwaySignature(pathway) {
+  return JSON.stringify(normalizePathwayGraph(pathway || buildCanonicalPathway()));
 }
 
 function getActivePathwayRecord() {
@@ -456,20 +813,20 @@ function getActivePathwayRecord() {
 function setActivePathwayRecord(record) {
   window.OptiDxCurrentPathwayRecord = record || null;
   if (record) {
-    const canonical = record._canonical || normalizePathwayGraph(record.editor_definition || record.engine_definition || record);
-    window.OptiDxCurrentPathway = canonical;
-    window.OptiDxCanvasDraft = canonical;
-    window.SEED_PATHWAY = canonical;
+    const canvasDraft = buildCanvasDraftFromPathway(record._canonical || record.editor_definition || record.engine_definition || record);
+    window.OptiDxCurrentPathway = canvasDraft;
+    window.OptiDxCanvasDraft = canvasDraft;
+    window.SEED_PATHWAY = canvasDraft;
   }
   return record || null;
 }
 
 function setActivePathwayDraft(pathway) {
-  const canonical = normalizePathwayGraph(pathway);
-  window.OptiDxCurrentPathway = canonical;
-  window.OptiDxCanvasDraft = canonical;
-  window.SEED_PATHWAY = canonical;
-  return canonical;
+  const canvasDraft = buildCanvasDraftFromPathway(pathway || createStarterCanvasGraph());
+  window.OptiDxCurrentPathway = canvasDraft;
+  window.OptiDxCanvasDraft = canvasDraft;
+  window.SEED_PATHWAY = canvasDraft;
+  return canvasDraft;
 }
 
 function buildCanonicalPathway(source = null) {
@@ -488,18 +845,20 @@ function buildCanonicalPathway(source = null) {
         ? window.SEED_EDGES
         : [];
   const metadata = source?.metadata || window.OptiDxCanvasMeta || {};
+  const normalizedNodes = ensureRequiredTerminalNodes(nodes);
 
   return {
     schema_version: source?.schema_version || 'canvas-v1',
-    start_node: source?.start_node || source?.startNode || detectStartNode(nodes, edges),
-    tests: collectCanvasTests({ nodes }),
-    nodes: Object.fromEntries(nodes.map(node => [node.id, {
+    start_node: source?.start_node || source?.startNode || detectStartNode(normalizedNodes, edges),
+    tests: collectCanvasTests({ nodes: normalizedNodes }),
+    nodes: Object.fromEntries(normalizedNodes.map(node => [node.id, {
       id: node.id,
       type: node.type,
       testId: node.testId ?? null,
       label: node.label ?? null,
       kind: node.kind ?? null,
       subtype: node.subtype ?? null,
+      terminalRole: node.terminalRole ?? null,
       members: node.members?.map(member => ({ ...member })) ?? null,
       text: node.text ?? null,
       x: node.x,
@@ -581,7 +940,7 @@ function buildOptimizationScenarios(result) {
         : index === 1
           ? 'Closest balanced option'
           : 'Optimizer output',
-      pathway: pathway && Object.keys(pathway).length ? normalizePathwayGraph(pathway) : null,
+      pathway: pathway && Object.keys(pathway).length ? buildCanvasDraftFromPathway(pathway) : null,
     };
   });
 }
@@ -646,6 +1005,7 @@ async function evaluatePathway(pathway = null, prevalence = null) {
   const response = await request('post', '/api/pathways/evaluate', payload);
   window.OptiDxLatestEvaluationResult = response;
   window.OptiDxLatestEvaluationPathway = canonicalPathway;
+  window.OptiDxLatestEvaluationSignature = buildPathwaySignature(canonicalPathway);
   window.OptiDxLatestEvaluationView = buildEvaluationView(response);
   if (response?.pathway) {
     window.OptiDxCurrentPathwayRecord = normalizePathwayRecord(response.pathway);
@@ -656,12 +1016,12 @@ async function evaluatePathway(pathway = null, prevalence = null) {
 
 async function loadPathwayIntoWorkspace(pathway) {
   const response = await request('post', '/api/pathways/import', { pathway });
-  const canonical = normalizePathwayGraph(response?.editor_definition || response);
+  const canvasDraft = buildCanvasDraftFromPathway(pathway);
   window.OptiDxImportedPathway = response;
   window.OptiDxCurrentPathwayRecord = normalizePathwayRecord(response);
-  setActivePathwayDraft(canonical);
-  window.dispatchEvent(new CustomEvent('optidx-pathway-loaded', { detail: canonical }));
-  showToast(`Imported "${canonical.metadata?.label || 'pathway'}"`, 'success');
+  setActivePathwayDraft(canvasDraft);
+  window.dispatchEvent(new CustomEvent('optidx-pathway-loaded', { detail: canvasDraft }));
+  showToast(`Imported "${canvasDraft.metadata?.label || 'pathway'}"`, 'success');
   return response;
 }
 
@@ -819,12 +1179,15 @@ window.OptiDxActions = {
   getActivePathwayRecord,
   setActivePathwayRecord,
   setActivePathwayDraft,
+  createStarterCanvasGraph,
   showToast,
   copyText,
   copyShareLink,
   ensureBlobDownload,
   buildCanonicalPathway,
+  buildPathwaySignature,
   normalizePathwayGraph,
+  buildCanvasDraftFromPathway,
   loadPathwayIntoWorkspace,
   openPathwayRecord,
   savePathway,

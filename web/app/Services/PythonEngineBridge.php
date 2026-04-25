@@ -44,4 +44,9 @@ class PythonEngineBridge
     {
         return $this->run('benchmark', $payload);
     }
+
+    public function optimize(array $payload): array
+    {
+        return $this->run('optimize', $payload);
+    }
 }

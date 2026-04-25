@@ -41,8 +41,12 @@ class AuthController extends Controller
 
         $request->session()->regenerate();
 
-        /** @var User $user */
-        $user = $request->user();
+        /** @var User|null $user */
+        $user = Auth::user();
+        if (! $user) {
+            $user = User::query()->where('email', $credentials['email'])->first();
+        }
+
         if (! $user?->hasVerifiedEmail()) {
             Auth::logout();
             $request->session()->invalidate();

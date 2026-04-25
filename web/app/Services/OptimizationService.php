@@ -16,7 +16,8 @@ class OptimizationService
     public function optimize(array $tests, array $constraints = [], ?float $prevalence = null): array
     {
         $tests = $this->normalizeTests($tests);
-        $candidates = [];
+        $tests = $this->filterTestsByAllowedSampleTypes($tests, $constraints);
+        $templates = [];
 
         foreach ($this->buildTemplates($tests) as $template) {
             $validation = $this->definitions->validate($template);
@@ -24,12 +25,26 @@ class OptimizationService
                 continue;
             }
 
-            $evaluation = $this->bridge->evaluate($template + ['prevalence' => $prevalence]);
-            $metrics = $evaluation['metrics'] ?? $evaluation;
+            $templates[] = $template;
+        }
+
+        $evaluation = $this->bridge->optimize([
+            'templates' => $templates,
+            'prevalence' => $prevalence,
+        ]);
+
+        $candidates = [];
+        foreach ($evaluation['ranked_results'] ?? [] as $index => $candidate) {
+            $template = $templates[$index] ?? $candidate['pathway'] ?? null;
+            if (! is_array($template)) {
+                continue;
+            }
+
+            $metrics = $candidate['metrics'] ?? [];
             $row = [
                 'pathway' => $template,
                 'metrics' => $metrics,
-                'warnings' => $evaluation['warnings'] ?? [],
+                'warnings' => $candidate['warnings'] ?? [],
                 'label' => $template['metadata']['label'] ?? 'Candidate pathway',
             ];
 
@@ -50,6 +65,36 @@ class OptimizationService
             'ranked_results' => $candidates,
             'pareto_frontier' => $candidates,
         ];
+    }
+
+    private function filterTestsByAllowedSampleTypes(array $tests, array $constraints): array
+    {
+        $allowedSampleTypes = array_values(array_filter(array_map(
+            static fn ($value) => strtolower(trim((string) $value)),
+            Arr::wrap($constraints['allowed_sample_types'] ?? [])
+        ), static fn (string $value) => $value !== ''));
+
+        if ($allowedSampleTypes === []) {
+            return $tests;
+        }
+
+        $filtered = [];
+        foreach ($tests as $id => $test) {
+            if (! is_array($test)) {
+                continue;
+            }
+
+            $sampleTypes = array_values(array_filter(array_map(
+                static fn ($value) => strtolower(trim((string) $value)),
+                $test['sample_types'] ?? []
+            ), static fn (string $value) => $value !== ''));
+
+            if ($sampleTypes === [] || array_intersect($allowedSampleTypes, $sampleTypes) !== []) {
+                $filtered[$id] = $test;
+            }
+        }
+
+        return $filtered;
     }
 
     private function buildTemplates(array $tests): array

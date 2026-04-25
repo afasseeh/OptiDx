@@ -1,5 +1,50 @@
 # Change Log
 
+## 2026-04-25 - Required builder endpoints for final pathway outcomes
+
+- Summary: Added required positive and negative terminal endpoints to every builder draft, made new canvas sessions start with those endpoints already placed, prevented those required endpoints from being deleted or retyped, and added an explicit endpoint-creation action for optional positive, negative, or inconclusive terminal nodes.
+- Files or modules affected: `web/resources/js/optidx/actions.js`, `web/resources/js/optidx/components/ScreenCanvas.jsx`, `web/resources/js/optidx/components/PropertiesPanel.jsx`, `web/resources/js/optidx/components/ScreenWizard.jsx`, `ARCHITECTURE.md`, `FUTURE_TASKS.md`, `CHANGE_LOG.md`.
+- Reason for the change: The builder needed explicit end nodes for considered positive and considered negative outcomes on every pathway, with optional inconclusive endpoints, and those required endpoints needed to exist from the start of authoring without being removable.
+- Architecture impact: The frontend canonical graph normalization layer now injects and preserves required terminal roles for the mandatory positive/negative endpoints, while the canvas and inspector enforce the same constraint at the interaction layer.
+- Migration or deployment impact: Rebuild the Vite frontend bundle so the updated builder state model and endpoint controls are published. No database migration was required.
+- Follow-up notes: `npm run build` and `php artisan test --filter=PathwayApiTest` both passed. Backend-side required-endpoint enforcement is tracked in `FUTURE_TASKS.md`.
+
+## 2026-04-25 - Builder live graph tabs, branch routing, and safer evaluation errors
+
+- Summary: Replaced the Builder's remaining seed-driven `Paths` and `Validate` panel data with live canonical-graph derivation, bound outgoing-branch selectors in the properties panel to real canvas edges, separated the visible output ports for test and parallel nodes, and changed pathway evaluation to return structured validation failures instead of a generic 500 when the graph is invalid.
+- Files or modules affected: `web/resources/js/optidx/actions.js`, `web/resources/js/optidx/components/ScreenCanvas.jsx`, `web/resources/js/optidx/components/PropertiesPanel.jsx`, `web/resources/js/optidx/canvas.css`, `web/app/Http/Controllers/Api/PathwayController.php`, `ARCHITECTURE.md`, `FUTURE_TASKS.md`, `CHANGE_LOG.md`.
+- Reason for the change: The Builder was still showing static seed paths and validation findings, outgoing branches in the inspector were dummy placeholders, output ports were visually overlapping, and invalid pathway runs surfaced to the UI as opaque server errors.
+- Architecture impact: The Builder side panels now read from live canonical graph state with optional overlay from the latest matching evaluation payload, inspector branch edits now mutate the actual edge graph, and the evaluation controller now enforces a validation boundary before calling the Python bridge.
+- Migration or deployment impact: Rebuild the Vite frontend bundle and redeploy Laravel so the updated Builder behavior and `422` evaluation response path are published. No database migration was required.
+- Follow-up notes: `php artisan test --filter=PathwayApiTest` and `npm run build` both passed. Full backend-backed live validation is still tracked in `FUTURE_TASKS.md`.
+
+## 2026-04-25 - Hydrate optimization candidates into canvas drafts
+
+- Summary: Added a shared browser-side canvas hydration helper that turns imported pathway records and optimization templates into canvas-ready graphs with layout coordinates, then wired the scenarios and builder screens to use that draft before mounting the canvas.
+- Files or modules affected: `web/resources/js/optidx/actions.js`, `web/resources/js/optidx/components/ScreenCanvas.jsx`, `ARCHITECTURE.md`, `FUTURE_TASKS.md`, `CHANGE_LOG.md`.
+- Reason for the change: Optimization results were arriving as engine-style templates, which meant the canvas could not reliably render the selected candidate after clicking load in canvas.
+- Architecture impact: Established a browser hydration boundary for engine-style pathway records so optimization output and saved imported pathways are converted into builder-friendly canvas graphs before they reach the editor.
+- Migration or deployment impact: Rebuild the Vite frontend bundle so the new hydration logic is published. No backend or database migration was required.
+- Follow-up notes: `npm run build` and `php artisan test --filter PathwayApiTest` both passed. The compare screen still targets the first live suggestion, which remains tracked in `FUTURE_TASKS.md`.
+
+## 2026-04-25 - Auth login and home-screen blank-page fix
+
+- Summary: Fixed the login controller so verified users are resolved from the authenticated guard after `Auth::attempt()`, and hardened the authenticated home screen so persisted pathway cards no longer crash when summary metrics are missing.
+- Files or modules affected: `web/app/Http/Controllers/AuthController.php`, `web/resources/js/optidx/components/ScreenHome.jsx`, `web/tests/Feature/AuthFlowTest.php`, `ARCHITECTURE.md`, `FUTURE_TASKS.md`, `CHANGE_LOG.md`.
+- Reason for the change: Verified login was being misclassified during the same request, and the workspace home was dereferencing missing `cost`/`sens`/`spec` fields from persisted pathway records, which produced the white-screen behavior after login.
+- Architecture impact: The auth flow now treats the guard-backed user as authoritative inside the login request, and the workspace home now tolerates partially populated pathway records instead of assuming every record already has evaluation metrics.
+- Migration or deployment impact: None.
+- Follow-up notes: Added a regression test for verified logins and documented the remaining opportunity to persist hydrated pathway summary fields for the home screen.
+
+## 2026-04-25 - Fix optimization endpoint 500 on completion
+
+- Summary: Batched optimization candidate evaluation into a single Python bridge call, pruned sample-ineligible tests before template generation, and lifted the request time ceiling for `/api/pathways/optimize` so the run no longer dies at the finish line with a 500.
+- Files or modules affected: `optidx_package/optidx/cli.py`, `web/app/Services/PythonEngineBridge.php`, `web/app/Services/OptimizationService.php`, `web/app/Http/Controllers/Api/PathwayController.php`, `web/tests/Unit/OptimizationServiceTest.php`, `ARCHITECTURE.md`, `FUTURE_TASKS.md`, `CHANGE_LOG.md`.
+- Reason for the change: The optimizer was still spawning a new Python process for every candidate and tripping PHP's default execution limit during the final stage of the request.
+- Architecture impact: Preserved the synchronous optimize flow but changed it from per-candidate bridge invocations to one batched Python evaluation pass, with early sample-type filtering on the Laravel side.
+- Migration or deployment impact: Rebuild and redeploy the Laravel app and Python package so the new CLI action and batched bridge path are available. No database migration was required.
+- Follow-up notes: The optimizer still runs inside one HTTP request, so the queued/workflow runner in `FUTURE_TASKS.md` remains relevant for larger libraries.
+
 ## 2026-04-25 - Fix full-bleed top bar stretching
 
 - Summary: Changed the full-bleed frame so Builder and Report keep an intrinsic-height top bar while only the body fills the remaining space, which removes the large blank band above those screen headers.

@@ -80,7 +80,10 @@ function ScreenWizard({ setScreen }) {
   const onContinue = async () => {
     if (step < 4) setStep(step + 1);
     else if (mode === "optimize") await runOptimization();
-    else setScreen("canvas");
+    else {
+      window.OptiDxActions?.setActivePathwayDraft?.(window.OptiDxActions?.createStarterCanvasGraph?.());
+      setScreen("canvas");
+    }
   };
 
   return (
@@ -224,7 +227,7 @@ function WizardStep5({ mode, setMode }) {
           <Icon name="info" size={16} className="banner__icon"/>
           <div>
             {mode === "test"
-              ? "The canvas will open with your selected tests placed on a blank grid."
+              ? "The canvas will open with required positive and negative endpoints already placed on the right side."
               : "The optimizer will search the current test library and return the best feasible candidates along the Pareto frontier."}
           </div>
         </div>
