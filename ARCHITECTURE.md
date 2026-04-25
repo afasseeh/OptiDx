@@ -70,6 +70,7 @@ Current bridge shape:
 - `optidx_package/optidx/cli.py` loads canonical engine payloads, evaluates them, and returns JSON
 - `web/app/Services/PathwayDefinitionService.php` performs Laravel-side graph validation before evaluation
 - `web/app/Http/Controllers/AuthController.php` owns the session-backed auth endpoints used by the React shell
+- `web/resources/js/app.js` bootstraps the browser runtime with Axios, CSRF/session defaults, and the component registry before mounting the React shell
 
 ### Auth and Email
 
@@ -89,6 +90,7 @@ Important implementation details:
 - Password reset tokens are handled by Laravel's password broker.
 - The React shell reads auth state from `/auth/me` on startup and switches between auth, verified, and reset states based on query parameters.
 - `web/resources/js/optidx/actions.js` exposes a shared browser action helper for clipboard, download, and temporary UX messaging so the UI can progress from mockup screens to functional controls without duplicating logic in every component.
+- During the migration away from the prototype shell, the Vite entry also exposes the React hooks expected by the legacy component modules so the existing JSX structure can boot without a wholesale rewrite.
 
 ## Persistence Model
 
@@ -124,3 +126,4 @@ Implemented tables in `web/database/migrations`:
 - PostgreSQL remains the preferred long-term system of record, but the Laragon MVP can use MariaDB if needed for local ergonomics.
 - Docker should be documented later, but it is not the initial local runtime dependency.
 - The browser shell currently uses local file downloads for some export controls; those should be replaced with server-side DOCX/PDF generation when the reporting pipeline is finalized.
+- The signed email-verification flow assumes the app URL matches the live dev host. In local development the host is `http://127.0.0.1:8000`, which keeps signed verification links and redirects consistent during browser testing.

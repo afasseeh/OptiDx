@@ -1,6 +1,13 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 
+window.React = React;
+window.useState = React.useState;
+window.useEffect = React.useEffect;
+window.useMemo = React.useMemo;
+window.useRef = React.useRef;
+window.useCallback = React.useCallback;
+import './bootstrap.js';
 import './optidx/actions.js';
 import './optidx/app.css';
 import './optidx/canvas.css';
