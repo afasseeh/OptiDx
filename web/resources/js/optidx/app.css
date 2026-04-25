@@ -57,10 +57,9 @@ input, select, textarea { font-family: inherit; font-size: inherit; color: inher
 .app {
   display: grid;
   grid-template-columns: 64px 1fr;
-  grid-template-rows: 36px 48px 1fr;
+  grid-template-rows: 36px 1fr;
   grid-template-areas:
     "beta beta"
-    "rail top"
     "rail main";
   height: 100vh;
 }
@@ -238,12 +237,11 @@ input, select, textarea { font-family: inherit; font-size: inherit; color: inher
 .rail__item svg { width: 20px; height: 20px; }
 
 .app__top {
-  grid-area: top;
   background: var(--surface);
   border-bottom: 1px solid var(--edge);
   display: flex; align-items: center;
-  padding: 0 20px;
-  gap: 16px;
+  padding: 0 14px;
+  gap: 10px;
   z-index: 9;
 }
 .top__crumbs { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--fg-3); }
@@ -261,8 +259,20 @@ input, select, textarea { font-family: inherit; font-size: inherit; color: inher
   min-width: 0;
 }
 /* Flush variant: child fills the whole main area, no scroll on the wrapper. Used by canvas/builder and report. */
-.app__main--flush { overflow: hidden; padding: 0; display: flex; flex-direction: column; }
-.app__main--flush > * { flex: 1; min-height: 0; }
+.app__main--flush {
+  overflow: hidden;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.app__main--flush > :first-child {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+.app__main--flush > :last-child {
+  flex: 1 1 auto;
+  min-height: 0;
+}
 
 /* ---------- Buttons ---------- */
 .btn {
@@ -439,7 +449,7 @@ input, select, textarea { font-family: inherit; font-size: inherit; color: inher
 .page {
   max-width: 1280px;
   margin: 0 auto;
-  padding: 18px 40px 64px;
+  padding: 0 40px 64px;
 }
 .page__head {
   display: flex; align-items: flex-end; justify-content: space-between;

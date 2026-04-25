@@ -26,6 +26,7 @@ function App() {
   const [showTweaks, setShowTweaks] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [sessionChecked, setSessionChecked] = useState(false);
+  const [workspaceLoaded, setWorkspaceLoaded] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -42,6 +43,25 @@ function App() {
       });
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    if (!authed) {
+      return;
+    }
+
+    let active = true;
+    window.OptiDxActions?.loadWorkspaceData?.()
+      .catch(() => {})
+      .finally(() => {
+        if (active) {
+          setWorkspaceLoaded(true);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [authed]);
 
   if (!sessionChecked && !authed) {
     return (
@@ -62,6 +82,7 @@ function App() {
       <Rail screen={screen} setScreen={setScreen} onHelp={() => setShowFeedback(true)}/>
       {showFeedback && <FeedbackModal onClose={() => setShowFeedback(false)}/>}
       {screen === "home"     && <Frame><ScreenHome setScreen={setScreen}/></Frame>}
+      {screen === "library"  && <Frame><ScreenLibrary setScreen={setScreen}/></Frame>}
       {screen === "wizard"   && <Frame><ScreenWizard setScreen={setScreen}/></Frame>}
       {screen === "scenarios"&& <Frame><ScreenScenarios setScreen={setScreen}/></Frame>}
       {screen === "canvas"   && <CanvasWrapper variant={variant.canvas} setVariant={v => setVariant(s => ({...s, canvas:v}))}

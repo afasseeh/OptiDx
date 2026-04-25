@@ -3,6 +3,7 @@ function ScreenWizard({ setScreen }) {
   const [step, setStep] = useState(0);
   const [mode, setMode] = useState(null); // null | "test" | "optimize"
   const [objective, setObjective] = useState("Balanced MCDA");
+  const [sampleTypes, setSampleTypes] = useState(["None", "Blood", "Urine", "Stool", "Sputum"]);
   const [optimization, setOptimization] = useState({ status: "idle", progress: 0, stage: "", error: null });
   const steps = ["Disease", "Test library", "Constraints", "Review", "Run"];
 
@@ -48,6 +49,7 @@ function ScreenWizard({ setScreen }) {
           minimum_sensitivity: 0.85,
           minimum_specificity: 0.90,
           maximum_total_cost: 10,
+          allowed_sample_types: sampleTypes,
         },
         prevalence: 0.08,
       };
@@ -116,9 +118,9 @@ function ScreenWizard({ setScreen }) {
         </div>
 
         {step === 0 && <WizardStep1 objective={objective} setObjective={setObjective}/>}
-        {step === 1 && <WizardStep2/>}
-        {step === 2 && <WizardStep3/>}
-        {step === 3 && <WizardStep4/>}
+        {step === 1 && <WizardStep2 setScreen={setScreen}/>}
+        {step === 2 && <WizardStep3 sampleTypes={sampleTypes} setSampleTypes={setSampleTypes}/>}
+        {step === 3 && <WizardStep4 objective={objective} sampleTypes={sampleTypes}/>}
         {step === 4 && <WizardStep5 mode={mode} setMode={setMode}/>}
         {optimization.status !== "idle" && (
           <OptimizationOverlay optimization={optimization} />
@@ -271,7 +273,7 @@ function WizardStep1({ objective, setObjective }) {
   );
 }
 
-function WizardStep2() {
+function WizardStep2({ setScreen }) {
   const [, setLibraryRevision] = useState(0);
   useEffect(() => {
     const onUpdate = () => setLibraryRevision(v => v + 1);
@@ -287,10 +289,16 @@ function WizardStep2() {
         Add the tests you want available on the canvas. Import from evidence database or define manually.
       </p>
       <div className="row" style={{marginBottom:12, gap:8}}>
-        <button className="btn btn--primary" onClick={() => window.OptiDxActions.addManualTest?.() }><Icon name="plus"/>Add test</button>
-        <button className="btn" onClick={() => window.OptiDxActions.comingSoon("Import from evidence")}><Icon name="database"/>Import from evidence</button>
+        <button className="btn btn--primary" onClick={async () => {
+          try {
+            await window.OptiDxActions.addManualTest?.();
+          } catch (error) {
+            window.OptiDxActions.showToast?.(error?.message || "Unable to add test", "error");
+          }
+        }}><Icon name="plus"/>Add test</button>
+        <button className="btn" onClick={() => setScreen("evidence")}><Icon name="database"/>Import from evidence</button>
         <div className="spacer"/>
-        <span className="u-meta">{window.SEED_TESTS.length} tests in library</span>
+        <span className="u-meta">{(window.OptiDxActions.getWorkspaceTests?.() || window.SEED_TESTS || []).length} tests in library</span>
       </div>
       <div className="card card--flush">
         <table className="table">
@@ -299,7 +307,7 @@ function WizardStep2() {
             <th className="num">Cost</th><th>TAT</th><th>Sample</th><th>Skill</th><th/>
           </tr></thead>
           <tbody>
-            {window.SEED_TESTS.slice(0,7).map(t => (
+            {(window.OptiDxActions.getWorkspaceTests?.() || window.SEED_TESTS || []).slice(0,7).map(t => (
               <tr key={t.id}>
                 <td><b>{t.name}</b></td>
                 <td><span className="chip chip--outline">{t.category}</span></td>
@@ -319,7 +327,7 @@ function WizardStep2() {
   );
 }
 
-function WizardStep3() {
+function WizardStep3({ sampleTypes, setSampleTypes }) {
   return (
     <div className="card card--pad">
       <div className="sme-eyebrow" style={{marginBottom:6}}>Step 03</div>
@@ -351,9 +359,11 @@ function WizardStep3() {
         <div className="field" style={{gridColumn:"span 2"}}>
           <label className="field__label">Allowed sample types</label>
           <div className="row row--wrap" style={{gap:6}}>
-            {["None","Blood","Urine","Stool","Sputum","Nasal swab","Imaging"].map((s,i) =>
-              <button key={s} type="button" onClick={() => window.OptiDxActions.comingSoon(`Sample type: ${s}`)} className={"btn btn--sm" + (i < 5 ? " btn--ink" : "")}>
-                {i < 5 && <Icon name="check" size={11}/>}{s}
+            {["None","Blood","Urine","Stool","Sputum","Nasal swab","Imaging"].map((s) =>
+              <button key={s} type="button" onClick={() => setSampleTypes(current => current.includes(s) ? current.filter(item => item !== s) : [...current, s])}
+                className={"btn btn--sm" + (sampleTypes.includes(s) ? " btn--ink" : "")}>
+                {sampleTypes.includes(s) && <Icon name="check" size={11}/>}
+                {s}
               </button>
             )}
           </div>
@@ -363,7 +373,7 @@ function WizardStep3() {
   );
 }
 
-function WizardStep4() {
+function WizardStep4({ objective, sampleTypes }) {
   return (
     <div className="card card--pad">
       <div className="sme-eyebrow" style={{marginBottom:6}}>Step 04</div>
@@ -374,23 +384,23 @@ function WizardStep4() {
       <div className="grid" style={{gridTemplateColumns:"1fr 1fr", gap:12}}>
         <div className="card card--pad">
           <div className="sme-eyebrow" style={{marginBottom:6}}>Disease</div>
-          <div style={{fontSize:15, fontWeight:700}}>Pulmonary tuberculosis</div>
-          <div className="u-meta" style={{marginTop:4}}>Community screening · Adults ≥15 with cough {" > "}2 wk · Prevalence 8%</div>
+          <div style={{fontSize:15, fontWeight:700}}>{objective}</div>
+          <div className="u-meta" style={{marginTop:4}}>Community screening | Live wizard state | Prevalence 8%</div>
         </div>
         <div className="card card--pad">
           <div className="sme-eyebrow" style={{marginBottom:6}}>Objective</div>
-          <div style={{fontSize:15, fontWeight:700}}>Balanced MCDA</div>
-          <div className="u-meta" style={{marginTop:4}}>Weights: Cost 0.3 · Sens 0.3 · Spec 0.3 · TAT 0.1</div>
+          <div style={{fontSize:15, fontWeight:700}}>{objective}</div>
+          <div className="u-meta" style={{marginTop:4}}>Weights and constraints reflect the live wizard state.</div>
         </div>
         <div className="card card--pad">
           <div className="sme-eyebrow" style={{marginBottom:6}}>Test library</div>
-          <div style={{fontSize:15, fontWeight:700}}>7 tests · 4 categories</div>
-          <div className="u-meta" style={{marginTop:4}}>Clinical · Imaging · Molecular · Pathology</div>
+          <div style={{fontSize:15, fontWeight:700}}>{(window.OptiDxActions.getWorkspaceTests?.() || window.SEED_TESTS || []).length} tests</div>
+          <div className="u-meta" style={{marginTop:4}}>{sampleTypes.join(" | ")}</div>
         </div>
         <div className="card card--pad">
           <div className="sme-eyebrow" style={{marginBottom:6}}>Constraints</div>
-          <div style={{fontSize:15, fontWeight:700}}>Sens ≥ 0.85 · Spec ≥ 0.90</div>
-          <div className="u-meta" style={{marginTop:4}}>Cost ≤ $10 · TAT ≤ 72h · Max skill: Lab tech</div>
+          <div style={{fontSize:15, fontWeight:700}}>Sens &gt;= 0.85 | Spec &gt;= 0.90</div>
+          <div className="u-meta" style={{marginTop:4}}>Cost &lt;= $10 | TAT &lt;= 72h | Max skill: Lab tech</div>
         </div>
       </div>
       <div className="banner banner--info" style={{marginTop:20}}>
@@ -403,4 +413,3 @@ function WizardStep4() {
 
 Object.assign(window, { ScreenWizard });
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-

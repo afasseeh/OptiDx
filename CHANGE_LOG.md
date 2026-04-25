@@ -1,5 +1,68 @@
 # Change Log
 
+## 2026-04-25 - Fix full-bleed top bar stretching
+
+- Summary: Changed the full-bleed frame so Builder and Report keep an intrinsic-height top bar while only the body fills the remaining space, which removes the large blank band above those screen headers.
+- Files or modules affected: `web/resources/js/optidx/app.css`, `web/resources/js/optidx/components/Shell.jsx`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: Builder/Canvas and Report preview were still rendering with a tall blank area because the full-bleed shell was stretching the top bar as a flex-growing child.
+- Architecture impact: Preserved the shared shell contract but made the full-bleed frame explicitly two-part: top bar plus expandable content area.
+- Migration or deployment impact: Rebuild the Vite frontend bundle so the updated shell layout is published. No backend or database changes were required.
+- Follow-up notes: Re-run browser validation on Builder and Report preview after reload; if either screen still leaves space, inspect the screen-local wrapper rather than the shared shell.
+
+## 2026-04-25 - Remove unused shell row
+
+- Summary: Removed the unused middle grid track from the authenticated shell and simplified the frame wrapper so each screen renders directly inside `app__main`, which eliminates the blank band above the page header.
+- Files or modules affected: `web/resources/js/optidx/app.css`, `web/resources/js/optidx/components/Shell.jsx`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: Browser inspection showed the empty space was caused by an unused shell row, while the screen top bars were already being rendered inside the main content flow.
+- Architecture impact: Aligned the shell grid with the real DOM structure and made the authenticated app a two-row layout: beta banner plus content area.
+- Migration or deployment impact: Rebuild the Vite frontend bundle to publish the updated shell structure. No backend or database changes were required.
+- Follow-up notes: Recheck Home and Results after reload; if a specific page needs extra vertical rhythm, add it locally rather than restoring a reserved shell row.
+
+## 2026-04-25 - Restore shell top band to 48px
+
+- Summary: Restored the shared app shell middle grid row to `48px` so the top bar has the intended breathing room instead of the over-tight `32px` band.
+- Files or modules affected: `web/resources/js/optidx/app.css`, `CHANGE_LOG.md`.
+- Reason for the change: The previous compaction fixed the visible gap, but the shell should keep the original 48px top-band sizing for the authenticated layout.
+- Architecture impact: Preserved the three-row shell structure and adjusted only the shared row height used by all authenticated pages.
+- Migration or deployment impact: Rebuild the frontend bundle so the updated shell spacing is published. No backend or database changes were required.
+- Follow-up notes: Recheck the Home and Results screens after reload to confirm the 48px row keeps the layout visually balanced without reintroducing the large blank band.
+
+## 2026-04-25 - Shell top-band compaction
+
+- Summary: Tightened the shared app shell header row from 40px to 32px and reduced the top-bar padding so the visible blank band under the beta banner collapses on all pages.
+- Files or modules affected: `web/resources/js/optidx/app.css`, `CHANGE_LOG.md`.
+- Reason for the change: Browser inspection showed the remaining whitespace was still in the shared shell row, not the page body, so the previous top-padding fix was insufficient.
+- Architecture impact: Kept the page layout contract unchanged and only adjusted the shared shell dimensions inherited by all authenticated screens.
+- Migration or deployment impact: Rebuild the frontend bundle after deployment. No backend or database changes were required.
+- Follow-up notes: Recheck the Results and Home screens after the rebuild; if any content feels cramped, adjust that screen locally instead of expanding the global shell row again.
+
+## 2026-04-25 - Shared top bar compaction
+
+- Summary: Reduced the shared app shell top row from 48px to 40px and tightened the top-bar padding so the breadcrumb/action strip no longer leaves an oversized blank band above the page content.
+- Files or modules affected: `web/resources/js/optidx/app.css`, `CHANGE_LOG.md`.
+- Reason for the change: The first spacing fix removed page-body inset, but the visible empty band was still coming from the shared shell row height above the main content area.
+- Architecture impact: Kept the shell structure intact and adjusted only the shared header sizing that all page-based screens inherit.
+- Migration or deployment impact: Rebuild the Vite frontend bundle to publish the updated shell spacing. No backend or database changes were required.
+- Follow-up notes: If any page now feels too tight, the local screen wrapper should add spacing intentionally rather than restoring a larger global shell row.
+
+## 2026-04-25 - Shared page top spacing fix
+
+- Summary: Reduced the shared `.page` wrapper top padding so the main content starts flush under the screen top bar instead of leaving a visible empty band on Results, Home, and other page-based screens.
+- Files or modules affected: `web/resources/js/optidx/app.css`, `CHANGE_LOG.md`.
+- Reason for the change: Multiple screens were showing an unnecessary gap above the main content area because the shared page wrapper always injected a fixed top inset.
+- Architecture impact: Kept the shell layout intact and adjusted only the shared page spacing contract used by the page-based screens.
+- Migration or deployment impact: Rebuild the Vite frontend bundle to pick up the stylesheet change. No backend or database changes were required.
+- Follow-up notes: If any individual page needs extra breathing room later, it should opt in locally rather than reintroducing a global offset in the shared wrapper.
+
+## 2026-04-25 - Live workspace bootstrap and real report exports
+
+- Summary: Added authenticated workspace bootstrap for pathways, diagnostic tests, and scoped settings; wired persisted pathway open/duplicate/evaluate flows to preserve record identity; added scoped settings persistence; and replaced report text downloads with server-generated PDF and DOCX exports.
+- Files or modules affected: `web/app/Http/Controllers/Api/PathwayController.php`, `web/app/Http/Controllers/Api/SettingsController.php`, `web/database/migrations/2026_04_25_000180_scope_settings_by_key.php`, `web/resources/js/optidx/actions.js`, `web/resources/js/optidx/components/App.jsx`, `web/resources/js/optidx/components/ScreenHome.jsx`, `web/resources/js/optidx/components/ScreenExtras.jsx`, `web/resources/js/optidx/components/ScreenResults.jsx`, `web/resources/js/optidx/components/ScreenReport.jsx`, `web/resources/js/optidx/components/ScreenWizard.jsx`, `web/resources/js/optidx/components/ScreenOther.jsx`, `ARCHITECTURE.md`, `FUTURE_TASKS.md`, `CHANGE_LOG.md`.
+- Reason for the change: Several visible UI actions still behaved like a mockup, and workspace/report behavior needed to use persisted records instead of seed fallbacks.
+- Architecture impact: Established the browser workspace snapshot as the first-class source of truth for loaded pathways/tests/settings, preserved pathway record identity during evaluation, and moved report export to a real backend file-generation path.
+- Migration or deployment impact: Added a settings-scoping migration to replace the legacy key-only uniqueness constraint with `scope + key`. Rebuild the Laravel app and frontend bundle after deployment.
+- Follow-up notes: Frontend and backend validation still need to be rerun after these edits; report formatting is functional but intentionally minimal and remains on the future-task list.
+
 ## 2026-04-25 - Live pathway evaluation results binding
 
 - Summary: Rewired the Builder run action to call the live evaluation endpoint, stored the returned evaluation payload in shared browser state, and updated the Results and Trace screens to render from that latest run instead of the bundled seed fixture.

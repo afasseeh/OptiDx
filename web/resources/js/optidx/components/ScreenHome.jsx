@@ -1,5 +1,7 @@
 // Home — Workspace home screen
 function ScreenHome({ setScreen }) {
+  const pathways = window.OptiDxActions.getWorkspacePathways?.() || window.SEED_PATHWAYS || [];
+  const templates = window.SEED_TEMPLATES || [];
   return (
     <>
       <TopBar
@@ -36,11 +38,18 @@ function ScreenHome({ setScreen }) {
           <div className="row" style={{marginBottom:12}}>
             <h2 style={{fontSize:14, letterSpacing:"0.08em", textTransform:"uppercase", color:"var(--fg-2)"}}>Recent pathways</h2>
             <div className="spacer"/>
-            <button className="btn btn--sm btn--ghost" onClick={() => setScreen("results")}>View all <Icon name="chevron-right" size={12}/></button>
+            <button className="btn btn--sm btn--ghost" onClick={() => setScreen("library")}>View all <Icon name="chevron-right" size={12}/></button>
           </div>
           <div className="grid" style={{gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))"}}>
-            {window.SEED_PATHWAYS.map(p => (
-              <article key={p.id} className="card" onClick={() => setScreen("canvas")}
+            {pathways.map(p => (
+              <article key={p.id} className="card" onClick={async () => {
+                try {
+                  await window.OptiDxActions.openPathwayRecord?.(p);
+                  setScreen("canvas");
+                } catch (error) {
+                  window.OptiDxActions.showToast?.(error?.message || "Unable to open pathway", "error");
+                }
+              }}
                 style={{cursor:"pointer"}}>
                 <div style={{padding:"14px 16px 10px", borderBottom:"1px solid var(--edge)"}}>
                   <div className="row" style={{marginBottom:8}}>
@@ -72,7 +81,7 @@ function ScreenHome({ setScreen }) {
             <span className="u-meta">Start from a proven pattern</span>
           </div>
           <div className="grid" style={{gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))"}}>
-            {window.SEED_TEMPLATES.map(t => (
+            {templates.map(t => (
               <article key={t.id} className="card card--pad" style={{cursor:"pointer"}}
                 onClick={() => setScreen("wizard")}>
                 <div style={{width:36, height:36, borderRadius:6, background:"var(--sme-orange-050)",

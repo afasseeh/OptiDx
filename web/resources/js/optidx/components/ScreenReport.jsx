@@ -93,11 +93,34 @@ function ScreenReport({ setScreen, onShare }) {
       <TopBar crumbs={["OptiDx","TB Community Screening","Report preview"]}
         actions={<>
           <button className="btn" onClick={() => window.OptiDxActions.copyText(summaryText)}><Icon name="copy"/>Copy summary</button>
-          <button className="btn" onClick={onShare}><Icon name="upload"/>Share</button>
-          <button className="btn" onClick={() => window.OptiDxActions.downloadText("optidx-report.docx.txt", summaryText)}>
+          <button className="btn" onClick={async () => {
+            try {
+              if (navigator.share) {
+                await navigator.share({ title: "OptiDx report", text: summaryText, url: window.location.href });
+              } else {
+                await window.OptiDxActions.copyShareLink?.(window.location.href);
+                window.OptiDxActions.showToast?.("Share link copied", "success");
+              }
+            } catch (error) {
+              window.OptiDxActions.showToast?.(error?.message || "Unable to share report", "error");
+            }
+          }}><Icon name="upload"/>Share</button>
+          <button className="btn" onClick={async () => {
+            try {
+              await window.OptiDxActions.downloadReport?.("docx");
+            } catch (error) {
+              window.OptiDxActions.showToast?.(error?.message || "Unable to download DOCX", "error");
+            }
+          }}>
             <DocxLogo size={14}/>Download DOCX
           </button>
-          <button className="btn btn--primary" onClick={() => window.OptiDxActions.downloadText("optidx-report.pdf.txt", summaryText)}>
+          <button className="btn btn--primary" onClick={async () => {
+            try {
+              await window.OptiDxActions.downloadReport?.("pdf");
+            } catch (error) {
+              window.OptiDxActions.showToast?.(error?.message || "Unable to download PDF", "error");
+            }
+          }}>
             <PdfLogo size={14}/>Download PDF
           </button>
         </>}/>

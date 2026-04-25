@@ -21,9 +21,12 @@ class SettingsController extends Controller
             'value' => ['nullable', 'array'],
         ]);
 
-        $setting = Setting::updateOrCreate(['key' => $data['key']], $data);
+        $scope = $data['scope'] ?? 'workspace';
+        $setting = Setting::updateOrCreate(
+            ['scope' => $scope, 'key' => $data['key']],
+            ['scope' => $scope, 'key' => $data['key'], 'value' => $data['value'] ?? null]
+        );
 
         return response()->json($setting);
     }
 }
-

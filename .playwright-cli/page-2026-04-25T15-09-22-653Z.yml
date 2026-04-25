@@ -1,0 +1,506 @@
+- generic [ref=e3]:
+  - generic [ref=e9]:
+    - generic [ref=e10]: BETA
+    - generic [ref=e11]:
+      - generic [ref=e12]: Public beta
+      - text: by Syreon.
+      - generic [ref=e13]: ·
+      - generic [ref=e14]: Non‑profit, free to use.
+      - generic [ref=e15]: ·
+      - generic [ref=e16]: Not yet validated
+    - generic [ref=e18]:
+      - button "Send feedback" [ref=e19] [cursor=pointer]:
+        - img [ref=e20]
+        - text: Send feedback
+      - button "About beta" [ref=e23] [cursor=pointer]:
+        - text: About beta
+        - img [ref=e24]
+  - navigation [ref=e26]:
+    - generic "OptiDx" [ref=e28]:
+      - generic [ref=e29]: Ox
+    - generic "Home" [ref=e31] [cursor=pointer]:
+      - img [ref=e32]
+    - generic "New" [ref=e35] [cursor=pointer]:
+      - img [ref=e36]
+    - generic "Builder" [ref=e41] [cursor=pointer]:
+      - img [ref=e42]
+    - generic "Results" [ref=e47] [cursor=pointer]:
+      - img [ref=e48]
+    - generic "Compare" [ref=e49] [cursor=pointer]:
+      - img [ref=e50]
+    - generic "Evidence" [ref=e51] [cursor=pointer]:
+      - img [ref=e52]
+    - generic "Report" [ref=e56] [cursor=pointer]:
+      - img [ref=e57]
+    - generic "Teams" [ref=e60] [cursor=pointer]:
+      - img [ref=e61]
+    - generic "Send feedback or report a bug" [ref=e64] [cursor=pointer]:
+      - img [ref=e65]
+    - generic "Settings" [ref=e68] [cursor=pointer]:
+      - img [ref=e69]
+  - main [ref=e72]:
+    - generic [ref=e73]:
+      - generic [ref=e74]:
+        - generic [ref=e75]: OptiDx
+        - img [ref=e76]
+        - generic [ref=e78]: TB Community Screening
+        - img [ref=e79]
+        - generic [ref=e81]: Builder
+      - generic [ref=e82]:
+        - generic [ref=e83]:
+          - button "Layout A" [ref=e84] [cursor=pointer]
+          - button "Layout B" [ref=e85] [cursor=pointer]
+        - button "Save" [ref=e86] [cursor=pointer]:
+          - img [ref=e87]
+          - text: Save
+        - button "Export" [ref=e91] [cursor=pointer]:
+          - img [ref=e92]
+          - text: Export
+        - button "Run pathway" [ref=e95] [cursor=pointer]:
+          - img [ref=e96]
+          - text: Run pathway
+    - generic [ref=e98]:
+      - complementary [ref=e99]:
+        - generic [ref=e100]:
+          - heading "Diagnostic tests" [level=2] [ref=e101]
+          - button "Add test parameter" [ref=e102] [cursor=pointer]:
+            - img [ref=e103]
+        - generic [ref=e105]:
+          - img [ref=e106]
+          - textbox "Search test parameters…" [ref=e109]
+        - generic [ref=e110]:
+          - button "all" [ref=e111] [cursor=pointer]
+          - button "clinical" [ref=e112] [cursor=pointer]
+          - button "imaging" [ref=e113] [cursor=pointer]
+          - button "rapid" [ref=e114] [cursor=pointer]
+          - button "molecular" [ref=e115] [cursor=pointer]
+          - button "pathology" [ref=e116] [cursor=pointer]
+          - button "biomarker" [ref=e117] [cursor=pointer]
+        - generic [ref=e118]:
+          - generic [ref=e119]:
+            - generic [ref=e120]:
+              - img [ref=e122]
+              - generic [ref=e126]:
+                - generic "Symptom Screen (WHO-4)" [ref=e127]
+                - generic [ref=e128]: clinical
+            - generic [ref=e129]:
+              - generic [ref=e130]:
+                - generic [ref=e131]: Sens
+                - generic [ref=e132]: "0.77"
+              - generic [ref=e133]:
+                - generic [ref=e134]: Spec
+                - generic [ref=e135]: "0.68"
+              - generic [ref=e136]:
+                - generic [ref=e137]: Cost
+                - generic [ref=e138]: $0.50
+              - generic [ref=e139]:
+                - generic [ref=e140]: TAT
+                - generic [ref=e141]: 5m
+            - generic [ref=e142]:
+              - generic [ref=e143]: none
+              - generic [ref=e144]: CHW
+          - generic [ref=e145]:
+            - generic [ref=e146]:
+              - img [ref=e148]
+              - generic [ref=e150]:
+                - generic "Chest X-Ray (CAD4TB)" [ref=e151]
+                - generic [ref=e152]: imaging
+            - generic [ref=e153]:
+              - generic [ref=e154]:
+                - generic [ref=e155]: Sens
+                - generic [ref=e156]: "0.90"
+              - generic [ref=e157]:
+                - generic [ref=e158]: Spec
+                - generic [ref=e159]: "0.76"
+              - generic [ref=e160]:
+                - generic [ref=e161]: Cost
+                - generic [ref=e162]: $3.20
+              - generic [ref=e163]:
+                - generic [ref=e164]: TAT
+                - generic [ref=e165]: 30m
+            - generic [ref=e166]:
+              - generic [ref=e167]: imaging
+              - generic [ref=e168]: Radiographer
+          - generic [ref=e169]:
+            - generic [ref=e170]:
+              - img [ref=e172]
+              - generic [ref=e176]:
+                - generic "Xpert MTB/RIF Ultra" [ref=e177]
+                - generic [ref=e178]: molecular
+            - generic [ref=e179]:
+              - generic [ref=e180]:
+                - generic [ref=e181]: Sens
+                - generic [ref=e182]: "0.88"
+              - generic [ref=e183]:
+                - generic [ref=e184]: Spec
+                - generic [ref=e185]: "0.98"
+              - generic [ref=e186]:
+                - generic [ref=e187]: Cost
+                - generic [ref=e188]: $9.98
+              - generic [ref=e189]:
+                - generic [ref=e190]: TAT
+                - generic [ref=e191]: 2h
+            - generic [ref=e192]:
+              - generic [ref=e193]: sputum
+              - generic [ref=e194]: Lab Tech
+          - generic [ref=e195]:
+            - generic [ref=e196]:
+              - img [ref=e198]
+              - generic [ref=e201]:
+                - generic "Urine LF-LAM" [ref=e202]
+                - generic [ref=e203]: rapid
+            - generic [ref=e204]:
+              - generic [ref=e205]:
+                - generic [ref=e206]: Sens
+                - generic [ref=e207]: "0.42"
+              - generic [ref=e208]:
+                - generic [ref=e209]: Spec
+                - generic [ref=e210]: "0.91"
+              - generic [ref=e211]:
+                - generic [ref=e212]: Cost
+                - generic [ref=e213]: $3.50
+              - generic [ref=e214]:
+                - generic [ref=e215]: TAT
+                - generic [ref=e216]: 25m
+            - generic [ref=e217]:
+              - generic [ref=e218]: urine
+              - generic [ref=e219]: Nurse
+          - generic [ref=e220]:
+            - generic [ref=e221]:
+              - img [ref=e223]
+              - generic [ref=e226]:
+                - generic "Sputum Smear Microscopy" [ref=e227]
+                - generic [ref=e228]: pathology
+            - generic [ref=e229]:
+              - generic [ref=e230]:
+                - generic [ref=e231]: Sens
+                - generic [ref=e232]: "0.61"
+              - generic [ref=e233]:
+                - generic [ref=e234]: Spec
+                - generic [ref=e235]: "0.98"
+              - generic [ref=e236]:
+                - generic [ref=e237]: Cost
+                - generic [ref=e238]: $1.80
+              - generic [ref=e239]:
+                - generic [ref=e240]: TAT
+                - generic [ref=e241]: 1h
+            - generic [ref=e242]:
+              - generic [ref=e243]: sputum
+              - generic [ref=e244]: Lab Tech
+          - generic [ref=e245]:
+            - generic [ref=e246]:
+              - img [ref=e248]
+              - generic [ref=e251]:
+                - generic "Liquid Culture (MGIT)" [ref=e252]
+                - generic [ref=e253]: culture
+            - generic [ref=e254]:
+              - generic [ref=e255]:
+                - generic [ref=e256]: Sens
+                - generic [ref=e257]: "0.98"
+              - generic [ref=e258]:
+                - generic [ref=e259]: Spec
+                - generic [ref=e260]: "0.99"
+              - generic [ref=e261]:
+                - generic [ref=e262]: Cost
+                - generic [ref=e263]: $18.50
+              - generic [ref=e264]:
+                - generic [ref=e265]: TAT
+                - generic [ref=e266]: 14d
+            - generic [ref=e267]:
+              - generic [ref=e268]: sputum
+              - generic [ref=e269]: Specialist
+          - generic [ref=e270]:
+            - generic [ref=e271]:
+              - img [ref=e273]
+              - generic [ref=e277]:
+                - generic "Truenat MTB Plus" [ref=e278]
+                - generic [ref=e279]: molecular
+            - generic [ref=e280]:
+              - generic [ref=e281]:
+                - generic [ref=e282]: Sens
+                - generic [ref=e283]: "0.85"
+              - generic [ref=e284]:
+                - generic [ref=e285]: Spec
+                - generic [ref=e286]: "0.97"
+              - generic [ref=e287]:
+                - generic [ref=e288]: Cost
+                - generic [ref=e289]: $7.20
+              - generic [ref=e290]:
+                - generic [ref=e291]: TAT
+                - generic [ref=e292]: 1h
+            - generic [ref=e293]:
+              - generic [ref=e294]: sputum
+              - generic [ref=e295]: Lab Tech
+          - generic [ref=e296]:
+            - generic [ref=e297]:
+              - img [ref=e299]
+              - generic [ref=e302]:
+                - generic "IGRA (IFN-γ release)" [ref=e303]
+                - generic [ref=e304]: biomarker
+            - generic [ref=e305]:
+              - generic [ref=e306]:
+                - generic [ref=e307]: Sens
+                - generic [ref=e308]: "0.80"
+              - generic [ref=e309]:
+                - generic [ref=e310]: Spec
+                - generic [ref=e311]: "0.97"
+              - generic [ref=e312]:
+                - generic [ref=e313]: Cost
+                - generic [ref=e314]: $22.00
+              - generic [ref=e315]:
+                - generic [ref=e316]: TAT
+                - generic [ref=e317]: 24h
+            - generic [ref=e318]:
+              - generic [ref=e319]: blood
+              - generic [ref=e320]: Lab Tech
+        - generic [ref=e321]:
+          - text: Tip. Drag onto the canvas to add a pathway node. Hold
+          - generic [ref=e322]: Shift
+          - text: and drag-select to group as a parallel block.
+        - button "Collapse test library" [ref=e323] [cursor=pointer]:
+          - img [ref=e324]
+      - generic [ref=e326]:
+        - generic [ref=e327]:
+          - generic [ref=e328]:
+            - button "Undo (⌘Z)" [ref=e329] [cursor=pointer]:
+              - img [ref=e330]
+            - button "Redo (⇧⌘Z)" [ref=e333] [cursor=pointer]:
+              - img [ref=e334]
+          - generic [ref=e337]:
+            - button "Snap" [ref=e338] [cursor=pointer]:
+              - img [ref=e339]
+              - text: Snap
+            - button "Auto-layout" [ref=e341] [cursor=pointer]:
+              - img [ref=e342]
+              - text: Auto-layout
+          - button "Group as parallel" [ref=e344] [cursor=pointer]:
+            - img [ref=e345]
+            - text: Group as parallel
+          - button "Add referee test" [ref=e349] [cursor=pointer]:
+            - img [ref=e350]
+            - text: Add referee test
+          - button "Delete" [ref=e355] [cursor=pointer]:
+            - img [ref=e356]
+            - text: Delete
+        - generic [ref=e358]:
+          - generic [ref=e360]: Valid with warnings
+          - generic [ref=e362]: 9 nodes · 9 edges · 6 terminal paths
+        - generic [ref=e363]:
+          - generic [ref=e364]: Branches
+          - generic [ref=e365]: Positive
+          - generic [ref=e367]: Negative
+          - generic [ref=e369]: Discordant
+          - generic [ref=e371]: Inconclusive
+          - generic [ref=e373]: Referee
+        - generic [ref=e375]:
+          - img
+          - generic "Click to delete edge" [ref=e385] [cursor=pointer]: Positive
+          - generic "Click to delete edge" [ref=e387] [cursor=pointer]: Negative
+          - generic "Click to delete edge" [ref=e389] [cursor=pointer]: Positive
+          - generic "Click to delete edge" [ref=e391] [cursor=pointer]: Negative
+          - generic "Click to delete edge" [ref=e393] [cursor=pointer]: Both positive
+          - generic "Click to delete edge" [ref=e395] [cursor=pointer]: Both negative
+          - generic "Click to delete edge" [ref=e397] [cursor=pointer]: Discordant → referee
+          - generic "Click to delete edge" [ref=e399] [cursor=pointer]: Positive
+          - generic "Click to delete edge" [ref=e401] [cursor=pointer]: Negative
+          - generic [ref=e403]:
+            - generic [ref=e404]:
+              - img [ref=e406]
+              - generic [ref=e410]:
+                - generic [ref=e411]: Symptom Screen (WHO-4)
+                - generic [ref=e412]: "Entry: Symptom screen"
+            - generic [ref=e414]:
+              - generic [ref=e415]: Se 0.77
+              - generic [ref=e416]: Sp 0.68
+              - generic [ref=e417]: $0.50
+              - generic [ref=e418]: 5m
+            - generic [ref=e419]:
+              - generic [ref=e420]: Positive
+              - generic [ref=e422]: Negative
+            - generic "Drag to wire positive branch" [ref=e425]
+            - generic "Drag to wire negative branch" [ref=e426]
+          - generic [ref=e427]:
+            - generic [ref=e428]:
+              - img [ref=e430]
+              - generic [ref=e432]:
+                - generic [ref=e433]: Chest X-Ray (CAD4TB)
+                - generic [ref=e434]: imaging · pathway node
+            - generic [ref=e436]:
+              - generic [ref=e437]: Se 0.90
+              - generic [ref=e438]: Sp 0.76
+              - generic [ref=e439]: $3.20
+              - generic [ref=e440]: 30m
+            - generic [ref=e441]:
+              - generic [ref=e442]: Positive
+              - generic [ref=e444]: Negative
+            - generic "Drag to wire positive branch" [ref=e447]
+            - generic "Drag to wire negative branch" [ref=e448]
+          - generic [ref=e449]:
+            - generic [ref=e450]:
+              - img [ref=e451]
+              - text: Parallel testing block
+            - generic [ref=e455]: Confirmatory parallel block
+            - generic [ref=e456]:
+              - generic [ref=e457]:
+                - img [ref=e458]
+                - generic [ref=e462]: Xpert MTB/RIF Ultra
+                - generic [ref=e463]: Se 0.88
+                - generic [ref=e464]: Sp 0.98
+              - generic [ref=e465]:
+                - img [ref=e466]
+                - generic [ref=e469]: Sputum Smear Microscopy
+                - generic [ref=e470]: Se 0.61
+                - generic [ref=e471]: Sp 0.98
+            - generic [ref=e472]:
+              - generic [ref=e473]:
+                - generic [ref=e474]: Combined cost
+                - generic [ref=e475]: $11.78
+              - generic [ref=e476]:
+                - generic [ref=e477]: TAT (max rule)
+                - generic [ref=e478]: 2.0h
+              - generic [ref=e479]:
+                - generic [ref=e480]: Samples
+                - generic [ref=e481]: sputum
+            - generic [ref=e482]:
+              - generic [ref=e483]: Both +
+              - generic [ref=e485]: Discordant
+              - generic [ref=e487]: Both −
+          - generic [ref=e493]:
+            - generic [ref=e494]: Referee
+            - generic [ref=e495]:
+              - img [ref=e497]
+              - generic [ref=e500]:
+                - generic [ref=e501]: Liquid Culture (MGIT)
+                - generic [ref=e502]: Referee on discordance
+            - generic [ref=e504]:
+              - generic [ref=e505]: Se 0.98
+              - generic [ref=e506]: Sp 0.99
+              - generic [ref=e507]: $18.50
+              - generic [ref=e508]: 14d
+            - generic [ref=e509]:
+              - generic [ref=e510]: Positive
+              - generic [ref=e512]: Negative
+            - generic "Drag to wire positive branch" [ref=e515]
+            - generic "Drag to wire negative branch" [ref=e516]
+          - generic [ref=e518]:
+            - img [ref=e520]
+            - generic [ref=e522]:
+              - generic [ref=e523]: TB, Treat
+              - generic [ref=e524]: Final positive · terminal
+          - generic [ref=e527]:
+            - img [ref=e529]
+            - generic [ref=e531]:
+              - generic [ref=e532]: TB Unlikely
+              - generic [ref=e533]: Final negative · terminal
+          - generic [ref=e536]:
+            - img [ref=e538]
+            - generic [ref=e540]:
+              - generic [ref=e541]: No TB
+              - generic [ref=e542]: Final negative · terminal
+          - generic [ref=e545]:
+            - img [ref=e547]
+            - generic [ref=e550]:
+              - generic [ref=e551]: Inconclusive
+              - generic [ref=e552]: Inconclusive · terminal
+          - generic [ref=e554]:
+            - generic [ref=e555]: Assumption
+            - text: Assumes conditional independence between Xpert and smear, given disease status (Qu et al., 2020).
+        - generic [ref=e556]:
+          - button [ref=e557] [cursor=pointer]:
+            - img [ref=e558]
+          - button [ref=e561] [cursor=pointer]:
+            - img [ref=e562]
+          - button [ref=e565] [cursor=pointer]:
+            - img [ref=e566]
+        - img [ref=e569]
+      - complementary [ref=e588]:
+        - generic [ref=e589]:
+          - button "Properties" [ref=e590] [cursor=pointer]:
+            - img [ref=e591]
+            - text: Properties
+          - button "Paths 6" [ref=e594] [cursor=pointer]:
+            - img [ref=e595]
+            - text: Paths
+            - generic [ref=e600]: "6"
+          - button "Validate 4" [ref=e601] [cursor=pointer]:
+            - img [ref=e602]
+            - text: Validate
+            - generic [ref=e605]: "4"
+        - generic [ref=e607]:
+          - generic [ref=e608]:
+            - button "Duplicate" [ref=e609] [cursor=pointer]:
+              - img [ref=e610]
+              - text: Duplicate
+            - button "Delete" [ref=e613] [cursor=pointer]:
+              - img [ref=e614]
+              - text: Delete
+          - generic [ref=e616]:
+            - generic [ref=e617]:
+              - generic [ref=e618]:
+                - img [ref=e620]
+                - generic [ref=e624]:
+                  - generic [ref=e625]: Symptom Screen (WHO-4)
+                  - generic [ref=e626]: Diagnostic test · pathway node
+              - heading "Custom label (optional)" [level=4] [ref=e627]
+              - textbox "clinical · pathway node" [ref=e628]: "Entry: Symptom screen"
+              - generic [ref=e629]:
+                - term [ref=e630]: Sensitivity
+                - definition [ref=e631]: "0.770"
+                - term [ref=e632]: Specificity
+                - definition [ref=e633]: "0.680"
+                - term [ref=e634]: Cost
+                - definition [ref=e635]: $0.50
+                - term [ref=e636]: Turnaround
+                - definition [ref=e637]: 5 min
+                - term [ref=e638]: Sample type
+                - definition [ref=e639]: none
+                - term [ref=e640]: Skill required
+                - definition [ref=e641]: CHW
+                - term [ref=e642]: Evidence
+                - definition [ref=e643]: WHO, 2021
+                - term [ref=e644]: Confidence
+                - definition [ref=e645]:
+                  - generic [ref=e646]: High
+              - generic [ref=e647]:
+                - checkbox "Mark as referee test (used on discordance)" [ref=e648]
+                - text: Mark as referee test (used on discordance)
+            - generic [ref=e649]:
+              - heading "Decision rule (routing condition)" [level=4] [ref=e650]
+              - generic [ref=e651]:
+                - button "Preset" [ref=e652] [cursor=pointer]
+                - button "Builder" [ref=e653] [cursor=pointer]
+                - button "Custom" [ref=e654] [cursor=pointer]
+              - generic [ref=e655]:
+                - button "Test is positive" [ref=e656] [cursor=pointer]:
+                  - img [ref=e658]
+                  - text: Test is positive
+                - button "Test is negative" [ref=e660] [cursor=pointer]:
+                  - img [ref=e662]
+                  - text: Test is negative
+                - button "Custom rule (advanced)" [ref=e664] [cursor=pointer]:
+                  - img [ref=e666]
+                  - text: Custom rule (advanced)
+              - generic [ref=e668]:
+                - generic [ref=e669]: Natural-language preview
+                - generic [ref=e670]: If Symptom Screen (WHO-4) is positive, route to Xpert MTB/RIF Ultra. Otherwise, route to TB Unlikely.
+              - heading "Outgoing branches" [level=4] [ref=e671]
+              - generic [ref=e672]:
+                - generic [ref=e673]:
+                  - generic [ref=e675]: Positive
+                  - img [ref=e677]
+                  - combobox [ref=e679]:
+                    - option "Xpert MTB/RIF Ultra" [selected]
+                    - option "Parallel block"
+                    - option "TB, Treat"
+                    - option "Refer"
+                - generic [ref=e680]:
+                  - generic [ref=e682]: Negative
+                  - img [ref=e684]
+                  - combobox [ref=e686]:
+                    - option "TB Unlikely" [selected]
+                    - option "Repeat testing"
+                    - option "No TB"
+        - button "Collapse inspector" [ref=e687] [cursor=pointer]:
+          - img [ref=e688]
+  - button "Design specification" [ref=e690] [cursor=pointer]:
+    - img [ref=e691]

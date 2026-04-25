@@ -50,24 +50,13 @@ function TopBar({ crumbs, actions }) {
   );
 }
 
-// Frame — splits a screen's children into the top-bar grid area and the main
-// scroll area. Screens are written as <><TopBar/>...content...</> — Frame
-// pulls the TopBar out (so it lands in grid-area:top) and wraps the rest in
-// <main class="app__main"> so it scrolls inside grid-area:main.
+// Frame keeps the authenticated shell body consistent across screens.
+// Normal screens scroll inside .app__main, while fullBleed screens render a
+// top bar plus a body that fills the remaining space without stretching the
+// bar itself.
 function Frame({ children, fullBleed = false }) {
-  const arr = React.Children.toArray(children);
-  // Unwrap a single fragment passed as the only child
-  let kids = arr;
-  if (arr.length === 1 && arr[0]?.type === React.Fragment) {
-    kids = React.Children.toArray(arr[0].props.children);
-  }
-  const topBar = kids.find(c => c?.type === TopBar);
-  const rest = kids.filter(c => c?.type !== TopBar);
   return (
-    <>
-      {topBar}
-      <main className={"app__main" + (fullBleed ? " app__main--flush" : "")}>{rest}</main>
-    </>
+    <main className={"app__main" + (fullBleed ? " app__main--flush" : "")}>{children}</main>
   );
 }
 

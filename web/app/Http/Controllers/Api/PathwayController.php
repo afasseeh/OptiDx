@@ -10,6 +10,9 @@ use App\Services\PathwayGraphService;
 use App\Services\PathwayDefinitionService;
 use App\Services\PythonEngineBridge;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\File;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class PathwayController extends Controller
 {
@@ -105,6 +108,7 @@ class PathwayController extends Controller
     {
         $payload = $request->validate([
             'pathway' => ['required', 'array'],
+            'pathway_id' => ['nullable', 'integer', 'exists:pathways,id'],
             'prevalence' => ['nullable', 'numeric', 'between:0,1'],
         ]);
 
@@ -116,16 +120,28 @@ class PathwayController extends Controller
 
         $result = $this->bridge->evaluate($prepared['engine_definition'] + ['prevalence' => $payload['prevalence'] ?? null]);
 
-        $pathwayRecord = Pathway::create([
-            'name' => $pathway['metadata']['label'] ?? 'Untitled pathway',
-            'version' => 1,
-            'schema_version' => $pathway['schema_version'] ?? 'v1',
-            'start_node_id' => $pathway['start_node'] ?? null,
+        $pathwayRecord = null;
+        if (! empty($payload['pathway_id'])) {
+            $pathwayRecord = Pathway::query()->find($payload['pathway_id']);
+        }
+
+        $pathwayData = [
+            'name' => $pathway['metadata']['label'] ?? $pathwayRecord?->name ?? 'Untitled pathway',
+            'version' => $pathwayRecord?->version ?? 1,
+            'schema_version' => $pathway['schema_version'] ?? $pathwayRecord?->schema_version ?? 'v1',
+            'start_node_id' => $pathway['start_node'] ?? $pathwayRecord?->start_node_id ?? null,
             'editor_definition' => $pathway,
             'engine_definition' => $prepared['engine_definition'],
             'validation_status' => ($result['validation']['valid'] ?? true) ? 'valid' : 'invalid',
             'metadata' => $pathway['metadata'] ?? [],
-        ]);
+        ];
+
+        if ($pathwayRecord) {
+            $pathwayRecord->update($pathwayData);
+            $pathwayRecord = $pathwayRecord->refresh();
+        } else {
+            $pathwayRecord = Pathway::create($pathwayData);
+        }
 
         EvaluationResult::create([
             'pathway_id' => $pathwayRecord->id,
@@ -135,7 +151,10 @@ class PathwayController extends Controller
             'evaluation_mode' => 'server',
         ]);
 
-        return response()->json($result);
+        return response()->json([
+            ...$result,
+            'pathway' => $pathwayRecord,
+        ]);
     }
 
     public function optimize(Request $request)
@@ -177,15 +196,317 @@ class PathwayController extends Controller
         return response()->json($pathway->editor_definition ?? $pathway->engine_definition);
     }
 
-    public function exportReport(Pathway $pathway)
+    public function exportReport(Request $request, Pathway $pathway)
     {
+        $format = strtolower((string) $request->query('format', 'html'));
         $result = $pathway->latestEvaluationResult?->result_payload ?? [];
+        $reportData = $this->buildReportData($pathway, $result);
 
-        return response()->json([
-            'pathway' => $pathway,
-            'evaluation' => $result,
-            'format' => 'html',
-        ]);
+        return match ($format) {
+            'pdf' => $this->downloadGeneratedFile(
+                $this->buildPdfReport($pathway, $reportData),
+                $this->exportFilename($pathway, 'pdf'),
+                'application/pdf'
+            ),
+            'docx' => $this->downloadGeneratedFile(
+                $this->buildDocxReport($pathway, $reportData),
+                $this->exportFilename($pathway, 'docx'),
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            ),
+            default => response()->json([
+                'pathway' => $pathway,
+                'evaluation' => $result,
+                'format' => 'html',
+                'report' => $reportData,
+            ]),
+        };
+    }
+
+    private function buildReportData(Pathway $pathway, array $evaluation): array
+    {
+        $metrics = $evaluation['metrics'] ?? [];
+        $warnings = array_values(array_filter(array_merge(
+            array_map(fn ($warning) => (string) $warning, $evaluation['warnings'] ?? []),
+            array_map(fn ($warning) => (string) $warning, $evaluation['validation']['warnings'] ?? [])
+        )));
+
+        return [
+            'title' => $pathway->name,
+            'subtitle' => ($pathway->metadata ?? [])['label'] ?? $pathway->name,
+            'summary' => [
+                'prevalence' => $evaluation['prevalence'] ?? null,
+                'sensitivity' => $metrics['sensitivity'] ?? null,
+                'specificity' => $metrics['specificity'] ?? null,
+                'expected_cost_population' => $metrics['expected_cost_population'] ?? $metrics['expected_cost_given_disease'] ?? null,
+                'expected_turnaround_time_population' => $metrics['expected_turnaround_time_population'] ?? $metrics['expected_turnaround_time_given_disease'] ?? null,
+            ],
+            'warnings' => $warnings,
+            'metrics' => $metrics,
+            'pathway' => $pathway->editor_definition ?? [],
+            'evaluation' => $evaluation,
+            'generated_at' => Carbon::now()->toIso8601String(),
+        ];
+    }
+
+    private function exportFilename(Pathway $pathway, string $extension): string
+    {
+        $base = preg_replace('/[^A-Za-z0-9_-]+/', '-', $pathway->name ?: 'optidx-pathway');
+        $base = trim($base, '-');
+
+        return ($base !== '' ? $base : 'optidx-pathway') . '.' . $extension;
+    }
+
+    private function downloadGeneratedFile(string $filePath, string $downloadName, string $contentType): BinaryFileResponse
+    {
+        return response()->download($filePath, $downloadName, [
+            'Content-Type' => $contentType,
+        ])->deleteFileAfterSend(true);
+    }
+
+    private function buildPdfReport(Pathway $pathway, array $reportData): string
+    {
+        $filePath = $this->temporaryExportPath('pdf');
+        File::put($filePath, $this->renderPdfDocument($pathway, $reportData));
+
+        return $filePath;
+    }
+
+    private function renderPdfDocument(Pathway $pathway, array $reportData): string
+    {
+        $lines = $this->buildReportLines($pathway, $reportData);
+        $contentLines = [
+            'BT',
+            '/F1 11 Tf',
+            '50 790 Td',
+        ];
+
+        foreach ($lines as $index => $line) {
+            $escaped = $this->escapePdfText($line);
+            $contentLines[] = sprintf('(%s) Tj', $escaped);
+            if ($index < count($lines) - 1) {
+                $contentLines[] = 'T*';
+            }
+        }
+
+        $contentLines[] = 'ET';
+        $contentStream = implode("\n", $contentLines);
+
+        $objects = [];
+        $objects[] = "<< /Type /Catalog /Pages 2 0 R >>";
+        $objects[] = "<< /Type /Pages /Kids [3 0 R] /Count 1 >>";
+        $objects[] = "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>";
+        $objects[] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>";
+        $objects[] = "<< /Length " . strlen($contentStream) . " >>\nstream\n" . $contentStream . "\nendstream";
+
+        $pdf = "%PDF-1.4\n";
+        $offsets = [0];
+
+        foreach ($objects as $index => $object) {
+            $offsets[] = strlen($pdf);
+            $pdf .= ($index + 1) . " 0 obj\n" . $object . "\nendobj\n";
+        }
+
+        $xrefOffset = strlen($pdf);
+        $pdf .= "xref\n0 " . (count($objects) + 1) . "\n";
+        $pdf .= sprintf("%010d %05d f \n", 0, 65535);
+        foreach (array_slice($offsets, 1) as $offset) {
+            $pdf .= sprintf("%010d %05d n \n", $offset, 0);
+        }
+        $pdf .= "trailer\n<< /Size " . (count($objects) + 1) . " /Root 1 0 R >>\nstartxref\n" . $xrefOffset . "\n%%EOF";
+
+        return $pdf;
+    }
+
+    private function buildDocxReport(Pathway $pathway, array $reportData): string
+    {
+        if (! class_exists(\ZipArchive::class)) {
+            throw new \RuntimeException('ZipArchive extension is required for DOCX exports.');
+        }
+
+        $filePath = $this->temporaryExportPath('docx');
+        $zip = new \ZipArchive();
+        if ($zip->open($filePath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
+            throw new \RuntimeException('Unable to create DOCX export.');
+        }
+
+        $zip->addFromString('[Content_Types].xml', $this->docxContentTypes());
+        $zip->addFromString('_rels/.rels', $this->docxRootRels());
+        $zip->addFromString('word/document.xml', $this->docxDocumentXml($pathway, $reportData));
+        $zip->addFromString('word/_rels/document.xml.rels', $this->docxDocumentRels());
+        $zip->addFromString('docProps/core.xml', $this->docxCoreProps($pathway));
+        $zip->addFromString('docProps/app.xml', $this->docxAppProps($pathway));
+        $zip->close();
+
+        return $filePath;
+    }
+
+    private function temporaryExportPath(string $extension): string
+    {
+        $directory = storage_path('app/optidx-exports');
+        if (! is_dir($directory)) {
+            mkdir($directory, 0777, true);
+        }
+
+        return $directory . DIRECTORY_SEPARATOR . uniqid('report-', true) . '.' . $extension;
+    }
+
+    private function buildReportLines(Pathway $pathway, array $reportData): array
+    {
+        $summary = $reportData['summary'] ?? [];
+        $metrics = $reportData['metrics'] ?? [];
+        $lines = [
+            'OptiDx Decision Report',
+            'Pathway: ' . ($reportData['title'] ?? $pathway->name),
+            'Generated: ' . ($reportData['generated_at'] ?? Carbon::now()->toIso8601String()),
+            'Prevalence: ' . $this->formatPercent($summary['prevalence'] ?? null),
+            'Sensitivity: ' . $this->formatPercent($summary['sensitivity'] ?? null),
+            'Specificity: ' . $this->formatPercent($summary['specificity'] ?? null),
+            'Expected cost: ' . $this->formatCurrency($summary['expected_cost_population'] ?? null),
+            'Expected turnaround: ' . $this->formatDuration($summary['expected_turnaround_time_population'] ?? null),
+            'PPV: ' . $this->formatPercent($metrics['ppv'] ?? null),
+            'NPV: ' . $this->formatPercent($metrics['npv'] ?? null),
+            'Warnings:',
+        ];
+
+        $warnings = $reportData['warnings'] ?? [];
+        if ($warnings === []) {
+            $lines[] = ' - None';
+        } else {
+            foreach ($warnings as $warning) {
+                $lines[] = ' - ' . $warning;
+            }
+        }
+
+        return $lines;
+    }
+
+    private function escapePdfText(string $value): string
+    {
+        return str_replace(['\\', '(', ')'], ['\\\\', '\\(', '\\)'], $value);
+    }
+
+    private function formatPercent(mixed $value): string
+    {
+        if ($value === null || $value === '') {
+            return 'n/a';
+        }
+
+        return number_format((float) $value * 100, 1) . '%';
+    }
+
+    private function formatCurrency(mixed $value): string
+    {
+        if ($value === null || $value === '') {
+            return 'n/a';
+        }
+
+        return '$' . number_format((float) $value, 2);
+    }
+
+    private function formatDuration(mixed $value): string
+    {
+        if ($value === null || $value === '') {
+            return 'n/a';
+        }
+
+        return number_format((float) $value, 2) . ' hr';
+    }
+
+    private function docxContentTypes(): string
+    {
+        return <<<'XML'
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+  <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
+  <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
+</Types>
+XML;
+    }
+
+    private function docxRootRels(): string
+    {
+        return <<<'XML'
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
+</Relationships>
+XML;
+    }
+
+    private function docxDocumentRels(): string
+    {
+        return <<<'XML'
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>
+XML;
+    }
+
+    private function docxDocumentXml(Pathway $pathway, array $reportData): string
+    {
+        $paragraphs = [];
+        foreach ($this->buildReportLines($pathway, $reportData) as $line) {
+            $paragraphs[] = '<w:p><w:r><w:t>' . htmlspecialchars($line, ENT_XML1 | ENT_COMPAT, 'UTF-8') . '</w:t></w:r></w:p>';
+        }
+
+        return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            . '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+            . '<w:body>'
+            . implode('', $paragraphs)
+            . '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>'
+            . '</w:body>'
+            . '</w:document>';
+    }
+
+    private function docxCoreProps(Pathway $pathway): string
+    {
+        $title = htmlspecialchars($pathway->name, ENT_XML1 | ENT_COMPAT, 'UTF-8');
+        $generated = Carbon::now()->toAtomString();
+
+        return <<<XML
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <dc:title>{$title}</dc:title>
+  <dc:creator>OptiDx</dc:creator>
+  <cp:lastModifiedBy>OptiDx</cp:lastModifiedBy>
+  <dcterms:created xsi:type="dcterms:W3CDTF">{$generated}</dcterms:created>
+  <dcterms:modified xsi:type="dcterms:W3CDTF">{$generated}</dcterms:modified>
+</cp:coreProperties>
+XML;
+    }
+
+    private function docxAppProps(Pathway $pathway): string
+    {
+        $title = htmlspecialchars($pathway->name, ENT_XML1 | ENT_COMPAT, 'UTF-8');
+
+        return <<<XML
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+  <Application>OptiDx</Application>
+  <DocSecurity>0</DocSecurity>
+  <ScaleCrop>false</ScaleCrop>
+  <HeadingPairs>
+    <vt:vector size="2" baseType="variant">
+      <vt:variant><vt:lpstr>Titles</vt:lpstr></vt:variant>
+      <vt:variant><vt:i4>1</vt:i4></vt:variant>
+    </vt:vector>
+  </HeadingPairs>
+  <TitlesOfParts>
+    <vt:vector size="1" baseType="lpstr">
+      <vt:lpstr>{$title}</vt:lpstr>
+    </vt:vector>
+  </TitlesOfParts>
+  <Company>Syreon</Company>
+  <LinksUpToDate>false</LinksUpToDate>
+  <SharedDoc>false</SharedDoc>
+  <HyperlinksChanged>false</HyperlinksChanged>
+  <AppVersion>16.0000</AppVersion>
+</Properties>
+XML;
     }
 
     private function prepareDefinitions(array $definition, array $metadata = []): array

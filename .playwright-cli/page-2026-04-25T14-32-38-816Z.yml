@@ -1,0 +1,226 @@
+- generic [ref=e105]:
+  - generic [ref=e106]:
+    - generic [ref=e107]: BETA
+    - generic [ref=e108]:
+      - generic [ref=e109]: Public beta
+      - text: by Syreon.
+      - generic [ref=e110]: ·
+      - generic [ref=e111]: Non‑profit, free to use.
+      - generic [ref=e112]: ·
+      - generic [ref=e113]: Not yet validated
+    - generic [ref=e115]:
+      - button "Send feedback" [ref=e116] [cursor=pointer]:
+        - img [ref=e117]
+        - text: Send feedback
+      - button "About beta" [ref=e120] [cursor=pointer]:
+        - text: About beta
+        - img [ref=e121]
+  - navigation [ref=e123]:
+    - generic "OptiDx" [ref=e125]:
+      - generic [ref=e126]: Ox
+    - generic "Home" [ref=e128] [cursor=pointer]:
+      - img [ref=e129]
+    - generic "New" [ref=e132] [cursor=pointer]:
+      - img [ref=e133]
+    - generic "Builder" [ref=e138] [cursor=pointer]:
+      - img [ref=e139]
+    - generic "Results" [ref=e144] [cursor=pointer]:
+      - img [ref=e145]
+    - generic "Compare" [ref=e146] [cursor=pointer]:
+      - img [ref=e147]
+    - generic "Evidence" [ref=e148] [cursor=pointer]:
+      - img [ref=e149]
+    - generic "Report" [ref=e153] [cursor=pointer]:
+      - img [ref=e154]
+    - generic "Teams" [ref=e157] [cursor=pointer]:
+      - img [ref=e158]
+    - generic "Send feedback or report a bug" [ref=e161] [cursor=pointer]:
+      - img [ref=e162]
+    - generic "Settings" [ref=e165] [cursor=pointer]:
+      - img [ref=e166]
+  - main [ref=e286]:
+    - generic [ref=e287]:
+      - generic [ref=e288]:
+        - generic [ref=e289]: OptiDx
+        - img [ref=e290]
+        - generic [ref=e292]: Latest pathway
+        - img [ref=e293]
+        - generic [ref=e295]: Results
+      - generic [ref=e296]:
+        - generic [ref=e297]:
+          - button "Compact" [ref=e298] [cursor=pointer]
+          - button "Hero" [ref=e299] [cursor=pointer]
+        - button "Re-run" [ref=e300] [cursor=pointer]:
+          - img [ref=e301]
+          - text: Re-run
+        - button "Share" [ref=e303] [cursor=pointer]:
+          - img [ref=e304]
+          - text: Share
+        - button "Export" [ref=e307] [cursor=pointer]:
+          - img [ref=e308]
+          - text: Export
+        - button "Generate report" [ref=e311] [cursor=pointer]:
+          - img [ref=e312]
+          - text: Generate report
+    - generic [ref=e315]:
+      - generic [ref=e316]:
+        - generic [ref=e317]:
+          - generic [ref=e318]: Pathway Analysis
+          - heading "Latest pathway · live evaluation" [level=1] [ref=e319]
+          - paragraph [ref=e320]: Current evaluation · Probabilistic diagnostic pathway algorithm
+        - generic [ref=e321]:
+          - generic [ref=e322]:
+            - img [ref=e323]
+            - text: Feasible
+          - generic [ref=e325]: 3 warnings
+      - generic [ref=e326]:
+        - generic [ref=e327]:
+          - generic [ref=e328]: Sensitivity
+          - generic [ref=e329]: 84.2%
+        - generic [ref=e332]:
+          - generic [ref=e333]: Specificity
+          - generic [ref=e334]: 94.6%
+        - generic [ref=e337]:
+          - generic [ref=e338]: FNR
+          - generic [ref=e339]: 15.8%
+        - generic [ref=e340]:
+          - generic [ref=e341]: Cost / pt
+          - generic [ref=e342]: $5.62
+        - generic [ref=e343]:
+          - generic [ref=e344]: $ / case
+          - generic [ref=e345]: $83.43
+          - generic [ref=e346]: per detected
+        - generic [ref=e347]:
+          - generic [ref=e348]: TAT
+          - generic [ref=e349]: 2.8 hr
+        - generic [ref=e350]:
+          - generic [ref=e351]: PPV
+          - generic [ref=e352]: 58.0%
+        - generic [ref=e353]:
+          - generic [ref=e354]: NPV
+          - generic [ref=e355]: 98.7%
+      - generic [ref=e356]:
+        - generic [ref=e357]:
+          - img [ref=e358]
+          - generic [ref=e361]: Assumes conditional independence between CXR and Xpert given disease status.
+        - generic [ref=e362]:
+          - img [ref=e363]
+          - generic [ref=e366]: Sensitivity (84.2%) is below the user-defined minimum threshold of 85%.
+        - generic [ref=e367]:
+          - img [ref=e368]
+          - generic [ref=e371]: "Three sample types required: none, imaging, sputum. Operational burden: moderate."
+      - generic [ref=e372]:
+        - generic [ref=e373]:
+          - generic [ref=e374]:
+            - heading "Path-level trace" [level=3] [ref=e375]
+            - generic [ref=e376]: 4 paths covered
+            - button "Expand" [ref=e377] [cursor=pointer]:
+              - text: Expand
+              - img [ref=e378]
+          - table [ref=e380]:
+            - rowgroup [ref=e381]:
+              - row "Path Sequence Terminal P(path | D) P(path | ¬D) Cost TAT" [ref=e382]:
+                - columnheader "Path" [ref=e383]
+                - columnheader "Sequence" [ref=e384]
+                - columnheader "Terminal" [ref=e385]
+                - columnheader "P(path | D)" [ref=e386]
+                - columnheader "P(path | ¬D)" [ref=e387]
+                - columnheader "Cost" [ref=e388]
+                - columnheader "TAT" [ref=e389]
+            - rowgroup [ref=e390]:
+              - row "P1 Symp(+) → CXR(+) → Xpert(+) TB, Treat 61.0% 0.4% $13.68 2.5h" [ref=e391]:
+                - cell "P1" [ref=e392]
+                - cell "Symp(+) → CXR(+) → Xpert(+)" [ref=e393]
+                - cell "TB, Treat" [ref=e394]:
+                  - generic [ref=e395]: TB, Treat
+                - cell "61.0%" [ref=e396]
+                - cell "0.4%" [ref=e397]
+                - cell "$13.68" [ref=e398]
+                - cell "2.5h" [ref=e399]
+              - row "P2 Symp(+) → CXR(+) → Xpert(−) TB Unlikely 8.3% 16.3% $13.68 2.5h" [ref=e400]:
+                - cell "P2" [ref=e401]
+                - cell "Symp(+) → CXR(+) → Xpert(−)" [ref=e402]
+                - cell "TB Unlikely" [ref=e403]:
+                  - generic [ref=e404]: TB Unlikely
+                - cell "8.3%" [ref=e405]
+                - cell "16.3%" [ref=e406]
+                - cell "$13.68" [ref=e407]
+                - cell "2.5h" [ref=e408]
+              - row "P3 Symp(+) → CXR(−) TB Unlikely 7.7% 22.0% $3.70 35m" [ref=e409]:
+                - cell "P3" [ref=e410]
+                - cell "Symp(+) → CXR(−)" [ref=e411]
+                - cell "TB Unlikely" [ref=e412]:
+                  - generic [ref=e413]: TB Unlikely
+                - cell "7.7%" [ref=e414]
+                - cell "22.0%" [ref=e415]
+                - cell "$3.70" [ref=e416]
+                - cell "35m" [ref=e417]
+              - row "P4 Symp(−) No TB 23.0% 61.3% $0.50 5m" [ref=e418]:
+                - cell "P4" [ref=e419]
+                - cell "Symp(−)" [ref=e420]
+                - cell "No TB" [ref=e421]:
+                  - generic [ref=e422]: No TB
+                - cell "23.0%" [ref=e423]
+                - cell "61.3%" [ref=e424]
+                - cell "$0.50" [ref=e425]
+                - cell "5m" [ref=e426]
+        - generic [ref=e427]:
+          - generic [ref=e428]:
+            - generic [ref=e429]:
+              - heading "Branch flow" [level=3] [ref=e430]
+              - generic [ref=e431]: 1,000 simulated patients
+            - img [ref=e433]:
+              - generic [ref=e435]: D+ (80 pts)
+              - generic [ref=e437]: D− (920 pts)
+              - generic [ref=e445]:
+                - generic [ref=e447]: TB, Treat
+                - generic [ref=e449]: TB Unlikely
+                - generic [ref=e451]: No TB
+          - generic [ref=e452]:
+            - heading "Trade-off summary" [level=3] [ref=e454]
+            - generic [ref=e455]:
+              - generic [ref=e456]:
+                - generic [ref=e458]: Good at
+                - generic [ref=e459]: Ruling out non-disease at low cost
+              - generic [ref=e460]:
+                - generic [ref=e462]: Watch
+                - generic [ref=e463]: Xpert-negative after CXR-positive may miss early disease
+              - generic [ref=e464]:
+                - generic [ref=e466]: High-cost branch
+                - generic [ref=e467]: "P1: symptom → CXR → Xpert ($13.68)"
+              - generic [ref=e468]:
+                - generic [ref=e470]: Simplification
+                - generic [ref=e471]: Dropping Xpert raises FNR from 15.8 → 24.2%
+      - generic [ref=e472]:
+        - generic [ref=e473]:
+          - heading "Cost contribution" [level=3] [ref=e475]
+          - generic [ref=e476]:
+            - generic [ref=e478]:
+              - generic [ref=e479]: Symptom Screen
+              - generic [ref=e480]: $0.50
+            - generic [ref=e484]:
+              - generic [ref=e485]: Chest X-Ray
+              - generic [ref=e486]: $3.20
+            - generic [ref=e490]:
+              - generic [ref=e491]: Xpert MTB/RIF
+              - generic [ref=e492]: $1.92
+            - generic [ref=e495]:
+              - generic [ref=e496]: Expected population cost
+              - generic [ref=e497]: $5.62
+        - generic [ref=e498]:
+          - heading "Turnaround time" [level=3] [ref=e500]
+          - generic [ref=e501]:
+            - generic [ref=e502]:
+              - generic [ref=e503]:
+                - generic [ref=e504]: Expected pathway TAT
+                - generic [ref=e505]: 2.8 hr
+              - generic [ref=e506]:
+                - generic [ref=e507]: "Longest branch: Symp → CXR → Xpert"
+                - generic [ref=e508]: 2h 35min · Lab dependent
+            - generic [ref=e511]:
+              - generic [ref=e512]: 5m
+              - generic [ref=e513]: 30m
+              - generic [ref=e514]: 2h
+              - generic [ref=e515]: 3h (target)
+  - button "Design specification" [ref=e282] [cursor=pointer]:
+    - img [ref=e283]

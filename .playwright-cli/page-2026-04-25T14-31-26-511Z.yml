@@ -1,0 +1,43 @@
+- generic [ref=e9]:
+  - generic [ref=e10]:
+    - img [ref=e11]:
+      - generic [ref=e13]: SYMPTOM
+      - generic [ref=e14]: WHO-4 · Se 0.77
+      - generic [ref=e16]: CAD4TB
+      - generic [ref=e17]: Imaging · Se 0.90
+      - generic [ref=e19]: XPERT
+      - generic [ref=e20]: Molecular · Se 0.88
+      - generic [ref=e22]: TREAT TB
+      - generic [ref=e24]: CONFIRM
+      - generic [ref=e26]: RULE OUT
+    - generic [ref=e33]:
+      - generic [ref=e35]:
+        - generic [ref=e36]: Opti
+        - generic [ref=e37]: Dx
+      - generic [ref=e39]: Beta
+    - generic [ref=e42]:
+      - generic [ref=e43]: SYREON · DIAGNOSTIC PATHWAY ENGINE
+      - heading "Design, evaluate and compare diagnostic pathways, grounded in published evidence." [level=1] [ref=e44]
+      - paragraph [ref=e45]: Drag tests onto a canvas. Route them with rules. OptiDx scores every path for sensitivity, specificity, cost per detected case, turnaround time, and feasibility.
+    - generic [ref=e46]: TODAY'S RESEARCH FOR TOMORROW'S HEALTH
+  - generic [ref=e47]:
+    - generic [ref=e48]:
+      - generic [ref=e49]: Sign in
+      - generic [ref=e50]:
+        - text: Have an account?
+        - button "Sign in" [ref=e91] [cursor=pointer]
+    - generic [ref=e92]:
+      - img [ref=e93]
+      - generic [ref=e96]: We sent a verification email. Open the link to activate your account.
+    - generic [ref=e97]:
+      - heading "Verify your email." [level=1] [ref=e98]
+      - paragraph [ref=e99]: We sent a verification link to browsercheck@syreon.me. Open it to activate the account.
+      - generic [ref=e100]:
+        - button "Back" [ref=e101] [cursor=pointer]
+        - button "Resend email" [ref=e103] [cursor=pointer]
+    - generic [ref=e85]:
+      - generic [ref=e86]: © 2026 Syreon
+      - generic [ref=e87]:
+        - button "Privacy" [ref=e88]
+        - button "Terms" [ref=e89]
+        - button "Support" [ref=e90]

@@ -2,6 +2,111 @@
 // Additions: Scenarios (optimization candidates), Settings subpages, Share modal
 // ==========================================================================
 
+// ---------- PATHWAY LIBRARY -----------------------------------------------
+function ScreenLibrary({ setScreen }) {
+  const [query, setQuery] = useState("");
+  const pathways = window.OptiDxActions.getWorkspacePathways?.() || window.SEED_PATHWAYS || [];
+  const filtered = pathways.filter(pathway => {
+    const haystack = [
+      pathway.name,
+      pathway.metadata?.label,
+      pathway.metadata?.disease,
+      pathway.status,
+    ].filter(Boolean).join(" ").toLowerCase();
+    return !query || haystack.includes(query.toLowerCase());
+  });
+
+  return (
+    <>
+      <TopBar
+        crumbs={["OptiDx", "Workspace", "Pathway library"]}
+        actions={<>
+          <button className="btn" onClick={() => setScreen("home")}><Icon name="arrow-left"/>Back home</button>
+          <button className="btn btn--primary" onClick={() => setScreen("wizard")}><Icon name="plus"/>New pathway</button>
+        </>}
+      />
+      <div className="page" style={{maxWidth:1320}}>
+        <div className="page__head">
+          <div>
+            <div className="sme-eyebrow" style={{marginBottom:6}}>Persisted pathways</div>
+            <h1>Saved pathway library</h1>
+            <p>Open, edit, evaluate, duplicate, or export the pathways stored in the backend.</p>
+          </div>
+          <div style={{position:"relative", minWidth:280}}>
+            <Icon name="search" style={{position:"absolute", left:10, top:10, color:"var(--fg-3)"}}/>
+            <input className="input" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search pathways..." style={{paddingLeft:32}}/>
+          </div>
+        </div>
+
+        <div className="card card--flush">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Pathway</th>
+                <th>Disease</th>
+                <th>Status</th>
+                <th className="num">Version</th>
+                <th className="num">Updated</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(pathway => (
+                <tr key={pathway.id}>
+                  <td>
+                    <b>{pathway.name || pathway.metadata?.label || "Untitled pathway"}</b>
+                    <div className="u-meta">{pathway.metadata?.source || pathway.notes || "Persisted record"}</div>
+                  </td>
+                  <td>{pathway.metadata?.disease || pathway.disease || "—"}</td>
+                  <td><span className={"chip " + (String(pathway.validation_status || pathway.status || "").toLowerCase().includes("valid") ? "chip--pos" : "chip--outline")}>{pathway.validation_status || pathway.status || "Draft"}</span></td>
+                  <td className="num mono">{pathway.version || 1}</td>
+                  <td className="num mono">{pathway.updated_at ? new Date(pathway.updated_at).toLocaleDateString() : "—"}</td>
+                  <td>
+                    <div className="row" style={{justifyContent:"flex-end", gap:8}}>
+                      <button className="btn btn--sm" onClick={async () => {
+                        try {
+                          await window.OptiDxActions.openPathwayRecord?.(pathway);
+                          setScreen("canvas");
+                        } catch (error) {
+                          window.OptiDxActions.showToast?.(error?.message || "Unable to open pathway", "error");
+                        }
+                      }}>Open</button>
+                      <button className="btn btn--sm" onClick={async () => {
+                        try {
+                          await window.OptiDxActions.openPathwayRecord?.(pathway);
+                          await window.OptiDxActions.evaluatePathway?.(pathway.editor_definition || pathway._canonical || pathway);
+                          setScreen("results");
+                        } catch (error) {
+                          window.OptiDxActions.showToast?.(error?.message || "Unable to evaluate pathway", "error");
+                        }
+                      }}>Evaluate</button>
+                      <button className="btn btn--sm" onClick={async () => {
+                        try {
+                          await window.OptiDxActions.duplicatePathwayRecord?.(pathway);
+                          window.OptiDxActions.showToast?.("Pathway duplicated", "success");
+                        } catch (error) {
+                          window.OptiDxActions.showToast?.(error?.message || "Unable to duplicate pathway", "error");
+                        }
+                      }}>Duplicate</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {!filtered.length && (
+                <tr>
+                  <td colSpan="6" style={{textAlign:"center", color:"var(--fg-3)", padding:"28px 12px"}}>
+                    No saved pathways match this search.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ---------- SCENARIOS (optimization results view) --------------------------
 function ScreenScenarios({ setScreen }) {
   const [selected, setSelected] = useState(0);
@@ -52,7 +157,19 @@ function ScreenScenarios({ setScreen }) {
           <button className="btn" onClick={() => setScreen("wizard")}>
             <Icon name="arrow-left"/>Back to setup
           </button>
-          <button className="btn btn--primary" onClick={() => setScreen("canvas")}>
+          <button className="btn btn--primary" onClick={async () => {
+            const scenario = current?.pathway;
+            if (!scenario) {
+              window.OptiDxActions.showToast?.("No optimized pathway is loaded yet.", "info");
+              return;
+            }
+            try {
+              await window.OptiDxActions.loadPathwayIntoWorkspace?.(scenario);
+              setScreen("canvas");
+            } catch (error) {
+              window.OptiDxActions.showToast?.(error?.message || "Unable to open scenario", "error");
+            }
+          }}>
             <Icon name="git-branch"/>Open scenario {current.id}
           </button>
         </>}
@@ -187,10 +304,32 @@ function ScreenScenarios({ setScreen }) {
               <div style={{fontWeight:700, fontSize:13, marginTop:4}}>{current.trade}</div>
             </div>
             <div className="spacer"/>
-            <button className="btn" onClick={() => window.OptiDxActions.comingSoon("Duplicate scenario")}>
+            <button className="btn" onClick={async () => {
+              if (!current?.pathway) {
+                window.OptiDxActions.showToast?.("No optimized pathway is loaded yet.", "info");
+                return;
+              }
+              try {
+                await window.OptiDxActions.duplicatePathwayRecord?.(current.pathway);
+                window.OptiDxActions.showToast?.("Scenario duplicated as a new pathway", "success");
+              } catch (error) {
+                window.OptiDxActions.showToast?.(error?.message || "Unable to duplicate scenario", "error");
+              }
+            }}>
               <Icon name="copy"/>Duplicate
             </button>
-            <button className="btn btn--primary" onClick={() => setScreen("canvas")}>
+            <button className="btn btn--primary" onClick={async () => {
+              if (!current?.pathway) {
+                window.OptiDxActions.showToast?.("No optimized pathway is loaded yet.", "info");
+                return;
+              }
+              try {
+                await window.OptiDxActions.loadPathwayIntoWorkspace?.(current.pathway);
+                setScreen("canvas");
+              } catch (error) {
+                window.OptiDxActions.showToast?.(error?.message || "Unable to load scenario into canvas", "error");
+              }
+            }}>
               <Icon name="git-branch"/>Load in canvas
             </button>
           </div>
@@ -314,20 +453,44 @@ function SetProfile() {
 }
 
 function SetWorkspace() {
+  const [profile, setProfile] = useState(() => window.OptiDxActions.getWorkspaceSetting?.("workspace_profile", "workspace") || {
+    name: "Syreon MENA HTA",
+    slug: "syreon-mena-hta",
+    currency: "USD",
+    language: "English",
+  });
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await window.OptiDxActions.saveWorkspaceSetting?.("workspace_profile", profile, "workspace");
+      window.OptiDxActions.showToast?.("Workspace settings saved", "success");
+    } catch (error) {
+      window.OptiDxActions.showToast?.(error?.message || "Unable to save workspace settings", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="grid" style={{gridTemplateColumns:"1fr 1fr", gap:16}}>
       <div className="card card--pad">
-        <h3 style={{fontSize:14, marginBottom:14}}>Workspace</h3>
+        <div className="row" style={{marginBottom:14}}>
+          <h3 style={{fontSize:14}}>Workspace</h3>
+          <div className="spacer"/>
+          <button className="btn btn--sm btn--primary" onClick={save} disabled={saving}>{saving ? "Saving..." : "Save workspace"}</button>
+        </div>
         <div className="stack" style={{gap:12}}>
-          <div className="field"><label className="field__label">Workspace name</label><input className="input" defaultValue="Syreon MENA HTA"/></div>
+          <div className="field"><label className="field__label">Workspace name</label><input className="input" value={profile.name || ""} onChange={e => setProfile(current => ({ ...current, name: e.target.value }))}/></div>
           <div className="field"><label className="field__label">URL slug</label>
-            <div className="input-group"><input className="input" defaultValue="syreon-mena-hta"/><div className="input-addon">.optidx.app</div></div>
+            <div className="input-group"><input className="input" value={profile.slug || ""} onChange={e => setProfile(current => ({ ...current, slug: e.target.value }))}/><div className="input-addon">.optidx.app</div></div>
           </div>
           <div className="field"><label className="field__label">Default currency</label>
-            <select className="select"><option>USD</option><option>EUR</option><option>EGP</option><option>AED</option></select>
+            <select className="select" value={profile.currency || "USD"} onChange={e => setProfile(current => ({ ...current, currency: e.target.value }))}><option>USD</option><option>EUR</option><option>EGP</option><option>AED</option></select>
           </div>
           <div className="field"><label className="field__label">Default language</label>
-            <select className="select"><option>English</option><option>العربية</option><option>Français</option></select>
+            <select className="select" value={profile.language || "English"} onChange={e => setProfile(current => ({ ...current, language: e.target.value }))}><option>English</option><option>العربية</option><option>Français</option></select>
           </div>
         </div>
       </div>
@@ -381,19 +544,75 @@ function SetWorkspace() {
 }
 
 function SetDefaults() {
+  const [defaults, setDefaults] = useState(() => window.OptiDxActions.getWorkspaceSetting?.("pathway_defaults", "workspace") || {
+    currency: "USD",
+    rounding: "3 decimals",
+    assumption: "Unless overridden by node-level flag",
+    prevalence: "WHO TB report 2024",
+    flags: {
+      warnUnconnectedOutputs: true,
+      warnMissingTerminals: true,
+      warnCircularLogic: true,
+      warnMissingPrevalence: true,
+      flagEvidenceAge: false,
+      blockLowSensitivity: false,
+      requireReferee: true,
+    },
+    weights: {
+      sensitivity: 0.30,
+      specificity: 0.30,
+      cost: 0.30,
+      tat: 0.10,
+    },
+  });
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await window.OptiDxActions.saveWorkspaceSetting?.("pathway_defaults", defaults, "workspace");
+      window.OptiDxActions.showToast?.("Pathway defaults saved", "success");
+    } catch (error) {
+      window.OptiDxActions.showToast?.(error?.message || "Unable to save pathway defaults", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const flagKeyMap = {
+    "Warn if unconnected outputs": "warnUnconnectedOutputs",
+    "Warn if missing terminal nodes": "warnMissingTerminals",
+    "Warn if circular logic": "warnCircularLogic",
+    "Warn if prevalence not set": "warnMissingPrevalence",
+    "Flag evidence older than 10 years": "flagEvidenceAge",
+    "Block save if below minimum sensitivity": "blockLowSensitivity",
+    "Require referee on discordant branches": "requireReferee",
+  };
+
+  const weightKeyMap = {
+    Sensitivity: "sensitivity",
+    Specificity: "specificity",
+    Cost: "cost",
+    TAT: "tat",
+  };
+
   return (
     <div className="grid" style={{gridTemplateColumns:"1fr 1fr", gap:16}}>
       <div className="card card--pad">
-        <h3 style={{fontSize:14, marginBottom:12}}>Algorithm defaults</h3>
+        <div className="row" style={{marginBottom:12}}>
+          <h3 style={{fontSize:14}}>Algorithm defaults</h3>
+          <div className="spacer"/>
+          <button className="btn btn--sm btn--primary" onClick={save} disabled={saving}>{saving ? "Saving..." : "Save defaults"}</button>
+        </div>
         <div className="stack" style={{gap:12}}>
-          <div className="field"><label className="field__label">Default currency</label><select className="select"><option>USD</option><option>EUR</option><option>EGP</option><option>AED</option></select></div>
-          <div className="field"><label className="field__label">Rounding precision</label><select className="select"><option>3 decimals</option><option>2 decimals</option><option>4 decimals</option></select></div>
+          <div className="field"><label className="field__label">Default currency</label><select className="select" value={defaults.currency || "USD"} onChange={e => setDefaults(current => ({ ...current, currency: e.target.value }))}><option>USD</option><option>EUR</option><option>EGP</option><option>AED</option></select></div>
+          <div className="field"><label className="field__label">Rounding precision</label><select className="select" value={defaults.rounding || "3 decimals"} onChange={e => setDefaults(current => ({ ...current, rounding: e.target.value }))}><option>3 decimals</option><option>2 decimals</option><option>4 decimals</option></select></div>
           <div className="field"><label className="field__label">Conditional independence assumption</label>
-            <select className="select"><option>Unless overridden by node-level flag</option><option>Never (use raw correlations)</option><option>Always</option></select>
+            <select className="select" value={defaults.assumption || "Unless overridden by node-level flag"} onChange={e => setDefaults(current => ({ ...current, assumption: e.target.value }))}><option>Unless overridden by node-level flag</option><option>Never (use raw correlations)</option><option>Always</option></select>
             <div className="field__hint">Applies to multi-test pathways with shared sample types.</div>
           </div>
           <div className="field"><label className="field__label">Default prevalence source</label>
-            <select className="select"><option>WHO TB report 2024</option><option>GBD 2023</option><option>Local (user-supplied)</option></select>
+            <select className="select" value={defaults.prevalence || "WHO TB report 2024"} onChange={e => setDefaults(current => ({ ...current, prevalence: e.target.value }))}><option>WHO TB report 2024</option><option>GBD 2023</option><option>Local (user-supplied)</option></select>
           </div>
         </div>
       </div>
@@ -409,12 +628,24 @@ function SetDefaults() {
             ["Flag evidence older than 10 years", false],
             ["Block save if below minimum sensitivity", false],
             ["Require referee on discordant branches", true],
-          ].map(([l, d]) => (
-            <label key={l} className="row" style={{cursor:"pointer"}}>
-              <span style={{flex:1}}>{l}</span>
-              <Toggle defaultOn={d}/>
-            </label>
-          ))}
+          ].map(([l, d]) => {
+            const key = flagKeyMap[l];
+            return (
+              <label key={l} className="row" style={{cursor:"pointer"}}>
+                <span style={{flex:1}}>{l}</span>
+                <Toggle
+                  value={defaults.flags?.[key] ?? d}
+                  onChange={next => setDefaults(current => ({
+                    ...current,
+                    flags: {
+                      ...(current.flags || {}),
+                      [key]: next,
+                    },
+                  }))}
+                />
+              </label>
+            );
+          })}
         </div>
       </div>
 
@@ -422,12 +653,29 @@ function SetDefaults() {
         <h3 style={{fontSize:14, marginBottom:12}}>Default MCDA weights</h3>
         <p className="u-meta" style={{marginBottom:14}}>Applied when a new pathway uses the Balanced MCDA objective. Must sum to 1.00.</p>
         <div style={{display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:16}}>
-          {[["Sensitivity",0.30],["Specificity",0.30],["Cost",0.30],["TAT",0.10]].map(([l,v]) => (
-            <div key={l}>
-              <div className="row"><span style={{fontSize:12, fontWeight:700}}>{l}</span><div className="spacer"/><span className="mono">{v.toFixed(2)}</span></div>
-              <input type="range" min="0" max="1" step="0.05" defaultValue={v} style={{width:"100%", accentColor:"var(--sme-orange)"}}/>
-            </div>
-          ))}
+          {[["Sensitivity",0.30],["Specificity",0.30],["Cost",0.30],["TAT",0.10]].map(([l,v]) => {
+            const key = weightKeyMap[l];
+            return (
+              <div key={l}>
+                <div className="row"><span style={{fontSize:12, fontWeight:700}}>{l}</span><div className="spacer"/><span className="mono">{(defaults.weights?.[key] ?? v).toFixed(2)}</span></div>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={defaults.weights?.[key] ?? v}
+                  onChange={e => setDefaults(current => ({
+                    ...current,
+                    weights: {
+                      ...(current.weights || {}),
+                      [key]: Number(e.target.value),
+                    },
+                  }))}
+                  style={{width:"100%", accentColor:"var(--sme-orange)"}}
+                />
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -579,16 +827,21 @@ function SetIntegrations() {
   );
 }
 
-function Toggle({ defaultOn = false }) {
+function Toggle({ defaultOn = false, value, onChange }) {
   const [on, setOn] = useState(defaultOn);
+  const active = value ?? on;
   return (
-    <div onClick={() => setOn(!on)} style={{
+    <div onClick={() => {
+      const next = !active;
+      setOn(next);
+      onChange?.(next);
+    }} style={{
       width:32, height:18, borderRadius:999,
-      background: on ? "var(--sme-orange)" : "var(--surface-3)",
+      background: active ? "var(--sme-orange)" : "var(--surface-3)",
       position:"relative", cursor:"pointer", transition:"background 120ms",
     }}>
       <div style={{
-        position:"absolute", top:2, left: on ? 16 : 2,
+        position:"absolute", top:2, left: active ? 16 : 2,
         width:14, height:14, borderRadius:"50%", background:"#fff",
         boxShadow:"0 1px 2px rgba(0,0,0,0.2)", transition:"left 120ms",
       }}/>
@@ -616,9 +869,10 @@ function ShareModal({ onClose }) {
   ];
 
   const copy = () => {
-    navigator.clipboard?.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1800);
+    return window.OptiDxActions.copyText?.(url)?.then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    });
   };
 
   return (
@@ -714,14 +968,25 @@ function ShareModal({ onClose }) {
 
         <div className="modal__foot">
           <button className="btn" onClick={onClose}>Done</button>
-          <button className="btn btn--primary" onClick={onClose}><Icon name="upload"/>Share</button>
+          <button className="btn btn--primary" onClick={async () => {
+            try {
+              if (navigator.share) {
+                await navigator.share({ title: "OptiDx pathway", text: "Share this pathway", url });
+              } else {
+                await copy();
+              }
+              onClose?.();
+            } catch (error) {
+              window.OptiDxActions.showToast?.(error?.message || "Unable to share pathway", "error");
+            }
+          }}><Icon name="upload"/>Share</button>
         </div>
       </div>
     </div>
   );
 }
 
-Object.assign(window, { ScreenScenarios, ScreenSettingsFull, ShareModal, ScreenTeams });
+Object.assign(window, { ScreenLibrary, ScreenScenarios, ScreenSettingsFull, ShareModal, ScreenTeams });
 
 // ---------- TEAMS (coming soon) -------------------------------------------
 function ScreenTeams() {

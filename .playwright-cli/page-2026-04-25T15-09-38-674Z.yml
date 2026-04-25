@@ -1,0 +1,462 @@
+- generic [ref=e3]:
+  - generic [ref=e9]:
+    - generic [ref=e10]: BETA
+    - generic [ref=e11]:
+      - generic [ref=e12]: Public beta
+      - text: by Syreon.
+      - generic [ref=e13]: ·
+      - generic [ref=e14]: Non‑profit, free to use.
+      - generic [ref=e15]: ·
+      - generic [ref=e16]: Not yet validated
+    - generic [ref=e18]:
+      - button "Send feedback" [ref=e19] [cursor=pointer]:
+        - img [ref=e20]
+        - text: Send feedback
+      - button "About beta" [ref=e23] [cursor=pointer]:
+        - text: About beta
+        - img [ref=e24]
+  - navigation [ref=e26]:
+    - generic "OptiDx" [ref=e28]:
+      - generic [ref=e29]: Ox
+    - generic "Home" [ref=e31] [cursor=pointer]:
+      - img [ref=e32]
+    - generic "New" [ref=e35] [cursor=pointer]:
+      - img [ref=e36]
+    - generic "Builder" [ref=e41] [cursor=pointer]:
+      - img [ref=e42]
+    - generic "Results" [ref=e47] [cursor=pointer]:
+      - img [ref=e48]
+    - generic "Compare" [ref=e49] [cursor=pointer]:
+      - img [ref=e50]
+    - generic "Evidence" [ref=e51] [cursor=pointer]:
+      - img [ref=e52]
+    - generic "Report" [ref=e56] [cursor=pointer]:
+      - img [ref=e57]
+    - generic "Teams" [ref=e60] [cursor=pointer]:
+      - img [ref=e61]
+    - generic "Send feedback or report a bug" [ref=e64] [cursor=pointer]:
+      - img [ref=e65]
+    - generic "Settings" [ref=e68] [cursor=pointer]:
+      - img [ref=e69]
+  - main [ref=e694]:
+    - generic [ref=e695]:
+      - generic [ref=e696]:
+        - generic [ref=e697]: OptiDx
+        - img [ref=e698]
+        - generic [ref=e700]: TB Community Screening
+        - img [ref=e701]
+        - generic [ref=e703]: Report preview
+      - generic [ref=e704]:
+        - button "Copy summary" [ref=e705] [cursor=pointer]:
+          - img [ref=e706]
+          - text: Copy summary
+        - button "Share" [ref=e709] [cursor=pointer]:
+          - img [ref=e710]
+          - text: Share
+        - button "Download DOCX" [ref=e713] [cursor=pointer]:
+          - img [ref=e714]
+          - text: Download DOCX
+        - button "Download PDF" [ref=e717] [cursor=pointer]:
+          - img [ref=e718]:
+            - generic [ref=e720]: PDF
+          - text: Download PDF
+    - generic [ref=e721]:
+      - complementary [ref=e722]:
+        - heading "Report builder" [level=2] [ref=e724]
+        - generic [ref=e725]:
+          - generic [ref=e726]:
+            - generic [ref=e727]: Audience
+            - generic [ref=e728]:
+              - generic [ref=e729] [cursor=pointer]:
+                - radio "Technical (HTA analyst) Full methodology, parameters, sensitivity, path table." [checked] [ref=e730]
+                - generic [ref=e731]:
+                  - generic [ref=e732]: Technical (HTA analyst)
+                  - generic [ref=e733]: Full methodology, parameters, sensitivity, path table.
+              - generic [ref=e734] [cursor=pointer]:
+                - radio "Clinical Pathway interpretation, decision rules, workflow." [ref=e735]
+                - generic [ref=e736]:
+                  - generic [ref=e737]: Clinical
+                  - generic [ref=e738]: Pathway interpretation, decision rules, workflow.
+              - generic [ref=e739] [cursor=pointer]:
+                - radio "Policymaker Aggregate impact, costing, equity, key takeaways." [ref=e740]
+                - generic [ref=e741]:
+                  - generic [ref=e742]: Policymaker
+                  - generic [ref=e743]: Aggregate impact, costing, equity, key takeaways.
+          - generic [ref=e745]:
+            - generic [ref=e746]: Format
+            - generic [ref=e747]:
+              - generic [ref=e748] [cursor=pointer]:
+                - radio "PDF PDF Print-ready, signed digital report" [checked] [ref=e749]
+                - img [ref=e750]:
+                  - generic [ref=e752]: PDF
+                - generic [ref=e753]:
+                  - generic [ref=e754]: PDF
+                  - generic [ref=e755]: Print-ready, signed digital report
+              - generic [ref=e756] [cursor=pointer]:
+                - radio "Microsoft Word (.docx) Editable for ministry templates" [ref=e757]
+                - img [ref=e758]
+                - generic [ref=e761]:
+                  - generic [ref=e762]: Microsoft Word (.docx)
+                  - generic [ref=e763]: Editable for ministry templates
+          - generic [ref=e765]:
+            - generic [ref=e766]:
+              - generic [ref=e767]: Sections
+              - generic [ref=e768]: 11 on
+            - generic [ref=e769]:
+              - generic [ref=e770] [cursor=pointer]:
+                - checkbox "Cover & executive summary p.1" [checked] [ref=e771]
+                - generic [ref=e772]: Cover & executive summary
+                - generic [ref=e773]: p.1
+              - generic [ref=e774] [cursor=pointer]:
+                - checkbox "Pathway diagram p.1" [checked] [ref=e775]
+                - generic [ref=e776]: Pathway diagram
+                - generic [ref=e777]: p.1
+              - generic [ref=e778] [cursor=pointer]:
+                - checkbox "Aggregate diagnostic accuracy p.2" [checked] [ref=e779]
+                - generic [ref=e780]: Aggregate diagnostic accuracy
+                - generic [ref=e781]: p.2
+              - generic [ref=e782] [cursor=pointer]:
+                - checkbox "Input parameters & priors p.2" [checked] [ref=e783]
+                - generic [ref=e784]: Input parameters & priors
+                - generic [ref=e785]: p.2
+              - generic [ref=e786] [cursor=pointer]:
+                - checkbox "Decision rules per node p.2" [checked] [ref=e787]
+                - generic [ref=e788]: Decision rules per node
+                - generic [ref=e789]: p.2
+              - generic [ref=e790] [cursor=pointer]:
+                - checkbox "Path-level outcome table p.3" [checked] [ref=e791]
+                - generic [ref=e792]: Path-level outcome table
+                - generic [ref=e793]: p.3
+              - generic [ref=e794] [cursor=pointer]:
+                - checkbox "Sensitivity analysis (tornado) p.3" [checked] [ref=e795]
+                - generic [ref=e796]: Sensitivity analysis (tornado)
+                - generic [ref=e797]: p.3
+              - generic [ref=e798] [cursor=pointer]:
+                - checkbox "Costing & resource use p.4" [checked] [ref=e799]
+                - generic [ref=e800]: Costing & resource use
+                - generic [ref=e801]: p.4
+              - generic [ref=e802] [cursor=pointer]:
+                - checkbox "Comparator pathways p.5" [checked] [ref=e803]
+                - generic [ref=e804]: Comparator pathways
+                - generic [ref=e805]: p.5
+              - generic [ref=e806] [cursor=pointer]:
+                - checkbox "Warnings & assumptions p.5" [checked] [ref=e807]
+                - generic [ref=e808]: Warnings & assumptions
+                - generic [ref=e809]: p.5
+              - generic [ref=e810] [cursor=pointer]:
+                - checkbox "Evidence sources & references p.6" [checked] [ref=e811]
+                - generic [ref=e812]: Evidence sources & references
+                - generic [ref=e813]: p.6
+          - generic [ref=e815]:
+            - generic [ref=e816]: 11 sections · 6 pages
+            - text: Tailored for Technical (HTA analyst).
+      - main [ref=e817]:
+        - generic [ref=e818]:
+          - generic [ref=e819]:
+            - generic [ref=e820]:
+              - generic [ref=e821]:
+                - generic [ref=e822]:
+                  - generic [ref=e823]: SME
+                  - generic [ref=e824]:
+                    - generic [ref=e825]: SYREON
+                    - generic [ref=e826]: HEALTH TECHNOLOGY ASSESSMENT
+                - generic [ref=e827]: OptiDx Decision Report
+                - heading "TB Community Screening Pathway" [level=1] [ref=e828]
+                - generic [ref=e829]: v3 · Computed 24 Apr 2026 · Prevalence 8% · Technical (HTA analyst) edition
+              - generic [ref=e830]:
+                - generic [ref=e831]: CONFIDENTIAL
+                - generic [ref=e832]: For intended recipients only
+                - generic [ref=e833]: BETA
+            - generic [ref=e834]:
+              - generic [ref=e835]:
+                - heading "Cover & executive summary" [level=2] [ref=e836]
+                - paragraph [ref=e837]: "Under a prevalence of 8% in the target community, the proposed three-step pathway (WHO-4 symptom screening → CAD4TB chest X-ray → Xpert MTB/RIF Ultra) achieves an aggregate sensitivity of 84.2% and specificity of 94.6%, at an expected cost of $5.62 per patient screened. Mean turnaround is 2.8 hours. The pathway is feasible under the declared operational constraints with one warning: aggregate sensitivity falls 0.8 pp below the user-defined minimum of 85%."
+              - generic [ref=e838]:
+                - heading "Pathway diagram" [level=2] [ref=e839]
+                - img [ref=e841]:
+                  - generic [ref=e842]:
+                    - generic [ref=e844]: WHO-4 symptom
+                    - generic [ref=e845]: Se 0.71
+                  - generic [ref=e846]:
+                    - generic [ref=e848]: CAD4TB CXR
+                    - generic [ref=e849]: Se 0.90
+                  - generic [ref=e850]:
+                    - generic [ref=e852]: Xpert Ultra
+                    - generic [ref=e853]: Se 0.88
+                  - generic [ref=e855]: TB · Treat
+                  - generic [ref=e857]: No TB
+            - generic [ref=e860]:
+              - generic [ref=e861]: TODAY'S RESEARCH FOR TOMORROW'S HEALTH
+              - generic [ref=e862]: www.syreon.me
+              - generic [ref=e863]: Page 1 / 6
+          - generic [ref=e864]:
+            - generic [ref=e865]:
+              - generic [ref=e866]: SME
+              - generic [ref=e867]: OptiDx · TB Community Screening v3
+              - generic [ref=e868]: Technical (HTA analyst)
+            - generic [ref=e869]:
+              - generic [ref=e870]:
+                - heading "Aggregate diagnostic accuracy" [level=2] [ref=e871]
+                - generic [ref=e872]:
+                  - table [ref=e873]:
+                    - rowgroup [ref=e874]:
+                      - row "Sensitivity 84.2%" [ref=e875]:
+                        - cell "Sensitivity" [ref=e876]
+                        - cell "84.2%" [ref=e877]
+                      - row "Specificity 94.6%" [ref=e878]:
+                        - cell "Specificity" [ref=e879]
+                        - cell "94.6%" [ref=e880]
+                      - row "False neg. rate 15.8%" [ref=e881]:
+                        - cell "False neg. rate" [ref=e882]
+                        - cell "15.8%" [ref=e883]
+                      - row "False pos. rate 5.4%" [ref=e884]:
+                        - cell "False pos. rate" [ref=e885]
+                        - cell "5.4%" [ref=e886]
+                  - table [ref=e887]:
+                    - rowgroup [ref=e888]:
+                      - row "PPV @ 8% prev. 58.0%" [ref=e889]:
+                        - cell "PPV @ 8% prev." [ref=e890]
+                        - cell "58.0%" [ref=e891]
+                      - row "NPV @ 8% prev. 98.7%" [ref=e892]:
+                        - cell "NPV @ 8% prev." [ref=e893]
+                        - cell "98.7%" [ref=e894]
+                      - row "Expected cost $5.62" [ref=e895]:
+                        - cell "Expected cost" [ref=e896]
+                        - cell "$5.62" [ref=e897]
+                      - row "Turnaround time 2.8 hr" [ref=e898]:
+                        - cell "Turnaround time" [ref=e899]
+                        - cell "2.8 hr" [ref=e900]
+              - generic [ref=e901]:
+                - heading "Input parameters & priors" [level=2] [ref=e902]
+                - table [ref=e903]:
+                  - rowgroup [ref=e904]:
+                    - row "Parameter Value Source" [ref=e905]:
+                      - columnheader "Parameter" [ref=e906]
+                      - columnheader "Value" [ref=e907]
+                      - columnheader "Source" [ref=e908]
+                  - rowgroup [ref=e909]:
+                    - row "Prevalence (community) 8.0% Local prevalence survey, 2024" [ref=e910]:
+                      - cell "Prevalence (community)" [ref=e911]
+                      - cell "8.0%" [ref=e912]
+                      - cell "Local prevalence survey, 2024" [ref=e913]
+                    - row "WHO-4 symptom Se / Sp 0.71 / 0.78 WHO 2021 systematic review" [ref=e914]:
+                      - cell "WHO-4 symptom Se / Sp" [ref=e915]
+                      - cell "0.71 / 0.78" [ref=e916]
+                      - cell "WHO 2021 systematic review" [ref=e917]
+                    - row "CAD4TB Se / Sp (threshold 60) 0.90 / 0.79 Qin et al., Lancet Digit Health 2023" [ref=e918]:
+                      - cell "CAD4TB Se / Sp (threshold 60)" [ref=e919]
+                      - cell "0.90 / 0.79" [ref=e920]
+                      - cell "Qin et al., Lancet Digit Health 2023" [ref=e921]
+                    - row "Xpert MTB/RIF Ultra Se / Sp 0.88 / 0.97 Cochrane review CD009593 (2021)" [ref=e922]:
+                      - cell "Xpert MTB/RIF Ultra Se / Sp" [ref=e923]
+                      - cell "0.88 / 0.97" [ref=e924]
+                      - cell "Cochrane review CD009593 (2021)" [ref=e925]
+                    - row "Conditional independence Assumed (CXR ⊥ Xpert | TB) User-defined" [ref=e926]:
+                      - cell "Conditional independence" [ref=e927]
+                      - cell "Assumed (CXR ⊥ Xpert | TB)" [ref=e928]
+                      - cell "User-defined" [ref=e929]
+                    - 'row "Cost: WHO-4 screen $0.30 Local activity-based costing" [ref=e930]':
+                      - 'cell "Cost: WHO-4 screen" [ref=e931]'
+                      - cell "$0.30" [ref=e932]
+                      - cell "Local activity-based costing" [ref=e933]
+                    - 'row "Cost: CAD4TB CXR $2.40 Local activity-based costing" [ref=e934]':
+                      - 'cell "Cost: CAD4TB CXR" [ref=e935]'
+                      - cell "$2.40" [ref=e936]
+                      - cell "Local activity-based costing" [ref=e937]
+                    - 'row "Cost: Xpert Ultra $10.80 GDF concessionary price 2025" [ref=e938]':
+                      - 'cell "Cost: Xpert Ultra" [ref=e939]'
+                      - cell "$10.80" [ref=e940]
+                      - cell "GDF concessionary price 2025" [ref=e941]
+              - generic [ref=e942]:
+                - heading "Decision rules per node" [level=2] [ref=e943]
+                - generic [ref=e944]:
+                  - generic [ref=e945]:
+                    - generic [ref=e946]: Node 1, WHO-4 symptom
+                    - generic [ref=e947]: If POSITIVE → CXR. If NEGATIVE → exit (No TB).
+                  - generic [ref=e948]:
+                    - generic [ref=e949]: Node 2, CAD4TB
+                    - generic [ref=e950]: If score ≥ 60 → Xpert. If < 60 → exit (No TB).
+                  - generic [ref=e951]:
+                    - generic [ref=e952]: Node 3, Xpert Ultra
+                    - generic [ref=e953]: If MTB DETECTED → Treat. If NOT DETECTED → exit (No TB).
+            - generic [ref=e954]:
+              - generic [ref=e955]: TODAY'S RESEARCH FOR TOMORROW'S HEALTH
+              - generic [ref=e956]: www.syreon.me
+              - generic [ref=e957]: Page 2 / 6
+          - generic [ref=e958]:
+            - generic [ref=e959]:
+              - generic [ref=e960]: SME
+              - generic [ref=e961]: OptiDx · TB Community Screening v3
+              - generic [ref=e962]: Technical (HTA analyst)
+            - generic [ref=e963]:
+              - generic [ref=e964]:
+                - heading "Path-level outcome table" [level=2] [ref=e965]
+                - table [ref=e966]:
+                  - rowgroup [ref=e967]:
+                    - row "Path Sequence P(disease) P(path) Cost TAT" [ref=e968]:
+                      - columnheader "Path" [ref=e969]
+                      - columnheader "Sequence" [ref=e970]
+                      - columnheader "P(disease)" [ref=e971]
+                      - columnheader "P(path)" [ref=e972]
+                      - columnheader "Cost" [ref=e973]
+                      - columnheader "TAT" [ref=e974]
+                  - rowgroup [ref=e975]:
+                    - row "P1 S+ → CXR+ → Xpert+ 0.978 0.067 $13.50 3.2h" [ref=e976]:
+                      - cell "P1" [ref=e977]
+                      - cell "S+ → CXR+ → Xpert+" [ref=e978]
+                      - cell "0.978" [ref=e979]
+                      - cell "0.067" [ref=e980]
+                      - cell "$13.50" [ref=e981]
+                      - cell "3.2h" [ref=e982]
+                    - row "P2 S+ → CXR+ → Xpert− 0.012 0.022 $13.50 3.2h" [ref=e983]:
+                      - cell "P2" [ref=e984]
+                      - cell "S+ → CXR+ → Xpert−" [ref=e985]
+                      - cell "0.012" [ref=e986]
+                      - cell "0.022" [ref=e987]
+                      - cell "$13.50" [ref=e988]
+                      - cell "3.2h" [ref=e989]
+                    - row "P3 S+ → CXR− (exit) 0.018 0.142 $2.70 0.6h" [ref=e990]:
+                      - cell "P3" [ref=e991]
+                      - cell "S+ → CXR− (exit)" [ref=e992]
+                      - cell "0.018" [ref=e993]
+                      - cell "0.142" [ref=e994]
+                      - cell "$2.70" [ref=e995]
+                      - cell "0.6h" [ref=e996]
+                    - row "P4 S− (exit) 0.022 0.769 $0.30 0.1h" [ref=e997]:
+                      - cell "P4" [ref=e998]
+                      - cell "S− (exit)" [ref=e999]
+                      - cell "0.022" [ref=e1000]
+                      - cell "0.769" [ref=e1001]
+                      - cell "$0.30" [ref=e1002]
+                      - cell "0.1h" [ref=e1003]
+              - generic [ref=e1004]:
+                - heading "Sensitivity analysis (tornado)" [level=2] [ref=e1005]
+                - generic [ref=e1006]:
+                  - generic [ref=e1007]: Tornado plot, impact on aggregate sensitivity (±20%)
+                  - img [ref=e1008]:
+                    - generic [ref=e1010]: Xpert Se
+                    - generic [ref=e1014]: CAD4TB Se
+                    - generic [ref=e1018]: WHO-4 Se
+                    - generic [ref=e1022]: Prevalence
+                    - generic [ref=e1026]: Cond. indep.
+                    - generic [ref=e1029]: −10 pp
+                    - generic [ref=e1030]: +10 pp
+            - generic [ref=e1031]:
+              - generic [ref=e1032]: TODAY'S RESEARCH FOR TOMORROW'S HEALTH
+              - generic [ref=e1033]: www.syreon.me
+              - generic [ref=e1034]: Page 3 / 6
+          - generic [ref=e1035]:
+            - generic [ref=e1036]:
+              - generic [ref=e1037]: SME
+              - generic [ref=e1038]: OptiDx · TB Community Screening v3
+              - generic [ref=e1039]: Technical (HTA analyst)
+            - generic [ref=e1041]:
+              - heading "Costing & resource use" [level=2] [ref=e1042]
+              - table [ref=e1043]:
+                - rowgroup [ref=e1044]:
+                  - row "Resource Unit cost Per 1 000 screened Annual @ 50k" [ref=e1045]:
+                    - columnheader "Resource" [ref=e1046]
+                    - columnheader "Unit cost" [ref=e1047]
+                    - columnheader "Per 1 000 screened" [ref=e1048]
+                    - columnheader "Annual @ 50k" [ref=e1049]
+                - rowgroup [ref=e1050]:
+                  - row "WHO-4 screen (CHW time) $0.30 $300 $15 000" [ref=e1051]:
+                    - cell "WHO-4 screen (CHW time)" [ref=e1052]
+                    - cell "$0.30" [ref=e1053]
+                    - cell "$300" [ref=e1054]
+                    - cell "$15 000" [ref=e1055]
+                  - row "CAD4TB CXR $2.40 $553 $27 650" [ref=e1056]:
+                    - cell "CAD4TB CXR" [ref=e1057]
+                    - cell "$2.40" [ref=e1058]
+                    - cell "$553" [ref=e1059]
+                    - cell "$27 650" [ref=e1060]
+                  - row "Xpert MTB/RIF Ultra cartridge $10.80 $960 $48 000" [ref=e1061]:
+                    - cell "Xpert MTB/RIF Ultra cartridge" [ref=e1062]
+                    - cell "$10.80" [ref=e1063]
+                    - cell "$960" [ref=e1064]
+                    - cell "$48 000" [ref=e1065]
+                  - row "Sample transport & lab time $0.85 $76 $3 800" [ref=e1066]:
+                    - cell "Sample transport & lab time" [ref=e1067]
+                    - cell "$0.85" [ref=e1068]
+                    - cell "$76" [ref=e1069]
+                    - cell "$3 800" [ref=e1070]
+                  - row "Total $1 889 $94 450" [ref=e1071]:
+                    - cell "Total" [ref=e1072]
+                    - cell [ref=e1073]
+                    - cell "$1 889" [ref=e1074]
+                    - cell "$94 450" [ref=e1075]
+            - generic [ref=e1076]:
+              - generic [ref=e1077]: TODAY'S RESEARCH FOR TOMORROW'S HEALTH
+              - generic [ref=e1078]: www.syreon.me
+              - generic [ref=e1079]: Page 4 / 6
+          - generic [ref=e1080]:
+            - generic [ref=e1081]:
+              - generic [ref=e1082]: SME
+              - generic [ref=e1083]: OptiDx · TB Community Screening v3
+              - generic [ref=e1084]: Technical (HTA analyst)
+            - generic [ref=e1085]:
+              - generic [ref=e1086]:
+                - heading "Comparator pathways" [level=2] [ref=e1087]
+                - table [ref=e1088]:
+                  - rowgroup [ref=e1089]:
+                    - row "Pathway Se Sp Cost TAT" [ref=e1090]:
+                      - columnheader "Pathway" [ref=e1091]
+                      - columnheader "Se" [ref=e1092]
+                      - columnheader "Sp" [ref=e1093]
+                      - columnheader "Cost" [ref=e1094]
+                      - columnheader "TAT" [ref=e1095]
+                  - rowgroup [ref=e1096]:
+                    - row "Proposed (S → CXR → Xpert) 84.2% 94.6% $5.62 2.8h" [ref=e1097]:
+                      - cell "Proposed (S → CXR → Xpert)" [ref=e1098]
+                      - cell "84.2%" [ref=e1099]
+                      - cell "94.6%" [ref=e1100]
+                      - cell "$5.62" [ref=e1101]
+                      - cell "2.8h" [ref=e1102]
+                    - row "Symptom + Xpert (no CXR) 62.5% 97.6% $8.10 2.6h" [ref=e1103]:
+                      - cell "Symptom + Xpert (no CXR)" [ref=e1104]
+                      - cell "62.5%" [ref=e1105]
+                      - cell "97.6%" [ref=e1106]
+                      - cell "$8.10" [ref=e1107]
+                      - cell "2.6h" [ref=e1108]
+                    - row "CXR-only mass screen 90.0% 79.0% $2.40 0.3h" [ref=e1109]:
+                      - cell "CXR-only mass screen" [ref=e1110]
+                      - cell "90.0%" [ref=e1111]
+                      - cell "79.0%" [ref=e1112]
+                      - cell "$2.40" [ref=e1113]
+                      - cell "0.3h" [ref=e1114]
+                    - row "Smear microscopy (status quo) 61.0% 98.0% $1.80 2.0h" [ref=e1115]:
+                      - cell "Smear microscopy (status quo)" [ref=e1116]
+                      - cell "61.0%" [ref=e1117]
+                      - cell "98.0%" [ref=e1118]
+                      - cell "$1.80" [ref=e1119]
+                      - cell "2.0h" [ref=e1120]
+              - generic [ref=e1121]:
+                - heading "Warnings & assumptions" [level=2] [ref=e1122]
+                - list [ref=e1123]:
+                  - listitem [ref=e1124]: Conditional independence assumed between CXR and Xpert given disease status. Violations will inflate aggregate sensitivity.
+                  - listitem [ref=e1125]: Aggregate sensitivity (84.2%) is 0.8 pp below the user-defined minimum threshold of 85%.
+                  - listitem [ref=e1126]: "Three sample types required across pathway: none, imaging, sputum, operational complexity."
+                  - listitem [ref=e1127]: Costing uses 2025 GDF concessionary cartridge pricing; non-GDF buyers should re-cost Node 3.
+            - generic [ref=e1128]:
+              - generic [ref=e1129]: TODAY'S RESEARCH FOR TOMORROW'S HEALTH
+              - generic [ref=e1130]: www.syreon.me
+              - generic [ref=e1131]: Page 5 / 6
+          - generic [ref=e1132]:
+            - generic [ref=e1133]:
+              - generic [ref=e1134]: SME
+              - generic [ref=e1135]: OptiDx · TB Community Screening v3
+              - generic [ref=e1136]: Technical (HTA analyst)
+            - generic [ref=e1138]:
+              - heading "Evidence sources & references" [level=2] [ref=e1139]
+              - list [ref=e1140]:
+                - listitem [ref=e1141]: "WHO. Systematic screening for active tuberculosis: principles and recommendations. 2021 update."
+                - listitem [ref=e1142]: "Qin ZZ et al. CAD for TB triage: a multi-country diagnostic accuracy study. Lancet Digit Health. 2023."
+                - listitem [ref=e1143]: Cochrane Collaboration. Xpert MTB/RIF Ultra for pulmonary TB diagnosis. Cochrane Database Syst Rev. CD009593 (2021).
+                - listitem [ref=e1144]: Stop TB Partnership. Global Drug Facility cartridge pricing 2025.
+                - listitem [ref=e1145]: Local prevalence survey 2024 (data on file, Syreon).
+            - generic [ref=e1146]:
+              - generic [ref=e1147]: TODAY'S RESEARCH FOR TOMORROW'S HEALTH
+              - generic [ref=e1148]: www.syreon.me
+              - generic [ref=e1149]: Page 6 / 6
+  - button "Design specification" [ref=e690] [cursor=pointer]:
+    - img [ref=e691]

@@ -75,10 +75,23 @@ function ScreenTrace({ setScreen }) {
 }
 
 function ScreenCompare({ setScreen }) {
+  const scenarios = window.OptiDxOptimizationScenarios?.length ? window.OptiDxOptimizationScenarios : window.SEED_COMPARE;
   return (
     <>
       <TopBar crumbs={["OptiDx", "TB Community Screening", "Compare"]}
-        actions={<><button className="btn" onClick={() => window.OptiDxActions.downloadJson("optidx-compare-candidates.json", window.SEED_COMPARE)}><Icon name="download"/>Export</button><button className="btn btn--primary" onClick={() => setScreen("canvas")}>Apply suggestion</button></>}/>
+        actions={<><button className="btn" onClick={() => window.OptiDxActions.downloadJson("optidx-compare-candidates.json", scenarios)}><Icon name="download"/>Export</button><button className="btn btn--primary" onClick={async () => {
+          const candidate = window.OptiDxOptimizationScenarios?.find(item => item.pathway) || null;
+          if (!candidate?.pathway) {
+            window.OptiDxActions.showToast?.("Load a live optimization run before applying a suggestion.", "info");
+            return;
+          }
+          try {
+            await window.OptiDxActions.loadPathwayIntoWorkspace?.(candidate.pathway);
+            setScreen("canvas");
+          } catch (error) {
+            window.OptiDxActions.showToast?.(error?.message || "Unable to apply suggestion", "error");
+          }
+        }}>Apply suggestion</button></>}/>
       <div className="page" style={{maxWidth:1440}}>
         <div className="page__head">
           <div>
@@ -89,7 +102,7 @@ function ScreenCompare({ setScreen }) {
         </div>
 
         <div className="grid" style={{gridTemplateColumns:"repeat(3, 1fr)", gap:12, marginBottom:16}}>
-          {window.SEED_COMPARE.slice(0,3).map(c => (
+          {scenarios.slice(0,3).map(c => (
             <div key={c.id} className="card card--pad" style={{borderColor: c.id === "c1" ? "var(--sme-orange)" : "var(--edge)"}}>
               <div className="row" style={{marginBottom:6}}>
                 <div className="sme-eyebrow">{c.id === "c1" ? "Current" : c.name.split(" ")[0]}</div>
@@ -117,7 +130,7 @@ function ScreenCompare({ setScreen }) {
               <th>Skill</th><th>Samples</th><th>Status</th>
             </tr></thead>
             <tbody>
-              {window.SEED_COMPARE.map(c => (
+              {scenarios.map(c => (
                 <tr key={c.id}>
                   <td><b>{c.name}</b>{c.reason && <div style={{fontSize:11, color:"var(--fg-3)"}}>{c.reason}</div>}</td>
                   <td className="num mono">{(c.sens*100).toFixed(1)}%</td>
@@ -171,7 +184,7 @@ function RadarChart() {
 }
 
 function ScatterChart() {
-  const pts = window.SEED_COMPARE.map(c => ({ ...c, px: 20 + c.cost*10, py: 200 - c.sens*200 }));
+  const pts = (window.OptiDxOptimizationScenarios?.length ? window.OptiDxOptimizationScenarios : window.SEED_COMPARE).map(c => ({ ...c, px: 20 + c.cost*10, py: 200 - c.sens*200 }));
   return (
     <svg width="100%" height="220" viewBox="0 0 500 220">
       <line x1="40" y1="10" x2="40" y2="200" stroke="var(--edge)"/>
@@ -223,7 +236,13 @@ function ScreenEvidence() {
             <button className={"btn btn--sm " + (view==="table" ? "btn--ink" : "")} onClick={() => setView("table")}><Icon name="grid" size={11}/></button>
           </div>
           <button className="btn" onClick={() => setShowAccess(true)}><Icon name="lock"/>Request edit access</button>
-          <button className="btn btn--primary" onClick={() => window.OptiDxActions.comingSoon("Add record")}><Icon name="plus"/>Add record</button>
+          <button className="btn btn--primary" onClick={async () => {
+            try {
+              await window.OptiDxActions.addManualTest?.();
+            } catch (error) {
+              window.OptiDxActions.showToast?.(error?.message || "Unable to add record", "error");
+            }
+          }}><Icon name="plus"/>Add record</button>
         </>}
       />
 
@@ -387,7 +406,7 @@ function ScreenEvidence() {
             <div style={{flex:1, fontSize:12, color:"var(--fg-2)"}}>
               <b>Don't see what you need?</b> Submit a request and our clinical evidence team will source, vet, and add it within 7 days. Custom catalogs can be scoped to your workspace.
             </div>
-            <button className="btn btn--sm" onClick={() => window.OptiDxActions.comingSoon("Request a test")}>Request a test</button>
+            <button className="btn btn--sm" onClick={() => setShowAccess(true)}>Request a test</button>
           </div>
         </main>
       </div>
@@ -587,7 +606,14 @@ function PresetInspectModal({ preset:p, onClose, onRequest }) {
           <button className="btn" onClick={onClose}>Close</button>
           <div className="spacer"/>
           <button className="btn" onClick={() => window.OptiDxActions.comingSoon("View source PDF")}><Icon name="file"/>View source PDF</button>
-          <button className="btn btn--primary" onClick={() => window.OptiDxActions.comingSoon("Import to pathway")}><Icon name="plus"/>Import to pathway</button>
+          <button className="btn btn--primary" onClick={async () => {
+            try {
+              await window.OptiDxActions.importEvidenceTest?.(p);
+              onClose?.();
+            } catch (error) {
+              window.OptiDxActions.showToast?.(error?.message || "Unable to import to pathway", "error");
+            }
+          }}><Icon name="plus"/>Import to pathway</button>
         </div>
       </div>
     </div>

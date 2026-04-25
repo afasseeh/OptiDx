@@ -11,6 +11,179 @@ const api = axios.create({
   },
 });
 
+function dispatchWorkspaceEvent() {
+  window.dispatchEvent(new CustomEvent('optidx-workspace-updated', {
+    detail: window.OptiDxWorkspace || null,
+  }));
+}
+
+function normalizeDiagnosticTestRecord(test) {
+  if (!test || typeof test !== 'object') {
+    return null;
+  }
+
+  const sampleTypes = Array.isArray(test.sample_types)
+    ? test.sample_types.filter(Boolean)
+    : test.sample
+      ? [test.sample]
+      : [];
+  const turnaroundTime = test.turnaround_time ?? test.tat ?? null;
+  const turnaroundUnit = test.turnaround_time_unit ?? test.tatUnit ?? 'min';
+  const skill = test.skill_level ?? test.skill ?? null;
+
+  return {
+    id: test.id,
+    name: test.name || 'Untitled test',
+    category: test.category || 'clinical',
+    icon: test.icon || 'flask-conical',
+    cost: Number(test.cost ?? 0),
+    currency: test.currency || 'USD',
+    sens: Number(test.sensitivity ?? test.sens ?? 0),
+    spec: Number(test.specificity ?? test.spec ?? 0),
+    tat: Number(turnaroundTime ?? 0),
+    tatUnit: turnaroundUnit,
+    sample: sampleTypes[0] || 'none',
+    sample_types: sampleTypes,
+    skill: typeof skill === 'number' ? formatSkillLabel(skill) : (skill || 'Lab Tech'),
+    skill_level: typeof skill === 'number' ? skill : null,
+    evidence: test.provenance?.source || test.evidence || 'Workspace record',
+    notes: test.notes || '',
+    availability: test.availability ?? true,
+    turnaround_time: turnaroundTime,
+    turnaround_time_unit: turnaroundUnit,
+    provenance: test.provenance || null,
+  };
+}
+
+function normalizePathwayRecord(pathway) {
+  if (!pathway || typeof pathway !== 'object') {
+    return null;
+  }
+
+  const definition = pathway.editor_definition || pathway.engine_definition || pathway.definition || null;
+  const normalized = definition ? normalizePathwayGraph(definition) : null;
+  return {
+    ...pathway,
+    editor_definition: normalized || pathway.editor_definition || null,
+    engine_definition: pathway.engine_definition || null,
+    _canonical: normalized,
+  };
+}
+
+function toWorkspaceIndex(items, key = 'id') {
+  return Object.fromEntries(
+    (Array.isArray(items) ? items : [])
+      .filter(item => item && typeof item === 'object' && item[key] != null)
+      .map(item => [String(item[key]), item]),
+  );
+}
+
+function setWorkspaceSnapshot(partial) {
+  window.OptiDxWorkspace = {
+    pathways: window.OptiDxWorkspace?.pathways || [],
+    tests: window.OptiDxWorkspace?.tests || [],
+    settings: window.OptiDxWorkspace?.settings || [],
+    pathwaysById: window.OptiDxWorkspace?.pathwaysById || {},
+    testsById: window.OptiDxWorkspace?.testsById || {},
+    settingsByKey: window.OptiDxWorkspace?.settingsByKey || {},
+    ...window.OptiDxWorkspace,
+    ...partial,
+  };
+  dispatchWorkspaceEvent();
+  return window.OptiDxWorkspace;
+}
+
+function getWorkspacePathways() {
+  return window.OptiDxWorkspace?.pathways || window.SEED_PATHWAYS || [];
+}
+
+function getWorkspaceTests() {
+  return window.OptiDxWorkspace?.tests || window.SEED_TESTS || [];
+}
+
+function getWorkspaceSettings() {
+  return window.OptiDxWorkspace?.settings || [];
+}
+
+function getWorkspaceSetting(key, scope = 'workspace') {
+  const compoundKey = `${scope}:${key}`;
+  return window.OptiDxWorkspace?.settingsByKey?.[compoundKey]?.value ?? null;
+}
+
+async function saveWorkspaceSetting(key, value, scope = 'workspace') {
+  const response = await request('put', '/api/settings', {
+    scope,
+    key,
+    value,
+  });
+
+  const nextSettings = [
+    ...(getWorkspaceSettings().filter(setting => !(setting.key === key && (setting.scope || 'workspace') === scope))),
+    response,
+  ];
+
+  setWorkspaceSnapshot({
+    settings: nextSettings,
+    settingsByKey: toWorkspaceIndex(nextSettings.map(setting => ({
+      ...setting,
+      compoundKey: `${setting.scope || 'workspace'}:${setting.key}`,
+    })), 'compoundKey'),
+  });
+
+  return response;
+}
+
+async function loadWorkspaceData() {
+  const [pathwaysResponse, testsResponse, settingsResponse] = await Promise.allSettled([
+    request('get', '/api/pathways'),
+    request('get', '/api/evidence/tests'),
+    request('get', '/api/settings'),
+  ]);
+
+  const pathways = pathwaysResponse.status === 'fulfilled'
+    ? (Array.isArray(pathwaysResponse.value) ? pathwaysResponse.value : [])
+    : [];
+  const tests = testsResponse.status === 'fulfilled'
+    ? (Array.isArray(testsResponse.value) ? testsResponse.value : [])
+    : [];
+  const settings = settingsResponse.status === 'fulfilled'
+    ? (Array.isArray(settingsResponse.value) ? settingsResponse.value : [])
+    : [];
+
+  const normalizedPathways = pathways.map(record => normalizePathwayRecord(record)).filter(Boolean);
+  const normalizedTests = tests.map(record => normalizeDiagnosticTestRecord(record)).filter(Boolean);
+  const settingsByKey = toWorkspaceIndex(settings.map(setting => ({
+    ...setting,
+    compoundKey: `${setting.scope || 'workspace'}:${setting.key}`,
+  })), 'compoundKey');
+
+  setWorkspaceSnapshot({
+    pathways: normalizedPathways,
+    tests: normalizedTests,
+    settings,
+    pathwaysById: toWorkspaceIndex(normalizedPathways),
+    testsById: toWorkspaceIndex(normalizedTests),
+    settingsByKey,
+  });
+
+  if (normalizedPathways.length) {
+    window.SEED_PATHWAYS = normalizedPathways;
+    if (!window.OptiDxCurrentPathwayRecord) {
+      const latest = normalizedPathways[0];
+      window.OptiDxCurrentPathwayRecord = latest;
+      window.OptiDxCurrentPathway = latest._canonical || normalizePathwayGraph(latest.editor_definition || latest.engine_definition || latest);
+      window.OptiDxCanvasDraft = window.OptiDxCurrentPathway;
+      window.SEED_PATHWAY = window.OptiDxCurrentPathway;
+    }
+  }
+
+  if (normalizedTests.length) {
+    window.SEED_TESTS = normalizedTests;
+  }
+
+  return window.OptiDxWorkspace;
+}
+
 function ensureBlobDownload(filename, content, mimeType = 'application/json') {
   const blob = content instanceof Blob ? content : new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
@@ -276,6 +449,29 @@ function normalizePathwayGraph(pathway) {
   };
 }
 
+function getActivePathwayRecord() {
+  return window.OptiDxCurrentPathwayRecord || null;
+}
+
+function setActivePathwayRecord(record) {
+  window.OptiDxCurrentPathwayRecord = record || null;
+  if (record) {
+    const canonical = record._canonical || normalizePathwayGraph(record.editor_definition || record.engine_definition || record);
+    window.OptiDxCurrentPathway = canonical;
+    window.OptiDxCanvasDraft = canonical;
+    window.SEED_PATHWAY = canonical;
+  }
+  return record || null;
+}
+
+function setActivePathwayDraft(pathway) {
+  const canonical = normalizePathwayGraph(pathway);
+  window.OptiDxCurrentPathway = canonical;
+  window.OptiDxCanvasDraft = canonical;
+  window.SEED_PATHWAY = canonical;
+  return canonical;
+}
+
 function buildCanonicalPathway(source = null) {
   const nodes = Array.isArray(source?.nodes)
     ? source.nodes
@@ -322,17 +518,27 @@ function buildCanonicalPathway(source = null) {
 async function savePathway(pathway = null) {
   const payload = normalizePathwayGraph(pathway || window.OptiDxCurrentPathway || buildCanonicalPathway());
   const name = payload?.metadata?.label || 'Builder pathway';
-  const response = await request('post', '/api/pathways', {
-    name,
-    editor_definition: payload,
-    schema_version: payload?.schema_version || 'canvas-v1',
-    start_node_id: payload?.start_node || null,
-    metadata: payload?.metadata || {},
-  });
+  const currentRecord = getActivePathwayRecord();
+  const response = currentRecord?.id
+    ? await request('put', `/api/pathways/${currentRecord.id}`, {
+        project_id: currentRecord.project_id ?? null,
+        name,
+        editor_definition: payload,
+        schema_version: payload?.schema_version || 'canvas-v1',
+        start_node_id: payload?.start_node || null,
+        metadata: payload?.metadata || {},
+      })
+    : await request('post', '/api/pathways', {
+      name,
+      editor_definition: payload,
+      schema_version: payload?.schema_version || 'canvas-v1',
+      start_node_id: payload?.start_node || null,
+      metadata: payload?.metadata || {},
+    });
 
   window.OptiDxSavedPathway = response;
-  window.OptiDxCurrentPathway = normalizePathwayGraph(response?.editor_definition || payload);
-  window.OptiDxCanvasDraft = window.OptiDxCurrentPathway;
+  window.OptiDxCurrentPathwayRecord = normalizePathwayRecord(response);
+  setActivePathwayDraft(response?.editor_definition || payload);
   showToast(`Saved "${name}"`, 'success');
   return response;
 }
@@ -375,11 +581,12 @@ function buildOptimizationScenarios(result) {
         : index === 1
           ? 'Closest balanced option'
           : 'Optimizer output',
+      pathway: pathway && Object.keys(pathway).length ? normalizePathwayGraph(pathway) : null,
     };
   });
 }
 
-function addManualTest() {
+async function addManualTest() {
   const name = window.prompt("Name the new diagnostic test:");
   if (!name) {
     return null;
@@ -390,29 +597,31 @@ function addManualTest() {
     return null;
   }
 
-  const id = `t_manual_${Date.now().toString(36)}`;
-  const test = {
-    id,
+  const test = await request('post', '/api/evidence/tests', {
     name: cleaned,
     category: "clinical",
-    icon: "flask-conical",
+    sensitivity: 0.8,
+    specificity: 0.8,
     cost: 1.0,
     currency: "USD",
-    sens: 0.8,
-    spec: 0.8,
-    tat: 15,
-    tatUnit: "min",
-    sample: "blood",
-    skill: "Lab Tech",
-    evidence: "Manual entry",
+    turnaround_time: 15,
+    turnaround_time_unit: "min",
+    sample_types: ["blood"],
+    skill_level: 3,
     notes: "User-defined test.",
-    available: true,
-  };
+    availability: true,
+    provenance: { source: "Manual entry" },
+  });
 
-  window.SEED_TESTS = [...(window.SEED_TESTS || []), test];
-  window.dispatchEvent(new CustomEvent('optidx-tests-updated', { detail: test }));
+  const normalized = normalizeDiagnosticTestRecord(test);
+  const nextTests = [...getWorkspaceTests(), normalized];
+  window.SEED_TESTS = nextTests;
+  setWorkspaceSnapshot({
+    tests: nextTests,
+    testsById: toWorkspaceIndex(nextTests),
+  });
   showToast(`Added "${cleaned}" to the library`, 'success');
-  return test;
+  return normalized;
 }
 
 async function optimizePathways(payload) {
@@ -427,6 +636,7 @@ async function evaluatePathway(pathway = null, prevalence = null) {
   const canonicalPathway = normalizePathwayGraph(pathway || buildCanonicalPathway());
   const payload = {
     pathway: canonicalPathway,
+    pathway_id: getActivePathwayRecord()?.id || null,
   };
 
   if (prevalence !== null && prevalence !== undefined) {
@@ -437,6 +647,9 @@ async function evaluatePathway(pathway = null, prevalence = null) {
   window.OptiDxLatestEvaluationResult = response;
   window.OptiDxLatestEvaluationPathway = canonicalPathway;
   window.OptiDxLatestEvaluationView = buildEvaluationView(response);
+  if (response?.pathway) {
+    window.OptiDxCurrentPathwayRecord = normalizePathwayRecord(response.pathway);
+  }
   showToast('Pathway evaluation finished', 'success');
   return response;
 }
@@ -445,11 +658,118 @@ async function loadPathwayIntoWorkspace(pathway) {
   const response = await request('post', '/api/pathways/import', { pathway });
   const canonical = normalizePathwayGraph(response?.editor_definition || response);
   window.OptiDxImportedPathway = response;
-  window.OptiDxCurrentPathway = canonical;
-  window.OptiDxCanvasDraft = canonical;
+  window.OptiDxCurrentPathwayRecord = normalizePathwayRecord(response);
+  setActivePathwayDraft(canonical);
   window.dispatchEvent(new CustomEvent('optidx-pathway-loaded', { detail: canonical }));
   showToast(`Imported "${canonical.metadata?.label || 'pathway'}"`, 'success');
   return response;
+}
+
+async function openPathwayRecord(pathway) {
+  if (!pathway) {
+    return null;
+  }
+
+  const record = pathway.editor_definition || pathway.engine_definition ? pathway : await request('get', `/api/pathways/${pathway.id}`);
+  const normalized = normalizePathwayRecord(record);
+  window.OptiDxCurrentPathwayRecord = normalized;
+  setActivePathwayDraft(normalized._canonical || normalized.editor_definition || normalized);
+  window.dispatchEvent(new CustomEvent('optidx-pathway-loaded', { detail: window.OptiDxCurrentPathway }));
+  return normalized;
+}
+
+async function duplicatePathwayRecord(pathway) {
+  const record = normalizePathwayRecord(pathway || getActivePathwayRecord());
+  if (!record) {
+    return null;
+  }
+
+  const copyName = `${record.name || record.metadata?.label || 'Untitled pathway'} Copy`;
+  const response = await request('post', '/api/pathways', {
+    project_id: record.project_id ?? null,
+    name: copyName,
+    editor_definition: record.editor_definition || record._canonical || buildCanonicalPathway(),
+    schema_version: record.schema_version || 'canvas-v1',
+    start_node_id: record.start_node_id || record.editor_definition?.start_node || null,
+    metadata: {
+      ...(record.metadata || {}),
+      label: copyName,
+      source: record.metadata?.source || 'Duplicate pathway',
+    },
+  });
+
+  const normalized = normalizePathwayRecord(response);
+  const existing = getWorkspacePathways().filter(item => String(item.id) !== String(normalized.id));
+  const nextPathways = [normalized, ...existing];
+  window.SEED_PATHWAYS = nextPathways;
+  setWorkspaceSnapshot({
+    pathways: nextPathways,
+    pathwaysById: toWorkspaceIndex(nextPathways),
+  });
+  return normalized;
+}
+
+async function importEvidenceTest(test) {
+  if (!test || typeof test !== 'object') {
+    return null;
+  }
+
+  const payload = {
+    name: test.name || 'Imported evidence test',
+    category: test.category || 'clinical',
+    sensitivity: Number(test.sens ?? test.sensitivity ?? 0),
+    specificity: Number(test.spec ?? test.specificity ?? 0),
+    cost: Number(test.cost ?? 0),
+    currency: test.currency || 'USD',
+    turnaround_time: Number(test.tat ?? test.turnaround_time ?? 0),
+    turnaround_time_unit: test.tatUnit || test.turnaround_time_unit || 'min',
+    sample_types: Array.isArray(test.sample_types) ? test.sample_types : test.sample ? [test.sample] : [],
+    skill_level: test.skill_level ?? test.skill ?? 3,
+    notes: test.notes || test.evidence || 'Imported from evidence library.',
+    availability: true,
+    provenance: {
+      source: test.source || test.provenance?.source || 'Evidence library',
+      country: test.country || null,
+      year: test.year || null,
+    },
+  };
+
+  const response = await request('post', '/api/evidence/tests', payload);
+  const normalized = normalizeDiagnosticTestRecord(response);
+  const existing = getWorkspaceTests().filter(item => String(item.id) !== String(normalized.id));
+  const nextTests = [normalized, ...existing];
+  window.SEED_TESTS = nextTests;
+  setWorkspaceSnapshot({
+    tests: nextTests,
+    testsById: toWorkspaceIndex(nextTests),
+  });
+  showToast(`Imported "${normalized.name}"`, 'success');
+  return normalized;
+}
+
+async function downloadReport(format = 'pdf') {
+  const pathwayId = getActivePathwayRecord()?.id || window.OptiDxLatestEvaluationPathway?.id;
+  if (!pathwayId) {
+    showToast('Save or run a pathway before exporting a report.', 'error');
+    return null;
+  }
+
+  const response = await api.request({
+    method: 'get',
+    url: `/api/pathways/${pathwayId}/export/report`,
+    params: { format },
+    responseType: 'blob',
+  });
+
+  const disposition = response.headers?.['content-disposition'] || '';
+  const match = disposition.match(/filename="?([^"]+)"?/i);
+  const filename = match?.[1] || `optidx-report.${format}`;
+  ensureBlobDownload(filename, response.data, response.headers?.['content-type'] || 'application/octet-stream');
+  return response.data;
+}
+
+function copyShareLink(url = window.location.origin + '/?screen=results') {
+  return copyText(url);
 }
 
 function importJsonFile(onParsed) {
@@ -483,24 +803,39 @@ function importJsonFile(onParsed) {
 }
 
 function comingSoon(label) {
-  showToast(`${label} is not connected yet.`);
+  showToast(`${label} is available in a later beta.`, 'info');
 }
 
 window.OptiDxActions = {
   api,
   request,
+  loadWorkspaceData,
+  getWorkspacePathways,
+  getWorkspaceTests,
+  getWorkspaceSettings,
+  getWorkspaceSetting,
+  saveWorkspaceSetting,
+  setWorkspaceSnapshot,
+  getActivePathwayRecord,
+  setActivePathwayRecord,
+  setActivePathwayDraft,
   showToast,
   copyText,
+  copyShareLink,
   ensureBlobDownload,
   buildCanonicalPathway,
   normalizePathwayGraph,
   loadPathwayIntoWorkspace,
+  openPathwayRecord,
   savePathway,
   optimizePathways,
   evaluatePathway,
   buildEvaluationView,
   buildOptimizationScenarios,
   addManualTest,
+  duplicatePathwayRecord,
+  importEvidenceTest,
+  downloadReport,
   downloadJson(filename, data) {
     ensureBlobDownload(filename, JSON.stringify(data, null, 2), 'application/json');
   },

@@ -32,12 +32,12 @@
 - **Benefit:** Faster and more reliable evidence database growth.
 - **Priority:** High
 
-## 5. PDF reporting polish
+## 5. PDF/DOCX reporting polish
 
 - **Context:** HTML reporting is the safest initial path.
-- **Limitation:** The current shell still falls back to browser-side text downloads for some report export controls.
-- **Improvement:** Add a dedicated server-side DOCX/PDF rendering pipeline and layout snapshots, then route the download buttons to those endpoints.
-- **Benefit:** More reliable ministry/HTA-ready reporting with real file formats.
+- **Limitation:** The current export pipeline now produces real server-side PDF and DOCX files, but the layout is still intentionally minimal.
+- **Improvement:** Add branded page templates, richer charts, section pagination, and snapshot-driven export QA.
+- **Benefit:** More reliable ministry/HTA-ready reporting with production-grade formatting.
 - **Priority:** Medium
 
 ## 6. Collaboration and admin actions
