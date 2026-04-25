@@ -65,9 +65,10 @@ The initial web integration should preserve the engine contract and extend it in
 4. Laravel invokes the Python bridge for evaluation or benchmark execution.
 5. The bridge returns metrics, warnings, and path traces.
 6. The frontend renders those results without re-deriving the mathematics.
-7. The Builder serializes the live canvas into a canonical pathway graph, and the backend stores and rehydrates that same graph shape so save/export/import stay aligned with the engine contract.
-8. The optimization wizard posts the test library and constraints to `/api/pathways/optimize`, then renders the ranked candidates returned by the Laravel optimizer service.
-9. The optimizer service normalizes the wizard's UI-shaped test records into the Python engine schema before building candidate templates, so the browser can keep using the compact seed-library field names while the backend preserves the canonical engine contract.
+7. The shared browser action layer stores the latest evaluation payload and a normalized evaluation view on `window.OptiDxLatestEvaluationResult` / `window.OptiDxLatestEvaluationView`, and the Results and Trace screens render from that live state instead of the bundled seed example once a run has completed.
+8. The Builder serializes the live canvas into a canonical pathway graph, and the backend stores and rehydrates that same graph shape so save/export/import stay aligned with the engine contract.
+9. The optimization wizard posts the test library and constraints to `/api/pathways/optimize`, then renders the ranked candidates returned by the Laravel optimizer service.
+10. The optimizer service normalizes the wizard's UI-shaped test records into the Python engine schema before building candidate templates, so the browser can keep using the compact seed-library field names while the backend preserves the canonical engine contract.
 
 Current bridge shape:
 
@@ -78,7 +79,8 @@ Current bridge shape:
 - `web/app/Services/OptimizationService.php` canonicalizes wizard test-library records into the engine contract, prunes mirrored pair permutations, and then generates/evaluates candidate pathways within the synchronous optimize request
 - `web/app/Http/Controllers/AuthController.php` owns the session-backed auth endpoints used by the React shell
 - `web/resources/js/app.js` bootstraps the browser runtime with Axios, CSRF/session defaults, and the component registry before mounting the React shell
-- `web/resources/js/optidx/actions.js` now owns the shared browser helpers for save, optimize, manual test creation, canonical pathway serialization, import hydration, and canvas export
+- `web/resources/js/optidx/actions.js` now owns the shared browser helpers for save, optimize, manual test creation, canonical pathway serialization, import hydration, evaluation normalization, and canvas export
+- `web/resources/js/optidx/components/ScreenResults.jsx` and `web/resources/js/optidx/components/ScreenOther.jsx` read the latest live evaluation view from shared browser state so each run can surface its own pathway metrics, path trace, and trace export
 - `web/resources/js/optidx/components/ScreenCanvas.jsx` keeps the current canvas state mirrored on `window.OptiDxCanvasState` / `window.OptiDxCurrentPathway` so the shell can persist the live builder graph and restore imported canonical graphs
 
 ### Auth and Email

@@ -111,7 +111,14 @@ function CanvasWrapper({ variant, setVariant, openPanel, setOpenPanel, setScreen
             }
           }}><Icon name="save"/>Save</button>
           <button className="btn" onClick={() => window.OptiDxActions.downloadJson("optidx-pathway.json", window.OptiDxCurrentPathway || window.OptiDxCanvasDraft || window.SEED_PATHWAY || {})}><Icon name="download"/>Export</button>
-          <button className="btn btn--primary" onClick={() => setScreen("results")}><Icon name="play"/>Run pathway</button>
+          <button className="btn btn--primary" onClick={async () => {
+            try {
+              await window.OptiDxActions.evaluatePathway?.(window.OptiDxCurrentPathway || window.OptiDxCanvasDraft || window.SEED_PATHWAY || null);
+              setScreen("results");
+            } catch (error) {
+              window.OptiDxActions.showToast?.(error?.message || "Unable to evaluate pathway", "error");
+            }
+          }}><Icon name="play"/>Run pathway</button>
         </>}/>
       <ScreenCanvas variant={variant} openPanel={openPanel} setOpenPanel={setOpenPanel}/>
     </Frame>

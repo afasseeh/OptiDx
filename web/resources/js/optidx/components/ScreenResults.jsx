@@ -1,10 +1,15 @@
 // Results dashboard (variant A and B)
 function ScreenResults({ variant = "A", setVariant, setScreen, onShare }) {
-  const r = window.SEED_RESULTS;
+  const r = window.OptiDxLatestEvaluationView || window.SEED_RESULTS;
+  const pathwayLabel = window.OptiDxLatestEvaluationPathway?.metadata?.label || "Latest pathway";
+  const prevalenceLabel = window.OptiDxLatestEvaluationView?.prevalence != null
+    ? `${(Number(window.OptiDxLatestEvaluationView.prevalence) * 100).toFixed(1)}% prevalence`
+    : "Current evaluation";
+  const pathCount = Array.isArray(r.paths) ? r.paths.length : 0;
   return (
     <>
       <TopBar
-        crumbs={["OptiDx", "TB Community Screening", "Results"]}
+        crumbs={["OptiDx", pathwayLabel, "Results"]}
         actions={<>
           <div className="btn-group" style={{marginRight:6}}>
             <button className={"btn btn--sm " + (variant === "A" ? "btn--ink" : "")} onClick={() => setVariant && setVariant("A")}>Compact</button>
@@ -22,12 +27,12 @@ function ScreenResults({ variant = "A", setVariant, setScreen, onShare }) {
         <div className="page__head">
           <div>
             <div className="sme-eyebrow" style={{marginBottom:6}}>Pathway Analysis</div>
-            <h1>TB Community Screening <span style={{fontWeight:400, fontSize:16, color:"var(--fg-3)"}}>· v3 draft</span></h1>
-            <p>Computed on 24 Apr 2026 · Prevalence 8% · Probabilistic diagnostic pathway algorithm</p>
+            <h1>{pathwayLabel} <span style={{fontWeight:400, fontSize:16, color:"var(--fg-3)"}}>· live evaluation</span></h1>
+            <p>{prevalenceLabel} · Probabilistic diagnostic pathway algorithm</p>
           </div>
           <div className="row" style={{gap:8}}>
             <span className="chip chip--pos"><Icon name="check" size={10}/> Feasible</span>
-            <span className="chip chip--disc">1 warning</span>
+            <span className="chip chip--disc">{r.warnings.length} warning{r.warnings.length === 1 ? "" : "s"}</span>
           </div>
         </div>
 
@@ -50,7 +55,7 @@ function ScreenResults({ variant = "A", setVariant, setScreen, onShare }) {
             <div className="card__head">
               <h3>Path-level trace</h3>
               <div className="spacer"/>
-              <span className="u-meta">4 paths covered</span>
+              <span className="u-meta">{pathCount} paths covered</span>
               <button className="btn btn--sm btn--ghost" onClick={() => setScreen("trace")}>Expand <Icon name="maximize" size={11}/></button>
             </div>
             <table className="table">
@@ -64,7 +69,13 @@ function ScreenResults({ variant = "A", setVariant, setScreen, onShare }) {
                   <tr key={p.id}>
                     <td className="mono"><b>{p.id}</b></td>
                     <td className="mono" style={{fontSize:11}}>{p.sequence}</td>
-                    <td><span className={"chip " + (p.terminal.includes("Treat") ? "chip--pos" : p.terminal.includes("Unlikely") || p.terminal === "No TB" ? "chip--neg" : "chip--inc")}>{p.terminal}</span></td>
+                    <td><span className={"chip " + (
+                      p.terminalKind === "pos" ? "chip--pos"
+                      : p.terminalKind === "neg" ? "chip--neg"
+                      : p.terminal.includes("Treat") ? "chip--pos"
+                      : p.terminal.includes("Unlikely") || p.terminal === "No TB" ? "chip--neg"
+                      : "chip--inc"
+                    )}>{p.terminal}</span></td>
                     <td className="num mono">{(p.pIfD*100).toFixed(1)}%</td>
                     <td className="num mono">{(p.pIfND*100).toFixed(1)}%</td>
                     <td className="num mono">${p.cost.toFixed(2)}</td>

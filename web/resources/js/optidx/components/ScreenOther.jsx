@@ -1,6 +1,7 @@
 // Remaining screens: trace, compare, evidence, report, settings, parallel modal
 function ScreenTrace({ setScreen }) {
-  const r = window.SEED_RESULTS;
+  const r = window.OptiDxLatestEvaluationView || window.SEED_RESULTS;
+  const pathwayLabel = window.OptiDxLatestEvaluationPathway?.metadata?.label || "Latest pathway";
   const csv = [
     ["Path", "Sequence", "Terminal", "P(path | D+)", "P(path | D-)", "Cost", "TAT", "Samples", "Skill"],
     ...r.paths.map(p => [
@@ -17,7 +18,7 @@ function ScreenTrace({ setScreen }) {
   ].map(row => row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(",")).join("\n");
   return (
     <>
-      <TopBar crumbs={["OptiDx", "Results", "Path-level trace"]}
+      <TopBar crumbs={["OptiDx", pathwayLabel, "Path-level trace"]}
         actions={<><button className="btn" onClick={() => window.OptiDxActions.downloadText("optidx-path-trace.csv", csv)}><Icon name="download"/>CSV</button><button className="btn btn--primary" onClick={() => setScreen("results")}>Back to dashboard</button></>}/>
       <div className="page" style={{maxWidth:1440}}>
         <div className="page__head">
@@ -39,7 +40,12 @@ function ScreenTrace({ setScreen }) {
                 <tr key={p.id}>
                   <td className="mono"><b>{p.id}</b></td>
                   <td className="mono" style={{fontSize:12}}>{p.sequence}</td>
-                  <td><span className={"chip " + (p.terminal.includes("Treat") ? "chip--pos" : "chip--neg")}>{p.terminal}</span></td>
+                  <td><span className={"chip " + (
+                    p.terminalKind === "pos" ? "chip--pos"
+                    : p.terminalKind === "neg" ? "chip--neg"
+                    : p.terminal.includes("Treat") ? "chip--pos"
+                    : "chip--neg"
+                  )}>{p.terminal}</span></td>
                   <td className="num mono">{(p.pIfD*100).toFixed(1)}%</td>
                   <td className="num mono">{(p.pIfND*100).toFixed(1)}%</td>
                   <td className="num mono">${p.cost.toFixed(2)}</td>

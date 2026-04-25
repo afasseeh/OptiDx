@@ -1,5 +1,14 @@
 # Change Log
 
+## 2026-04-25 - Live pathway evaluation results binding
+
+- Summary: Rewired the Builder run action to call the live evaluation endpoint, stored the returned evaluation payload in shared browser state, and updated the Results and Trace screens to render from that latest run instead of the bundled seed fixture.
+- Files or modules affected: `web/resources/js/optidx/actions.js`, `web/resources/js/optidx/components/App.jsx`, `web/resources/js/optidx/components/ScreenResults.jsx`, `web/resources/js/optidx/components/ScreenOther.jsx`, `ARCHITECTURE.md`, `FUTURE_TASKS.md`, `CHANGE_LOG.md`.
+- Reason for the change: Different pathways were still showing the same static TB example because the result screens were reading `window.SEED_RESULTS` rather than the latest evaluated pathway.
+- Architecture impact: Introduced a browser-side evaluation view cache (`window.OptiDxLatestEvaluationResult` / `window.OptiDxLatestEvaluationView`) so the UI can reflect the current run without re-deriving metrics on the client.
+- Migration or deployment impact: Rebuild the Vite frontend bundle. No database migration was required.
+- Follow-up notes: Frontend build and backend tests still need to be rerun after this change; the result screens retain a seed fallback only until the first evaluation runs in the current session.
+
 ## 2026-04-25 - Optimization timeout and progress UI polish
 
 - Summary: Reduced optimizer candidate permutations by generating pair templates only once per unordered test pair, added a live animated optimization bar with a single current-action message, and removed the static step checklist and marketing text from the wizard overlay.

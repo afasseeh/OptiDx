@@ -71,3 +71,11 @@
 - **Improvement:** Move candidate generation/evaluation into a queued job or workflow endpoint and stream progress updates back to the UI.
 - **Benefit:** Restores the intended snappy optimization experience and removes pressure from the request timeout ceiling as the library grows.
 - **Priority:** High
+
+## 10. Persisted latest evaluation state
+
+- **Context:** The Results and Trace screens now read the most recent evaluation from shared browser state so each run can show its own metrics and path trace.
+- **Limitation:** A page refresh still falls back to the bundled seed example until the user runs a new evaluation in the current session.
+- **Improvement:** Persist the latest evaluation payload and normalized view alongside the current pathway so the UI can restore the last real run after refresh or screen reload.
+- **Benefit:** Makes the results experience feel stable and keeps the last evaluated pathway visible during iterative review.
+- **Priority:** Low

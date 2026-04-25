@@ -98,6 +98,98 @@ function normalizeTAT(value, unit) {
   return `${n} ${unit || ''}`.trim();
 }
 
+function formatSkillLabel(level) {
+  if (level == null || level === '') {
+    return 'n/a';
+  }
+
+  const numeric = Number(level);
+  if (Number.isNaN(numeric)) {
+    return String(level);
+  }
+
+  const labels = {
+    1: 'CHW / self',
+    2: 'Nurse',
+    3: 'Lab tech',
+    4: 'Specialist',
+    5: 'Specialist',
+  };
+
+  return labels[numeric] || `Skill ${numeric}`;
+}
+
+function formatPathSequence(outcomes) {
+  const entries = Object.entries(outcomes || {});
+  if (!entries.length) {
+    return 'No test outcomes';
+  }
+
+  return entries
+    .map(([testId, outcome]) => `${testId}(${outcome === 'pos' ? '+' : '-'})`)
+    .join(' → ');
+}
+
+function buildPathRowsFromEvaluation(metrics) {
+  const present = Array.isArray(metrics?.paths_disease_present) ? metrics.paths_disease_present : [];
+  const absent = Array.isArray(metrics?.paths_disease_absent) ? metrics.paths_disease_absent : [];
+  const rows = [...present.map(path => ({ ...path, cohort: 'D+' })), ...absent.map(path => ({ ...path, cohort: 'D-' }))];
+
+  return rows.map((path, index) => {
+    const positive = path.final_classification === 'positive';
+    return {
+      id: `P${index + 1}`,
+      sequence: formatPathSequence(path.outcomes),
+      terminal: positive ? 'Positive result' : 'Negative result',
+      terminalKind: positive ? 'pos' : 'neg',
+      pIfD: Number(path.cohort === 'D+' ? path.probability ?? 0 : 0),
+      pIfND: Number(path.cohort === 'D-' ? path.probability ?? 0 : 0),
+      cost: Number(path.cost ?? 0),
+      tat: normalizeTAT(path.turnaround_time, 'hr'),
+      samples: Array.isArray(path.sample_types) && path.sample_types.length ? path.sample_types.join(' · ') : 'n/a',
+      skill: formatSkillLabel(path.skill_level),
+      cohort: path.cohort,
+    };
+  });
+}
+
+function buildEvaluationView(result) {
+  const metrics = result?.metrics || {};
+  const sensitivity = Number(metrics.sensitivity ?? 0);
+  const specificity = Number(metrics.specificity ?? 0);
+  const falseNegativeRate = Number(metrics.false_negative_rate ?? (1 - sensitivity));
+  const falsePositiveRate = Number(metrics.false_positive_rate ?? (1 - specificity));
+  const warnings = [];
+
+  if (Array.isArray(metrics.warnings)) {
+    metrics.warnings.forEach(text => warnings.push({ kind: 'info', text }));
+  }
+
+  if (Array.isArray(metrics.assumptions)) {
+    metrics.assumptions.forEach(text => warnings.push({ kind: 'info', text }));
+  }
+
+  if (Array.isArray(result?.validation?.warnings)) {
+    result.validation.warnings.forEach(text => warnings.push({ kind: 'warn', text }));
+  }
+
+  return {
+    sens: sensitivity,
+    spec: specificity,
+    fnr: falseNegativeRate,
+    fpr: falsePositiveRate,
+    cost: Number(metrics.expected_cost_population ?? metrics.expected_cost_given_disease ?? 0),
+    tat: normalizeTAT(metrics.expected_turnaround_time_population ?? metrics.expected_turnaround_time_given_disease ?? null, 'hr'),
+    ppv: Number(metrics.ppv ?? 0),
+    npv: Number(metrics.npv ?? 0),
+    prevalence: result?.prevalence ?? null,
+    warnings,
+    paths: buildPathRowsFromEvaluation(metrics),
+    metrics,
+    source: result,
+  };
+}
+
 function collectCanvasTests(pathway) {
   const nodes = Array.isArray(pathway?.nodes) ? pathway.nodes : [];
   const tests = new Map();
@@ -331,6 +423,24 @@ async function optimizePathways(payload) {
   return response;
 }
 
+async function evaluatePathway(pathway = null, prevalence = null) {
+  const canonicalPathway = normalizePathwayGraph(pathway || buildCanonicalPathway());
+  const payload = {
+    pathway: canonicalPathway,
+  };
+
+  if (prevalence !== null && prevalence !== undefined) {
+    payload.prevalence = prevalence;
+  }
+
+  const response = await request('post', '/api/pathways/evaluate', payload);
+  window.OptiDxLatestEvaluationResult = response;
+  window.OptiDxLatestEvaluationPathway = canonicalPathway;
+  window.OptiDxLatestEvaluationView = buildEvaluationView(response);
+  showToast('Pathway evaluation finished', 'success');
+  return response;
+}
+
 async function loadPathwayIntoWorkspace(pathway) {
   const response = await request('post', '/api/pathways/import', { pathway });
   const canonical = normalizePathwayGraph(response?.editor_definition || response);
@@ -387,6 +497,8 @@ window.OptiDxActions = {
   loadPathwayIntoWorkspace,
   savePathway,
   optimizePathways,
+  evaluatePathway,
+  buildEvaluationView,
   buildOptimizationScenarios,
   addManualTest,
   downloadJson(filename, data) {
