@@ -279,10 +279,12 @@ function normalizeTAT(value, unit) {
     return String(value);
   }
 
-  if (unit === 'min') return `${n} min`;
-  if (unit === 'hr' || unit === 'h') return `${n} h`;
-  if (unit === 'day' || unit === 'days') return `${n} d`;
-  return `${n} ${unit || ''}`.trim();
+  const display = Number.parseFloat(n.toFixed(2)).toString();
+
+  if (unit === 'min') return `${display} min`;
+  if (unit === 'hr' || unit === 'h') return `${display} h`;
+  if (unit === 'day' || unit === 'days') return `${display} d`;
+  return `${display} ${unit || ''}`.trim();
 }
 
 function formatSkillLabel(level) {

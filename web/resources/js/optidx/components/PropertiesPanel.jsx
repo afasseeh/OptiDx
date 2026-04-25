@@ -52,8 +52,8 @@ function TestNodeProps({ node, updateNode }) {
         <input className="input" value={node.label || ""} placeholder={test.category + " · pathway node"}
           onChange={e => updateNode && updateNode(node.id, { label: e.target.value })}/>
         <dl className="kv" style={{marginTop:10}}>
-          <dt>Sensitivity</dt><dd className="mono">{test.sens.toFixed(3)}</dd>
-          <dt>Specificity</dt><dd className="mono">{test.spec.toFixed(3)}</dd>
+          <dt>Sensitivity</dt><dd className="mono">{test.sens.toFixed(2)}</dd>
+          <dt>Specificity</dt><dd className="mono">{test.spec.toFixed(2)}</dd>
           <dt>Cost</dt><dd className="mono">${test.cost.toFixed(2)}</dd>
           <dt>Turnaround</dt><dd className="mono">{test.tat} {test.tatUnit}</dd>
           <dt>Sample type</dt><dd>{test.sample}</dd>
@@ -422,8 +422,8 @@ function LiveTestNodeProps({ node, nodes, edges, updateNode, upsertEdge }) {
         <input className="input" value={node.label || ""} placeholder={test.category + " · pathway node"}
           onChange={e => updateNode && updateNode(node.id, { label: e.target.value })}/>
         <dl className="kv" style={{marginTop:10}}>
-          <dt>Sensitivity</dt><dd className="mono">{test.sens.toFixed(3)}</dd>
-          <dt>Specificity</dt><dd className="mono">{test.spec.toFixed(3)}</dd>
+          <dt>Sensitivity</dt><dd className="mono">{test.sens.toFixed(2)}</dd>
+          <dt>Specificity</dt><dd className="mono">{test.spec.toFixed(2)}</dd>
           <dt>Cost</dt><dd className="mono">${test.cost.toFixed(2)}</dd>
           <dt>Turnaround</dt><dd className="mono">{test.tat} {test.tatUnit}</dd>
           <dt>Sample type</dt><dd>{test.sample}</dd>

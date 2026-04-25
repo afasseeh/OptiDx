@@ -1,11 +1,40 @@
 // Results dashboard (variant A and B)
+function collectPathwayTests(pathway) {
+  const nodes = pathway?.nodes
+    ? (Array.isArray(pathway.nodes) ? pathway.nodes : Object.values(pathway.nodes))
+    : [];
+  const testsMap = pathway?.tests || {};
+  const seen = new Set();
+  const items = [];
+  for (const node of nodes) {
+    if (node?.type === 'test' && node.testId && !seen.has(node.testId)) {
+      seen.add(node.testId);
+      const t = testsMap[node.testId] || window.SEED_TESTS?.find(x => x.id === node.testId) || {};
+      items.push({ id: node.testId, name: t.name || node.testId, cost: Number(t.cost ?? 0) });
+    } else if (node?.type === 'parallel' && Array.isArray(node.members)) {
+      for (const m of node.members) {
+        if (m?.testId && !seen.has(m.testId)) {
+          seen.add(m.testId);
+          const t = testsMap[m.testId] || window.SEED_TESTS?.find(x => x.id === m.testId) || {};
+          items.push({ id: m.testId, name: t.name || m.testId, cost: Number(t.cost ?? 0) });
+        }
+      }
+    }
+  }
+  return items;
+}
+
 function ScreenResults({ variant = "A", setVariant, setScreen, onShare }) {
   const r = window.OptiDxLatestEvaluationView || window.SEED_RESULTS;
-  const pathwayLabel = window.OptiDxLatestEvaluationPathway?.metadata?.label || "Latest pathway";
+  const pathway = window.OptiDxLatestEvaluationPathway;
+  const pathwayLabel = pathway?.metadata?.label || "Latest pathway";
   const prevalenceLabel = window.OptiDxLatestEvaluationView?.prevalence != null
     ? `${(Number(window.OptiDxLatestEvaluationView.prevalence) * 100).toFixed(1)}% prevalence`
     : "Current evaluation";
   const pathCount = Array.isArray(r.paths) ? r.paths.length : 0;
+  const pathwayTests = collectPathwayTests(pathway);
+  const costPalette = ["#C4C8CB", "#F9C09A", "#F37739", "#5B8DEF", "#7DBE7D", "#B07AD0", "#E8B86A"];
+  const costMax = pathwayTests.reduce((m, it) => Math.max(m, it.cost), 0) || 1;
   return (
     <>
       <TopBar
@@ -94,7 +123,7 @@ function ScreenResults({ variant = "A", setVariant, setScreen, onShare }) {
 
           <div className="stack" style={{gap:16}}>
             <div className="card">
-              <div className="card__head"><h3>Branch flow</h3><div className="spacer"/><span className="u-meta">1,000 simulated patients</span></div>
+              <div className="card__head"><h3>Branch flow</h3><div className="spacer"/><span className="u-meta">{pathCount} terminal path{pathCount === 1 ? "" : "s"}</span></div>
               <div style={{padding:16}}>
                 <SankeyMini/>
               </div>
@@ -102,20 +131,8 @@ function ScreenResults({ variant = "A", setVariant, setScreen, onShare }) {
 
             <div className="card">
               <div className="card__head"><h3>Trade-off summary</h3></div>
-              <div style={{padding:"4px 0"}}>
-                {[
-                  ["Good at", "Ruling out non-disease at low cost", "pos"],
-                  ["Watch", "Xpert-negative after CXR-positive may miss early disease", "disc"],
-                  ["High-cost branch", "P1: symptom → CXR → Xpert ($13.68)", "neg"],
-                  ["Simplification", "Dropping Xpert raises FNR from 15.8 → 24.2%", "inc"],
-                ].map(([k,v,kind],i) => (
-                  <div key={i} style={{padding:"10px 16px", borderTop: i > 0 ? "1px solid var(--edge)" : "none", fontSize:12}}>
-                    <div className="row" style={{marginBottom:2}}>
-                      <span className={"chip chip--" + kind}>{k}</span>
-                    </div>
-                    <div style={{color:"var(--fg-2)", lineHeight:1.45}}>{v}</div>
-                  </div>
-                ))}
+              <div style={{padding:"16px"}}>
+                <div className="u-meta">Automated trade-off analysis is not yet available for this pathway.</div>
               </div>
             </div>
           </div>
@@ -126,18 +143,16 @@ function ScreenResults({ variant = "A", setVariant, setScreen, onShare }) {
           <div className="card">
             <div className="card__head"><h3>Cost contribution</h3></div>
             <div style={{padding:16}}>
-              {[
-                ["Symptom Screen", 0.50, "#C4C8CB"],
-                ["Chest X-Ray", 3.20, "#F9C09A"],
-                ["Xpert MTB/RIF", 1.92, "#F37739"],
-              ].map(([l,v,c]) => (
-                <div key={l} style={{marginBottom:10}}>
-                  <div className="row" style={{fontSize:12, marginBottom:4}}><span>{l}</span><div className="spacer"/><b className="mono">${v.toFixed(2)}</b></div>
-                  <div className="bar"><div className="bar__fill" style={{width: `${v/5.62*100}%`, background:c}}/></div>
+              {pathwayTests.length === 0 ? (
+                <div className="u-meta">No tests in this pathway.</div>
+              ) : pathwayTests.map((it, i) => (
+                <div key={it.id} style={{marginBottom:10}}>
+                  <div className="row" style={{fontSize:12, marginBottom:4}}><span>{it.name}</span><div className="spacer"/><b className="mono">${it.cost.toFixed(2)}</b></div>
+                  <div className="bar"><div className="bar__fill" style={{width: `${(it.cost/costMax)*100}%`, background: costPalette[i % costPalette.length]}}/></div>
                 </div>
               ))}
               <div className="row" style={{fontSize:13, marginTop:14, paddingTop:10, borderTop:"1px solid var(--edge)"}}>
-                <b>Expected population cost</b><div className="spacer"/><b className="mono">$5.62</b>
+                <b>Expected population cost</b><div className="spacer"/><b className="mono">${Number(r.cost ?? 0).toFixed(2)}</b>
               </div>
             </div>
           </div>
@@ -147,19 +162,13 @@ function ScreenResults({ variant = "A", setVariant, setScreen, onShare }) {
               <div className="row" style={{gap:20, alignItems:"flex-end", marginBottom:16}}>
                 <div>
                   <div className="u-meta">Expected pathway TAT</div>
-                  <div style={{fontSize:34, fontWeight:700, letterSpacing:"-0.02em"}}>2.8 <span style={{fontSize:16, color:"var(--fg-3)"}}>hr</span></div>
+                  <div style={{fontSize:34, fontWeight:700, letterSpacing:"-0.02em"}}>{r.tat || "—"}</div>
                 </div>
                 <div className="spacer"/>
                 <div style={{fontSize:11, color:"var(--fg-3)"}}>
-                  <div>Longest branch: <b className="mono">Symp → CXR → Xpert</b></div>
-                  <div>2h 35min · Lab dependent</div>
+                  <div>Across <b className="mono">{pathCount}</b> terminal path{pathCount === 1 ? "" : "s"}</div>
+                  <div>{pathwayTests.length} test{pathwayTests.length === 1 ? "" : "s"} in pathway</div>
                 </div>
-              </div>
-              <div className="bar" style={{height:10, background:"var(--surface-3)"}}>
-                <div className="bar__fill" style={{width:"4%", background:"#C4C8CB"}}/>
-              </div>
-              <div className="row" style={{marginTop:4, fontSize:10, color:"var(--fg-3)", justifyContent:"space-between"}}>
-                <span>5m</span><span>30m</span><span>2h</span><span>3h (target)</span>
               </div>
             </div>
           </div>
@@ -242,10 +251,10 @@ function SankeyMini() {
     <svg viewBox="0 0 480 200" width="100%" height="200">
       {/* Disease-present cohort (top half) */}
       <rect x="0" y="10" width="20" height="60" fill="var(--pos)" opacity="0.7"/>
-      <text x="-4" y="8" fontSize="9" fill="var(--fg-3)" fontWeight="700" textAnchor="start">D+ (80 pts)</text>
+      <text x="-4" y="8" fontSize="9" fill="var(--fg-3)" fontWeight="700" textAnchor="start">D+ cohort</text>
       {/* Disease-absent cohort */}
       <rect x="0" y="110" width="20" height="80" fill="var(--neg)" opacity="0.6"/>
-      <text x="-4" y="208" fontSize="9" fill="var(--fg-3)" fontWeight="700" textAnchor="start">D− (920 pts)</text>
+      <text x="-4" y="208" fontSize="9" fill="var(--fg-3)" fontWeight="700" textAnchor="start">D− cohort</text>
 
       {/* Flows from D+ */}
       <path d="M 20 10 C 140 10, 340 10, 460 10 L 460 40 C 340 40, 140 40, 20 40 Z" fill="var(--pos)" opacity="0.6"/>
@@ -261,11 +270,11 @@ function SankeyMini() {
       {/* Terminal labels */}
       <g fontSize="10" fill="var(--fg-2)" fontWeight="700">
         <rect x="460" y="10" width="16" height="30" fill="var(--pos)"/>
-        <text x="430" y="26" textAnchor="end">TB, Treat</text>
+        <text x="430" y="26" textAnchor="end">Positive</text>
         <rect x="460" y="60" width="16" height="50" fill="var(--neg)" opacity="0.7"/>
-        <text x="430" y="88" textAnchor="end">TB Unlikely</text>
+        <text x="430" y="88" textAnchor="end">Inconclusive</text>
         <rect x="460" y="140" width="16" height="60" fill="var(--neg)" opacity="0.5"/>
-        <text x="430" y="174" textAnchor="end">No TB</text>
+        <text x="430" y="174" textAnchor="end">Negative</text>
       </g>
     </svg>
   );

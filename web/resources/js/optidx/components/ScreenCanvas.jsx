@@ -1203,8 +1203,8 @@ function LivePathExplorer({ paths }) {
             ))}
           </div>
           <div className="path-row__metrics">
-            <div><span>P( · | D⁺ )</span><b className="mono">{p.pIfD.toFixed(3)}</b></div>
-            <div><span>P( · | D⁻ )</span><b className="mono">{p.pIfND.toFixed(3)}</b></div>
+            <div><span>P( · | D⁺ )</span><b className="mono">{p.pIfD.toFixed(2)}</b></div>
+            <div><span>P( · | D⁻ )</span><b className="mono">{p.pIfND.toFixed(2)}</b></div>
             <div><span>E[cost]</span><b className="mono">${p.cost.toFixed(2)}</b></div>
             <div><span>E[TAT]</span><b className="mono">{p.tat}</b></div>
           </div>
@@ -1278,8 +1278,8 @@ function PathExplorer({ paths }) {
             ))}
           </div>
           <div className="path-row__metrics">
-            <div><span>P( · | D+ )</span><b className="mono">{formatMetricValue(p.pIfD, value => Number(value).toFixed(3))}</b></div>
-            <div><span>P( · | D- )</span><b className="mono">{formatMetricValue(p.pIfND, value => Number(value).toFixed(3))}</b></div>
+            <div><span>P( · | D+ )</span><b className="mono">{formatMetricValue(p.pIfD, value => Number(value).toFixed(2))}</b></div>
+            <div><span>P( · | D- )</span><b className="mono">{formatMetricValue(p.pIfND, value => Number(value).toFixed(2))}</b></div>
             <div><span>E[cost]</span><b className="mono">{formatMetricValue(p.cost, value => `$${Number(value).toFixed(2)}`)}</b></div>
             <div><span>E[TAT]</span><b className="mono">{formatMetricValue(p.tat)}</b></div>
           </div>
