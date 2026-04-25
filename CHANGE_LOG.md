@@ -1,5 +1,68 @@
 # Change Log
 
+## 2026-04-26 - Wizard test library list now shows all rows
+
+- Summary: Removed the seven-row cap from the project wizard's diagnostic test table so newly added tests remain visible as the library grows.
+- Files or modules affected: `web/resources/js/optidx/components/ScreenWizard.jsx`, `CHANGE_LOG.md`.
+- Reason for the change: The library was saving new tests correctly, but the table view hid any entries beyond the first seven.
+- Architecture impact: None. This is a presentation-only change to the wizard table rendering.
+- Migration or deployment impact: Rebuild the Vite frontend bundle so the uncapped list rendering is active. No database migration was required.
+- Follow-up notes: If the table becomes too tall in real use, add scrolling or pagination rather than truncating the visible records.
+
+## 2026-04-26 - Seed library id guard for evidence imports
+
+- Summary: Fixed the diagnostic-test persistence path so preset library rows with seed ids like `p-tb-1` are always treated as new records instead of being sent to Laravel as model-bound updates or deletes.
+- Files or modules affected: `web/resources/js/optidx/actions.js`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: Importing a preset into the project was still failing because the browser tried to update a `DiagnosticTest` model using a fake seed id that does not exist in the database.
+- Architecture impact: The test-library persistence path now distinguishes persisted numeric ids from seed-library ids, which keeps evidence imports on the create path and prevents route-model binding errors.
+- Migration or deployment impact: Rebuild the Vite frontend bundle so the new id guard is active. No database migration was required.
+- Follow-up notes: If future seed data introduces non-numeric persisted ids, the id check should be expanded to match that backend contract.
+
+## 2026-04-26 - Project wizard test CRUD and evidence import fixes
+
+- Summary: Kept the wizard/project naming changes, fixed the preset import modal so it receives the screen setter it needs, preserved the real evidence-test name when importing from the evidence library, and added edit/delete actions to the wizard test table.
+- Files or modules affected: `web/resources/js/optidx/components/App.jsx`, `web/resources/js/optidx/components/ScreenHome.jsx`, `web/resources/js/optidx/components/ScreenWizard.jsx`, `web/resources/js/optidx/components/ScreenOther.jsx`, `web/resources/js/optidx/components/ScreenExtras.jsx`, `web/resources/js/optidx/actions.js`, `ARCHITECTURE.md`, `FUTURE_TASKS.md`, `CHANGE_LOG.md`.
+- Reason for the change: The evidence import flow still threw a `setScreen is not defined` error, imported rows were being saved under a fallback label instead of the real test name, and the wizard’s three-dot action column was still only decorative.
+- Architecture impact: The test-library flow now uses one shared modal-backed persistence path for create, update, import, and delete operations, and the wizard table refreshes itself from the workspace snapshot after CRUD actions.
+- Migration or deployment impact: Rebuild the Vite frontend bundle so the modal, evidence import, and row-action behavior are active. No database migration was required.
+- Follow-up notes: A few legacy pathway references remain in comments and secondary screens and are tracked as cleanup work in `FUTURE_TASKS.md`.
+
+## 2026-04-26 - Results analysis unique-path weighting and TAT unit fix
+
+- Summary: Reworked the Pathway Analysis results model so the trace view collapses disease-present and disease-absent cohorts into unique human-readable pathways, weights cost and turnaround summaries by path probability, converts mixed turnaround units into hours before aggregation, and falls back to the project prevalence when the evaluation request omits it.
+- Files or modules affected: `web/resources/js/optidx/actions.js`, `web/resources/js/optidx/components/ScreenResults.jsx`, `web/resources/js/optidx/components/ScreenOther.jsx`, `web/app/Http/Controllers/Api/PathwayController.php`, `web/app/Services/PathwayGraphService.php`, `optidx_package/optidx/engine.py`, `web/app/Models/Pathway.php`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: The analysis screen was summing mixed turnaround units incorrectly, showing raw alias keys in the trace, weighting cost with raw test values, and dropping prevalence even when the project already had it.
+- Architecture impact: Evaluation output now carries a unique-path view model with human-readable labels, probability-weighted cost/TAT summaries, deduped warnings, and prevalence-aware population metrics derived from the project record when needed.
+- Migration or deployment impact: Rebuild the Vite frontend bundle and restart/redeploy Laravel so the new results model and prevalence fallback are active. No database migration was required.
+- Follow-up notes: Verified with `php artisan test --filter=PathwayApiTest`, `php artisan test --filter=PathwayGraphServiceTest`, and `npm run build`.
+
+## 2026-04-25 - Parallel block duplicate member picker
+
+- Summary: Replaced the parallel-block prompt workflow with a drag-and-drop dropzone plus explicit test dropdowns in the canvas and inspector, allowed the same diagnostic test to be added multiple times in one block, and taught the compiler to alias duplicate member occurrences so they do not collapse into one engine key.
+- Files or modules affected: `web/resources/js/optidx/components/ScreenCanvas.jsx`, `web/resources/js/optidx/components/PropertiesPanel.jsx`, `web/resources/js/optidx/canvas.css`, `web/app/Services/PathwayGraphService.php`, `web/tests/Unit/PathwayGraphServiceTest.php`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: Authors needed a clearer way to add tests into a parallel container, and the old duplicate guard prevented the same diagnostic test from being used more than once inside the same block.
+- Architecture impact: Parallel blocks now have an explicit UI picker/drop target on the frontend and a canonical backend aliasing step for repeated members so the engine sees each occurrence as a distinct test key while preserving the source test definition.
+- Migration or deployment impact: Rebuild the Vite frontend bundle and redeploy/restart Laravel so the new canvas and inspector controls are active. No database migration was required.
+- Follow-up notes: Added a regression test for duplicate parallel-member compilation. Run the frontend build and targeted PHP tests before releasing.
+
+## 2026-04-25 - Restore SendGrid mailer and harden CSRF retry
+
+- Summary: Restored the local `web/.env` mailer settings to SendGrid SMTP, mirrored the same default in `web/.env.example`, and added a one-time CSRF refresh/retry path in the shared auth request helper so stale sessions can recover after a restart.
+- Files or modules affected: `web/.env`, `web/.env.example`, `web/resources/js/optidx/actions.js`, `ARCHITECTURE.md`, `README.md`, `CHANGE_LOG.md`.
+- Reason for the change: The account-creation flow should keep using SendGrid as requested, and the browser auth flow needed a safer recovery path for `419 CSRF token mismatch` errors after local restarts or expired sessions.
+- Architecture impact: Preserved the existing Laravel session/auth model and the SendGrid email transport, while making the browser request layer refresh the CSRF token from the app shell when a single retry can safely resolve the mismatch.
+- Migration or deployment impact: No database migration. Rebuild the frontend bundle and restart or refresh the Laravel app so the updated request helper and mail settings are active.
+- Follow-up notes: If the browser still shows `419` after a hard refresh, inspect the session cookie and `APP_URL`/host pairing before changing the auth flow.
+
+## 2026-04-25 - Local auth mailer switched to log transport
+
+- Summary: Changed the local `web/.env` mailer to `log`, mirrored that default in `web/.env.example`, and documented the local email behavior so registration and password-reset flows do not fail when SendGrid credentials are unavailable.
+- Files or modules affected: `web/.env`, `web/.env.example`, `README.md`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: Account creation was failing locally because the auth flow attempted to authenticate against SendGrid SMTP with missing or invalid credentials.
+- Architecture impact: Kept the auth flow and notification code unchanged, but clarified that local development uses the log transport while deployed environments can still use SMTP.
+- Migration or deployment impact: No database migration. Local developers should clear cached config if present and rebuild/restart the Laravel app to pick up the mailer change.
+- Follow-up notes: Real email delivery still works by switching `web/.env` back to SMTP and supplying valid SendGrid credentials.
+
 ## 2026-04-25 - Required builder endpoints for final pathway outcomes
 
 - Summary: Added required positive and negative terminal endpoints to every builder draft, made new canvas sessions start with those endpoints already placed, prevented those required endpoints from being deleted or retyped, and added an explicit endpoint-creation action for optional positive, negative, or inconclusive terminal nodes.

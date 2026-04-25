@@ -31,10 +31,16 @@ function ScreenResults({ variant = "A", setVariant, setScreen, onShare }) {
   const prevalenceLabel = window.OptiDxLatestEvaluationView?.prevalence != null
     ? `${(Number(window.OptiDxLatestEvaluationView.prevalence) * 100).toFixed(1)}% prevalence`
     : "Current evaluation";
-  const pathCount = Array.isArray(r.paths) ? r.paths.length : 0;
-  const pathwayTests = collectPathwayTests(pathway);
+  const pathCount = Number(r.pathCount ?? (Array.isArray(r.paths) ? r.paths.length : 0)) || 0;
+  const pathwayTests = Array.isArray(r.testContributions) && r.testContributions.length
+    ? r.testContributions
+    : collectPathwayTests(pathway).map(test => ({
+        ...test,
+        contribution: Number(test.cost ?? 0),
+        weight: 1,
+      }));
   const costPalette = ["#C4C8CB", "#F9C09A", "#F37739", "#5B8DEF", "#7DBE7D", "#B07AD0", "#E8B86A"];
-  const costMax = pathwayTests.reduce((m, it) => Math.max(m, it.cost), 0) || 1;
+  const costMax = pathwayTests.reduce((m, it) => Math.max(m, Number(it.contribution ?? it.cost ?? 0)), 0) || 1;
   return (
     <>
       <TopBar
@@ -90,7 +96,7 @@ function ScreenResults({ variant = "A", setVariant, setScreen, onShare }) {
             <div className="card__head">
               <h3>Path-level trace</h3>
               <div className="spacer"/>
-              <span className="u-meta">{pathCount} paths covered</span>
+              <span className="u-meta">{pathCount} unique paths covered</span>
               <button className="btn btn--sm btn--ghost" onClick={() => setScreen("trace")}>Expand <Icon name="maximize" size={11}/></button>
             </div>
             <table className="table">
@@ -146,13 +152,17 @@ function ScreenResults({ variant = "A", setVariant, setScreen, onShare }) {
               {pathwayTests.length === 0 ? (
                 <div className="u-meta">No tests in this pathway.</div>
               ) : pathwayTests.map((it, i) => (
-                <div key={it.id} style={{marginBottom:10}}>
-                  <div className="row" style={{fontSize:12, marginBottom:4}}><span>{it.name}</span><div className="spacer"/><b className="mono">${it.cost.toFixed(2)}</b></div>
-                  <div className="bar"><div className="bar__fill" style={{width: `${(it.cost/costMax)*100}%`, background: costPalette[i % costPalette.length]}}/></div>
+                <div key={it.key || it.id} style={{marginBottom:10}}>
+                  <div className="row" style={{fontSize:12, marginBottom:4}}>
+                    <span>{it.label || it.name}</span>
+                    <div className="spacer"/>
+                    <b className="mono">${Number(it.contribution ?? it.cost ?? 0).toFixed(2)}</b>
+                  </div>
+                  <div className="bar"><div className="bar__fill" style={{width: `${(Number(it.contribution ?? it.cost ?? 0)/costMax)*100}%`, background: costPalette[i % costPalette.length]}}/></div>
                 </div>
               ))}
               <div className="row" style={{fontSize:13, marginTop:14, paddingTop:10, borderTop:"1px solid var(--edge)"}}>
-                <b>Expected population cost</b><div className="spacer"/><b className="mono">${Number(r.cost ?? 0).toFixed(2)}</b>
+                <b>Expected population cost</b><div className="spacer"/><b className="mono">${Number(r.summary?.expectedCost ?? r.cost ?? 0).toFixed(2)}</b>
               </div>
             </div>
           </div>
@@ -161,13 +171,14 @@ function ScreenResults({ variant = "A", setVariant, setScreen, onShare }) {
             <div style={{padding:16}}>
               <div className="row" style={{gap:20, alignItems:"flex-end", marginBottom:16}}>
                 <div>
-                  <div className="u-meta">Expected pathway TAT</div>
-                  <div style={{fontSize:34, fontWeight:700, letterSpacing:"-0.02em"}}>{r.tat || "—"}</div>
+                  <div className="u-meta">Weighted average TAT</div>
+                  <div style={{fontSize:34, fontWeight:700, letterSpacing:"-0.02em"}}>{r.tatAverageLabel || r.tat || "—"}</div>
                 </div>
                 <div className="spacer"/>
                 <div style={{fontSize:11, color:"var(--fg-3)"}}>
-                  <div>Across <b className="mono">{pathCount}</b> terminal path{pathCount === 1 ? "" : "s"}</div>
-                  <div>{pathwayTests.length} test{pathwayTests.length === 1 ? "" : "s"} in pathway</div>
+                  <div>Minimum: <b className="mono">{r.tatMinLabel || "n/a"}</b></div>
+                  <div>Maximum: <b className="mono">{r.tatMaxLabel || "n/a"}</b></div>
+                  <div>Across <b className="mono">{pathCount}</b> unique path{pathCount === 1 ? "" : "s"}</div>
                 </div>
               </div>
             </div>

@@ -73,15 +73,43 @@ function TestNodeProps({ node, updateNode }) {
 }
 
 function ParallelBlockProps({ node, updateNode, ungroupParallel, addParallelMember, removeParallelMember, updateParallelRule }) {
-  const tests = (node.members || []).map(m => window.SEED_TESTS.find(t => t.id === m.testId)).filter(Boolean);
-  const availableTests = window.SEED_TESTS.filter(t => !(node.members || []).some(m => m.testId === t.id));
-  const addMember = () => {
-    const picked = window.prompt(
-      "Enter a test ID to add to this parallel block.\n\nAvailable: " + availableTests.map(t => `${t.id} (${t.name})`).join(", "),
-      availableTests[0]?.id || ""
-    );
-    if (!picked) return;
-    addParallelMember?.(node.id, picked.trim());
+  const memberRows = (node.members || [])
+    .map((member, index) => {
+      const test = window.SEED_TESTS.find(t => t.id === member.testId);
+      if (!test) return null;
+      return { member, test, key: member.id || `${member.testId}-${index}`, occurrence: index + 1 };
+    })
+    .filter(Boolean);
+  const tests = memberRows.map(row => row.test);
+  const [selectedTestId, setSelectedTestId] = useState(window.SEED_TESTS[0]?.id || "");
+  const [isDropActive, setIsDropActive] = useState(false);
+
+  const addMember = (testId) => {
+    if (!testId) return;
+    addParallelMember?.(node.id, testId);
+  };
+
+  const handleDrop = (e) => {
+    const testId = e.dataTransfer.getData("text/testId");
+    if (!testId) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDropActive(false);
+    addMember(testId);
+  };
+
+  const handleDragOver = (e) => {
+    if (!e.dataTransfer.types?.includes("text/testId")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "copy";
+    if (!isDropActive) setIsDropActive(true);
+  };
+
+  const handleDragLeave = (e) => {
+    if (!e.relatedTarget || !e.currentTarget.contains(e.relatedTarget)) {
+      setIsDropActive(false);
+    }
   };
   return (
     <div>
@@ -94,18 +122,42 @@ function ParallelBlockProps({ node, updateNode, ungroupParallel, addParallelMemb
           </div>
         </div>
         <h4 style={{marginTop:6}}>Member tests</h4>
+        <div className={"parallel__dropzone parallel__dropzone--panel" + (isDropActive ? " is-active" : "")}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+          onDragLeave={handleDragLeave}>
+          <Icon name="download" size={10}/>
+          <span>Drop a test from the library, or add one from the list below.</span>
+        </div>
+        <div className="parallel-add-row">
+          <select className="parallel-add-select" value={selectedTestId} onChange={e => setSelectedTestId(e.target.value)}>
+            {window.SEED_TESTS.map(test => (
+              <option key={test.id} value={test.id}>{test.name}</option>
+            ))}
+          </select>
+          <button className="btn btn--sm" onClick={() => addMember(selectedTestId)}>
+            <Icon name="plus" size={11}/>Add test
+          </button>
+        </div>
+        <div className="parallel-add-hint">The same diagnostic test can be added more than once.</div>
         <div className="parallel-members">
-          {tests.map((t,i) => (
-            <div key={i} className="parallel-member">
-              <Icon name={t.icon} size={12}/>
+          {memberRows.map(({ member, test, key, occurrence }) => (
+            <div key={key} className="parallel-member">
+              <Icon name={test.icon} size={12}/>
               <div style={{flex:1}}>
-                <div style={{fontSize:12, fontWeight:700}}>{t.name}</div>
-                <div style={{fontSize:11, color:"var(--fg-3)"}}>Se {t.sens.toFixed(2)} · Sp {t.spec.toFixed(2)} · {t.tat}{t.tatUnit[0]}</div>
+                <div style={{fontSize:12, fontWeight:700}}>
+                  {test.name} <span className="parallel__duplicate-tag">#{occurrence}</span>
+                </div>
+                <div style={{fontSize:11, color:"var(--fg-3)"}}>Se {test.sens.toFixed(2)} · Sp {test.spec.toFixed(2)} · {test.tat}{test.tatUnit[0]}</div>
               </div>
-              <button className="btn btn--xs btn--icon" title="Remove from block" onClick={() => removeParallelMember?.(node.id, t.id)}><Icon name="x" size={10}/></button>
+              <button
+                className="btn btn--xs btn--icon"
+                title="Remove from block"
+                onClick={() => removeParallelMember?.(node.id, member.id || member.testId)}>
+                <Icon name="x" size={10}/>
+              </button>
             </div>
           ))}
-          <button className="btn btn--sm" style={{marginTop:6}} onClick={addMember}><Icon name="plus" size={11}/>Add test to block</button>
         </div>
       </div>
 
@@ -443,15 +495,43 @@ function LiveTestNodeProps({ node, nodes, edges, updateNode, upsertEdge }) {
 }
 
 function LiveParallelBlockProps({ node, nodes, edges, updateNode, ungroupParallel, addParallelMember, removeParallelMember, updateParallelRule, upsertEdge }) {
-  const tests = (node.members || []).map(m => window.SEED_TESTS.find(t => t.id === m.testId)).filter(Boolean);
-  const availableTests = window.SEED_TESTS.filter(t => !(node.members || []).some(m => m.testId === t.id));
-  const addMember = () => {
-    const picked = window.prompt(
-      "Enter a test ID to add to this parallel block.\n\nAvailable: " + availableTests.map(t => `${t.id} (${t.name})`).join(", "),
-      availableTests[0]?.id || ""
-    );
-    if (!picked) return;
-    addParallelMember?.(node.id, picked.trim());
+  const memberRows = (node.members || [])
+    .map((member, index) => {
+      const test = window.SEED_TESTS.find(t => t.id === member.testId);
+      if (!test) return null;
+      return { member, test, key: member.id || `${member.testId}-${index}`, occurrence: index + 1 };
+    })
+    .filter(Boolean);
+  const tests = memberRows.map(row => row.test);
+  const [selectedTestId, setSelectedTestId] = useState(window.SEED_TESTS[0]?.id || "");
+  const [isDropActive, setIsDropActive] = useState(false);
+
+  const addMember = (testId) => {
+    if (!testId) return;
+    addParallelMember?.(node.id, testId);
+  };
+
+  const handleDrop = (e) => {
+    const testId = e.dataTransfer.getData("text/testId");
+    if (!testId) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDropActive(false);
+    addMember(testId);
+  };
+
+  const handleDragOver = (e) => {
+    if (!e.dataTransfer.types?.includes("text/testId")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "copy";
+    if (!isDropActive) setIsDropActive(true);
+  };
+
+  const handleDragLeave = (e) => {
+    if (!e.relatedTarget || !e.currentTarget.contains(e.relatedTarget)) {
+      setIsDropActive(false);
+    }
   };
 
   return (
@@ -465,18 +545,42 @@ function LiveParallelBlockProps({ node, nodes, edges, updateNode, ungroupParalle
           </div>
         </div>
         <h4 style={{marginTop:6}}>Member tests</h4>
+        <div className={"parallel__dropzone parallel__dropzone--panel" + (isDropActive ? " is-active" : "")}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+          onDragLeave={handleDragLeave}>
+          <Icon name="download" size={10}/>
+          <span>Drop a test from the library, or add one from the list below.</span>
+        </div>
+        <div className="parallel-add-row">
+          <select className="parallel-add-select" value={selectedTestId} onChange={e => setSelectedTestId(e.target.value)}>
+            {window.SEED_TESTS.map(test => (
+              <option key={test.id} value={test.id}>{test.name}</option>
+            ))}
+          </select>
+          <button className="btn btn--sm" onClick={() => addMember(selectedTestId)}>
+            <Icon name="plus" size={11}/>Add test
+          </button>
+        </div>
+        <div className="parallel-add-hint">The same diagnostic test can be added more than once.</div>
         <div className="parallel-members">
-          {tests.map((t,i) => (
-            <div key={i} className="parallel-member">
-              <Icon name={t.icon} size={12}/>
+          {memberRows.map(({ member, test, key, occurrence }) => (
+            <div key={key} className="parallel-member">
+              <Icon name={test.icon} size={12}/>
               <div style={{flex:1}}>
-                <div style={{fontSize:12, fontWeight:700}}>{t.name}</div>
-                <div style={{fontSize:11, color:"var(--fg-3)"}}>Se {t.sens.toFixed(2)} · Sp {t.spec.toFixed(2)} · {t.tat}{t.tatUnit[0]}</div>
+                <div style={{fontSize:12, fontWeight:700}}>
+                  {test.name} <span className="parallel__duplicate-tag">#{occurrence}</span>
+                </div>
+                <div style={{fontSize:11, color:"var(--fg-3)"}}>Se {test.sens.toFixed(2)} · Sp {test.spec.toFixed(2)} · {test.tat}{test.tatUnit[0]}</div>
               </div>
-              <button className="btn btn--xs btn--icon" title="Remove from block" onClick={() => removeParallelMember?.(node.id, t.id)}><Icon name="x" size={10}/></button>
+              <button
+                className="btn btn--xs btn--icon"
+                title="Remove from block"
+                onClick={() => removeParallelMember?.(node.id, member.id || member.testId)}>
+                <Icon name="x" size={10}/>
+              </button>
             </div>
           ))}
-          <button className="btn btn--sm" style={{marginTop:6}} onClick={addMember}><Icon name="plus" size={11}/>Add test to block</button>
         </div>
       </div>
 

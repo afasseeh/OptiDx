@@ -41,4 +41,9 @@ class Pathway extends Model
     {
         return $this->hasOne(EvaluationResult::class)->latestOfMany();
     }
+
+    public function project()
+    {
+        return $this->belongsTo(Project::class);
+    }
 }

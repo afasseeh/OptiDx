@@ -1,11 +1,15 @@
 // Wizard — New pathway setup (4 steps)
 function ScreenWizard({ setScreen }) {
-  const [step, setStep] = useState(0);
+  const [step, setStep] = useState(() => Number(window.OptiDxWizardStep ?? 0) || 0);
   const [mode, setMode] = useState(null); // null | "test" | "optimize"
   const [objective, setObjective] = useState("Balanced MCDA");
   const [sampleTypes, setSampleTypes] = useState(["None", "Blood", "Urine", "Stool", "Sputum"]);
   const [optimization, setOptimization] = useState({ status: "idle", progress: 0, stage: "", error: null });
   const steps = ["Disease", "Test library", "Constraints", "Review", "Run"];
+
+  useEffect(() => {
+    window.OptiDxWizardStep = step;
+  }, [step]);
 
   const runOptimization = async () => {
     if (optimization.status === "running") return;
@@ -89,7 +93,7 @@ function ScreenWizard({ setScreen }) {
   return (
     <>
       <TopBar
-        crumbs={["OptiDx", "New pathway"]}
+        crumbs={["OptiDx", "New project"]}
         actions={<>
           <button className="btn btn--ghost" onClick={() => setScreen("home")}>Cancel</button>
           <button className="btn btn--primary" onClick={onContinue}
@@ -240,9 +244,9 @@ function WizardStep1({ objective, setObjective }) {
   return (
     <div className="card card--pad">
       <div className="sme-eyebrow" style={{marginBottom:6}}>Step 01</div>
-      <h2 style={{fontSize:22, marginBottom:4}}>Disease and clinical context</h2>
+      <h2 style={{fontSize:22, marginBottom:4}}>Project and clinical context</h2>
       <p style={{color:"var(--fg-3)", marginBottom:24, fontSize:13}}>
-        Define what this pathway diagnoses, who it is for, and what it optimizes for.
+        Define what this project diagnoses, who it is for, and what it optimizes for.
       </p>
       <div className="grid" style={{gridTemplateColumns:"1fr 1fr", gap:16}}>
         <div className="field">
@@ -278,6 +282,7 @@ function WizardStep1({ objective, setObjective }) {
 
 function WizardStep2({ setScreen }) {
   const [, setLibraryRevision] = useState(0);
+  const [menuFor, setMenuFor] = useState(null);
   useEffect(() => {
     const onUpdate = () => setLibraryRevision(v => v + 1);
     window.addEventListener("optidx-tests-updated", onUpdate);
@@ -289,7 +294,7 @@ function WizardStep2({ setScreen }) {
       <div className="sme-eyebrow" style={{marginBottom:6}}>Step 02</div>
       <h2 style={{fontSize:22, marginBottom:4}}>Diagnostic test library</h2>
       <p style={{color:"var(--fg-3)", marginBottom:20, fontSize:13}}>
-        Add the tests you want available on the canvas. Import from evidence database or define manually.
+        Add the tests you want available for this project. Import from the evidence database or define them manually.
       </p>
       <div className="row" style={{marginBottom:12, gap:8}}>
         <button className="btn btn--primary" onClick={async () => {
@@ -303,14 +308,14 @@ function WizardStep2({ setScreen }) {
         <div className="spacer"/>
         <span className="u-meta">{(window.OptiDxActions.getWorkspaceTests?.() || window.SEED_TESTS || []).length} tests in library</span>
       </div>
-      <div className="card card--flush">
+      <div className="card card--flush" style={{maxHeight:"none"}}>
         <table className="table">
           <thead><tr>
             <th>Test</th><th>Category</th><th className="num">Sens</th><th className="num">Spec</th>
             <th className="num">Cost</th><th>TAT</th><th>Sample</th><th>Skill</th><th/>
           </tr></thead>
           <tbody>
-            {(window.OptiDxActions.getWorkspaceTests?.() || window.SEED_TESTS || []).slice(0,7).map(t => (
+            {(window.OptiDxActions.getWorkspaceTests?.() || window.SEED_TESTS || []).map(t => (
               <tr key={t.id}>
                 <td><b>{t.name}</b></td>
                 <td><span className="chip chip--outline">{t.category}</span></td>
@@ -320,7 +325,60 @@ function WizardStep2({ setScreen }) {
                 <td className="mono">{t.tat}{t.tatUnit}</td>
                 <td>{t.sample}</td>
                 <td>{t.skill}</td>
-                <td style={{textAlign:"right"}}><Icon name="more" size={14} style={{color:"var(--fg-3)"}}/></td>
+                <td style={{textAlign:"right", position:"relative"}}>
+                  <button
+                    type="button"
+                    className="btn btn--sm btn--icon"
+                    onClick={() => setMenuFor(current => current === t.id ? null : t.id)}
+                    aria-label="Test actions"
+                  >
+                    <Icon name="more" size={14} style={{color:"var(--fg-3)"}}/>
+                  </button>
+                  {menuFor === t.id && (
+                    <div style={{
+                      position:"absolute",
+                      right:0,
+                      top:"calc(100% + 4px)",
+                      background:"var(--surface)",
+                      border:"1px solid var(--edge)",
+                      borderRadius:6,
+                      boxShadow:"var(--shadow-4)",
+                      minWidth:140,
+                      zIndex:20,
+                      overflow:"hidden",
+                    }}>
+                      <button
+                        type="button"
+                        className="btn"
+                        style={{width:"100%", justifyContent:"flex-start", borderRadius:0, border:0}}
+                        onClick={() => {
+                          window.OptiDxActions.openDiagnosticTestEditor?.(t);
+                          setMenuFor(null);
+                        }}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="btn"
+                        style={{width:"100%", justifyContent:"flex-start", borderRadius:0, border:0}}
+                        onClick={async () => {
+                          setMenuFor(null);
+                          if (!window.confirm(`Delete "${t.name}" from the library?`)) {
+                            return;
+                          }
+                          try {
+                            await window.OptiDxActions.deleteDiagnosticTest?.(t.id);
+                          } catch (error) {
+                            window.OptiDxActions.showToast?.(error?.message || "Unable to delete test", "error");
+                          }
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>

@@ -18,7 +18,7 @@ function ScreenHome({ setScreen }) {
             }
           }}><Icon name="upload"/>Import JSON</button>
           <button className="btn btn--primary" onClick={() => setScreen("wizard")}>
-            <Icon name="plus"/>New pathway
+            <Icon name="plus"/>New project
           </button>
         </>}
       />
@@ -26,8 +26,8 @@ function ScreenHome({ setScreen }) {
         <div className="page__head">
           <div>
             <div className="sme-eyebrow" style={{marginBottom:6}}>Pathways</div>
-            <h1>Diagnostic pathway workspace</h1>
-            <p>Design, run, and compare diagnostic pathways. Grounded in published evidence.</p>
+            <h1>Diagnostic project workspace</h1>
+            <p>Design, run, and compare diagnostic projects. Grounded in published evidence.</p>
           </div>
           <div className="row">
             <div className="u-meta">Workspace · <b style={{color:"var(--fg-1)"}}>Syreon MENA HTA</b></div>

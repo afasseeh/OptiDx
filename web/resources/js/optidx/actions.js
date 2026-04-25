@@ -11,6 +11,33 @@ const api = axios.create({
   },
 });
 
+function setCsrfToken(token) {
+  if (!token) {
+    return;
+  }
+
+  api.defaults.headers.common['X-CSRF-TOKEN'] = token;
+
+  const meta = document.querySelector('meta[name="csrf-token"]');
+  if (meta) {
+    meta.setAttribute('content', token);
+  }
+}
+
+async function refreshCsrfToken() {
+  const response = await api.get('/');
+  const html = typeof response.data === 'string' ? response.data : '';
+  const match = html.match(/<meta name="csrf-token" content="([^"]+)">/i);
+  const token = match?.[1] || document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || null;
+
+  if (!token) {
+    throw new Error('Unable to refresh CSRF token.');
+  }
+
+  setCsrfToken(token);
+  return token;
+}
+
 function dispatchWorkspaceEvent() {
   window.dispatchEvent(new CustomEvent('optidx-workspace-updated', {
     detail: window.OptiDxWorkspace || null,
@@ -220,6 +247,26 @@ async function request(method, url, data = undefined) {
     const response = await api.request({ method, url, data });
     return response.data;
   } catch (error) {
+    if (error?.response?.status === 419 && !error.config?._optidxCsrfRetried) {
+      try {
+        await refreshCsrfToken();
+        const retryConfig = {
+          ...error.config,
+          headers: {
+            ...(error.config?.headers || {}),
+            'X-CSRF-TOKEN': api.defaults.headers.common['X-CSRF-TOKEN'],
+          },
+          _optidxCsrfRetried: true,
+        };
+        const retryResponse = await api.request({
+          ...retryConfig,
+        });
+        return retryResponse.data;
+      } catch (retryError) {
+        error = retryError;
+      }
+    }
+
     const payload = error?.response?.data;
     const validationErrors = payload?.validation?.errors;
     const message = Array.isArray(validationErrors) && validationErrors.length
@@ -308,38 +355,258 @@ function formatSkillLabel(level) {
   return labels[numeric] || `Skill ${numeric}`;
 }
 
-function formatPathSequence(outcomes) {
+function parseSkillLevel(value) {
+  if (value == null || value === '') {
+    return 3;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.max(0, Math.min(5, Math.round(value)));
+  }
+
+  const numeric = Number(value);
+  if (!Number.isNaN(numeric)) {
+    return Math.max(0, Math.min(5, Math.round(numeric)));
+  }
+
+  const label = String(value).toLowerCase();
+  if (label.includes('chw') || label.includes('self')) return 1;
+  if (label.includes('nurse')) return 2;
+  if (label.includes('lab')) return 3;
+  if (label.includes('radiolog') || label.includes('specialist')) return 4;
+  return 3;
+}
+
+function buildDiagnosticTestPayload(test = {}) {
+  const sampleTypes = Array.isArray(test.sample_types)
+    ? test.sample_types.filter(Boolean)
+    : typeof test.sample_types === 'string'
+      ? test.sample_types.split(',').map(item => item.trim()).filter(Boolean)
+      : test.sample
+        ? [test.sample]
+        : [];
+  const provenance = test.provenance && typeof test.provenance === 'object' ? test.provenance : {};
+
+  return {
+    project_id: test.project_id ?? null,
+    name: String(test.name || test.test || test.label || test.title || 'Untitled test').trim(),
+    category: test.category || 'clinical',
+    sensitivity: Number(test.sensitivity ?? test.sens ?? 0),
+    specificity: Number(test.specificity ?? test.spec ?? 0),
+    cost: Number(test.cost ?? 0),
+    currency: test.currency || 'USD',
+    turnaround_time: Number(test.turnaround_time ?? test.tat ?? 0),
+    turnaround_time_unit: test.turnaround_time_unit || test.tatUnit || 'min',
+    sample_types: sampleTypes,
+    skill_level: parseSkillLevel(test.skill_level ?? test.skill ?? test.skill_label),
+    threshold: test.threshold || null,
+    availability: test.availability ?? true,
+    capacity_limit: test.capacity_limit ?? null,
+    notes: test.notes || test.evidence || '',
+    provenance: {
+      source: test.source || provenance.source || 'Workspace record',
+      country: test.country || provenance.country || null,
+      year: test.year || provenance.year || null,
+    },
+    joint_probabilities: test.joint_probabilities || null,
+    conditional_probabilities: test.conditional_probabilities || null,
+  };
+}
+
+function isPersistedDiagnosticTestId(id) {
+  return /^\d+$/.test(String(id ?? ''));
+}
+
+function formatDurationHours(value) {
+  if (value == null || value === '') {
+    return 'n/a';
+  }
+
+  const hours = Number(value);
+  if (Number.isNaN(hours)) {
+    return String(value);
+  }
+
+  const totalMinutes = Math.max(0, Math.round(hours * 60));
+  const days = Math.floor(totalMinutes / 1440);
+  const remainingMinutes = totalMinutes % 1440;
+  const hrs = Math.floor(remainingMinutes / 60);
+  const mins = remainingMinutes % 60;
+  const parts = [];
+
+  if (days) parts.push(`${days} d`);
+  if (hrs) parts.push(`${hrs} h`);
+  if (!parts.length || mins) parts.push(`${mins} m`);
+
+  return parts.join(' ');
+}
+
+function toHours(value, unit) {
+  const numeric = Number(value ?? 0);
+  const normalizedUnit = String(unit || 'hr').toLowerCase();
+
+  if (Number.isNaN(numeric)) {
+    return 0;
+  }
+
+  if (normalizedUnit === 'min' || normalizedUnit === 'minute' || normalizedUnit === 'minutes') {
+    return numeric / 60;
+  }
+
+  if (normalizedUnit === 'day' || normalizedUnit === 'days' || normalizedUnit === 'd') {
+    return numeric * 24;
+  }
+
+  if (normalizedUnit === 'week' || normalizedUnit === 'weeks' || normalizedUnit === 'w') {
+    return numeric * 168;
+  }
+
+  return numeric;
+}
+
+function resolvePathwayTestCatalog(pathway) {
+  const nodes = normalizeGraphItems(pathway?.nodes);
+  const testsMap = pathway?.tests || {};
+  const entries = [];
+  const labelCounts = new Map();
+
+  const addEntry = (key, testId, label, payload = {}) => {
+    if (!key || !testId) {
+      return;
+    }
+
+    const baseLabel = label || testId;
+    const count = (labelCounts.get(baseLabel) || 0) + 1;
+    labelCounts.set(baseLabel, count);
+
+    entries.push({
+      key: String(key),
+      testId: String(testId),
+      label: count > 1 ? `${baseLabel} #${count}` : baseLabel,
+      baseLabel,
+      cost: Number(payload.cost ?? 0),
+      tatHours: Number(payload.tatHours ?? 0),
+      tatLabel: payload.tatLabel ?? formatDurationHours(payload.tatHours ?? 0),
+      sample: payload.sample ?? 'n/a',
+      skill: payload.skill ?? 'n/a',
+      category: payload.category ?? null,
+    });
+  };
+
+  for (const node of nodes) {
+    if (node?.type === 'test' && node.testId) {
+      const test = testsMap[node.testId] || window.SEED_TESTS?.find(x => x.id === node.testId) || {};
+      const tatHours = toHours(test.turnaround_time ?? test.tat ?? 0, test.turnaround_time_unit ?? test.tatUnit ?? 'hr');
+      addEntry(node.testId, node.testId, test.name || node.label || node.testId, {
+        cost: Number(test.cost ?? 0),
+        tatHours,
+        tatLabel: formatDurationHours(tatHours),
+        sample: Array.isArray(test.sample_types) ? test.sample_types.filter(Boolean)[0] || test.sample || 'n/a' : test.sample || 'n/a',
+        skill: typeof test.skill_level === 'number' ? formatSkillLabel(test.skill_level) : (test.skill || 'n/a'),
+        category: test.category || null,
+      });
+    }
+
+    if (node?.type === 'parallel') {
+      for (const [index, member] of (node.members || []).entries()) {
+        if (!member?.testId) {
+          continue;
+        }
+
+        const test = testsMap[member.testId] || window.SEED_TESTS?.find(x => x.id === member.testId) || {};
+        const tatHours = toHours(test.turnaround_time ?? test.tat ?? 0, test.turnaround_time_unit ?? test.tatUnit ?? 'hr');
+        const alias = member.id || `${node.id}__member_${index + 1}__${member.testId}`;
+        addEntry(alias, member.testId, test.name || member.testId, {
+          cost: Number(test.cost ?? 0),
+          tatHours,
+          tatLabel: formatDurationHours(tatHours),
+          sample: Array.isArray(test.sample_types) ? test.sample_types.filter(Boolean)[0] || test.sample || 'n/a' : test.sample || 'n/a',
+          skill: typeof test.skill_level === 'number' ? formatSkillLabel(test.skill_level) : (test.skill || 'n/a'),
+          category: test.category || null,
+        });
+      }
+    }
+  }
+
+  return entries;
+}
+
+function formatPathSequence(outcomes, catalog = []) {
   const entries = Object.entries(outcomes || {});
   if (!entries.length) {
     return 'No test outcomes';
   }
 
+  const lookup = new Map(catalog.map(entry => [String(entry.key), entry]));
+  const labelUsage = new Map();
+
   return entries
-    .map(([testId, outcome]) => `${testId}(${outcome === 'pos' ? '+' : '-'})`)
-    .join(' → ');
+    .map(([testId, outcome]) => {
+      const entry = lookup.get(String(testId));
+      const baseLabel = entry?.label || String(testId).replace(/[-_]+/g, ' ');
+      const count = (labelUsage.get(baseLabel) || 0) + 1;
+      labelUsage.set(baseLabel, count);
+      const label = count > 1 ? `${baseLabel} #${count}` : baseLabel;
+      return `${label}(${outcome === 'pos' ? '+' : '-'})`;
+    })
+    .join(' -> ');
 }
 
 function buildPathRowsFromEvaluation(metrics) {
+  const pathway = metrics?.pathway?.editor_definition
+    || metrics?.pathway?.engine_definition
+    || metrics?.pathway
+    || window.OptiDxLatestEvaluationPathway
+    || window.OptiDxCurrentPathway
+    || null;
+  const catalog = resolvePathwayTestCatalog(pathway);
   const present = Array.isArray(metrics?.paths_disease_present) ? metrics.paths_disease_present : [];
   const absent = Array.isArray(metrics?.paths_disease_absent) ? metrics.paths_disease_absent : [];
-  const rows = [...present.map(path => ({ ...path, cohort: 'D+' })), ...absent.map(path => ({ ...path, cohort: 'D-' }))];
+  const prevalence = metrics?.prevalence != null ? Number(metrics.prevalence) : null;
+  const uniqueRows = new Map();
 
-  return rows.map((path, index) => {
-    const positive = path.final_classification === 'positive';
-    return {
-      id: `P${index + 1}`,
-      sequence: formatPathSequence(path.outcomes),
-      terminal: positive ? 'Positive result' : 'Negative result',
-      terminalKind: positive ? 'pos' : 'neg',
-      pIfD: Number(path.cohort === 'D+' ? path.probability ?? 0 : 0),
-      pIfND: Number(path.cohort === 'D-' ? path.probability ?? 0 : 0),
-      cost: Number(path.cost ?? 0),
-      tat: normalizeTAT(path.turnaround_time, 'hr'),
-      samples: Array.isArray(path.sample_types) && path.sample_types.length ? path.sample_types.join(' · ') : 'n/a',
-      skill: formatSkillLabel(path.skill_level),
-      cohort: path.cohort,
-    };
-  });
+  const addPath = (path, cohort) => {
+    const outcomes = path?.outcomes || {};
+    const signature = JSON.stringify(Object.entries(outcomes).sort(([a], [b]) => String(a).localeCompare(String(b))));
+    const probability = Number(path?.probability ?? 0);
+    let row = uniqueRows.get(signature);
+
+    if (!row) {
+      const positive = path?.final_classification === 'positive';
+      row = {
+        id: `P${uniqueRows.size + 1}`,
+        sequence: formatPathSequence(outcomes, catalog),
+        terminal: positive ? 'Positive result' : 'Negative result',
+        terminalKind: positive ? 'pos' : 'neg',
+        pIfD: 0,
+        pIfND: 0,
+        cost: Number(path?.cost ?? 0),
+        tatHours: Number(path?.turnaround_time ?? 0),
+        tat: formatDurationHours(path?.turnaround_time ?? 0),
+        samples: Array.isArray(path?.sample_types) && path.sample_types.length ? path.sample_types.join(' · ') : 'n/a',
+        skill: formatSkillLabel(path?.skill_level),
+        cohort,
+        outcomeKeys: Object.keys(outcomes),
+      };
+      uniqueRows.set(signature, row);
+    }
+
+    if (cohort === 'D+') {
+      row.pIfD += probability;
+    } else {
+      row.pIfND += probability;
+    }
+  };
+
+  present.forEach(path => addPath(path, 'D+'));
+  absent.forEach(path => addPath(path, 'D-'));
+
+  return Array.from(uniqueRows.values()).map(row => ({
+    ...row,
+    probability: prevalence != null
+      ? (prevalence * row.pIfD) + ((1 - prevalence) * row.pIfND)
+      : (row.pIfD + row.pIfND) / 2,
+  }));
 }
 
 function buildEvaluationView(result) {
@@ -348,19 +615,55 @@ function buildEvaluationView(result) {
   const specificity = Number(metrics.specificity ?? 0);
   const falseNegativeRate = Number(metrics.false_negative_rate ?? (1 - sensitivity));
   const falsePositiveRate = Number(metrics.false_positive_rate ?? (1 - specificity));
+  const pathwaySource = result?.pathway?.editor_definition
+    || result?.pathway?.engine_definition
+    || result?.pathway
+    || window.OptiDxLatestEvaluationPathway
+    || null;
+  const pathRows = buildPathRowsFromEvaluation({
+    ...metrics,
+    pathway: pathwaySource,
+    prevalence: result?.prevalence ?? null,
+  });
+  const totalWeight = pathRows.reduce((sum, path) => sum + Number(path.probability ?? 0), 0) || 1;
+  const weightedTatHours = pathRows.reduce((sum, path) => sum + (Number(path.probability ?? 0) * Number(path.tatHours ?? 0)), 0) / totalWeight;
+  const minTatHours = pathRows.length ? Math.min(...pathRows.map(path => Number(path.tatHours ?? 0))) : null;
+  const maxTatHours = pathRows.length ? Math.max(...pathRows.map(path => Number(path.tatHours ?? 0))) : null;
+  const catalog = resolvePathwayTestCatalog(pathwaySource);
   const warnings = [];
+  const seenWarnings = new Set();
+  const addWarning = (kind, text) => {
+    const normalized = String(text || '').trim();
+    if (!normalized || seenWarnings.has(normalized)) {
+      return;
+    }
+    seenWarnings.add(normalized);
+    warnings.push({ kind, text: normalized });
+  };
 
   if (Array.isArray(metrics.warnings)) {
-    metrics.warnings.forEach(text => warnings.push({ kind: 'info', text }));
+    metrics.warnings.forEach(text => addWarning('info', text));
   }
 
   if (Array.isArray(metrics.assumptions)) {
-    metrics.assumptions.forEach(text => warnings.push({ kind: 'info', text }));
+    metrics.assumptions.forEach(text => addWarning('info', text));
   }
 
   if (Array.isArray(result?.validation?.warnings)) {
-    result.validation.warnings.forEach(text => warnings.push({ kind: 'warn', text }));
+    result.validation.warnings.forEach(text => addWarning('warn', text));
   }
+
+  const testContributions = catalog.map(entry => {
+    const probability = pathRows.reduce((sum, path) => (
+      path.outcomeKeys?.includes(entry.key) ? sum + Number(path.probability ?? 0) : sum
+    ), 0);
+
+    return {
+      ...entry,
+      weight: probability,
+      contribution: probability * Number(entry.cost ?? 0),
+    };
+  }).filter(entry => Number.isFinite(entry.contribution)).sort((a, b) => b.contribution - a.contribution);
 
   return {
     sens: sensitivity,
@@ -368,12 +671,30 @@ function buildEvaluationView(result) {
     fnr: falseNegativeRate,
     fpr: falsePositiveRate,
     cost: Number(metrics.expected_cost_population ?? metrics.expected_cost_given_disease ?? 0),
-    tat: normalizeTAT(metrics.expected_turnaround_time_population ?? metrics.expected_turnaround_time_given_disease ?? null, 'hr'),
+    tat: formatDurationHours(weightedTatHours),
+    tatAverageHours: weightedTatHours,
+    tatAverageLabel: formatDurationHours(weightedTatHours),
+    tatMinHours: minTatHours,
+    tatMinLabel: formatDurationHours(minTatHours),
+    tatMaxHours: maxTatHours,
+    tatMaxLabel: formatDurationHours(maxTatHours),
     ppv: Number(metrics.ppv ?? 0),
     npv: Number(metrics.npv ?? 0),
     prevalence: result?.prevalence ?? null,
     warnings,
-    paths: buildPathRowsFromEvaluation(metrics),
+    pathCount: pathRows.length,
+    paths: pathRows,
+    testContributions,
+    summary: {
+      pathCount: pathRows.length,
+      expectedCost: Number(metrics.expected_cost_population ?? metrics.expected_cost_given_disease ?? 0),
+      expectedTatHours: weightedTatHours,
+      expectedTatLabel: formatDurationHours(weightedTatHours),
+      minTatHours,
+      minTatLabel: formatDurationHours(minTatHours),
+      maxTatHours,
+      maxTatLabel: formatDurationHours(maxTatHours),
+    },
     metrics,
     source: result,
   };
@@ -511,7 +832,7 @@ function createStarterCanvasGraph() {
     schema_version: 'canvas-v1',
     start_node: detectStartNode(nodes, []),
     metadata: {
-      label: 'New pathway',
+      label: 'New project',
       source: 'Builder canvas',
       disease: null,
     },
@@ -947,42 +1268,70 @@ function buildOptimizationScenarios(result) {
   });
 }
 
-async function addManualTest() {
-  const name = window.prompt("Name the new diagnostic test:");
-  if (!name) {
-    return null;
+async function persistDiagnosticTest(test) {
+  const payload = buildDiagnosticTestPayload(test);
+  if (!payload.name) {
+    throw new Error('Test name is required.');
   }
 
-  const cleaned = name.trim();
-  if (!cleaned) {
-    return null;
-  }
-
-  const test = await request('post', '/api/evidence/tests', {
-    name: cleaned,
-    category: "clinical",
-    sensitivity: 0.8,
-    specificity: 0.8,
-    cost: 1.0,
-    currency: "USD",
-    turnaround_time: 15,
-    turnaround_time_unit: "min",
-    sample_types: ["blood"],
-    skill_level: 3,
-    notes: "User-defined test.",
-    availability: true,
-    provenance: { source: "Manual entry" },
-  });
-
-  const normalized = normalizeDiagnosticTestRecord(test);
+  const testRecord = isPersistedDiagnosticTestId(test?.id)
+    ? await request('put', `/api/evidence/tests/${test.id}`, payload)
+    : await request('post', '/api/evidence/tests', payload);
+  const normalized = normalizeDiagnosticTestRecord(testRecord);
   const nextTests = [...getWorkspaceTests(), normalized];
   window.SEED_TESTS = nextTests;
   setWorkspaceSnapshot({
     tests: nextTests,
     testsById: toWorkspaceIndex(nextTests),
   });
-  showToast(`Added "${cleaned}" to the library`, 'success');
+  window.dispatchEvent(new Event('optidx-tests-updated'));
   return normalized;
+}
+
+async function saveDiagnosticTest(test) {
+  const normalized = await persistDiagnosticTest(test);
+  showToast(`${test?.id ? 'Updated' : 'Added'} "${normalized.name}" in the library`, 'success');
+  return normalized;
+}
+
+function openDiagnosticTestEditor(initialTest = null) {
+  window.dispatchEvent(new CustomEvent('optidx-open-test-editor', {
+    detail: initialTest && typeof initialTest === 'object' ? initialTest : null,
+  }));
+  return initialTest || null;
+}
+
+async function addManualTest(initialTest = null) {
+  return openDiagnosticTestEditor(initialTest);
+}
+
+async function deleteDiagnosticTest(testId) {
+  if (!testId) {
+    return null;
+  }
+
+  if (!isPersistedDiagnosticTestId(testId)) {
+    const remaining = getWorkspaceTests().filter(item => String(item.id) !== String(testId));
+    window.SEED_TESTS = remaining;
+    setWorkspaceSnapshot({
+      tests: remaining,
+      testsById: toWorkspaceIndex(remaining),
+    });
+    window.dispatchEvent(new Event('optidx-tests-updated'));
+    showToast('Test removed from the library', 'success');
+    return true;
+  }
+
+  await request('delete', `/api/evidence/tests/${testId}`);
+  const remaining = getWorkspaceTests().filter(item => String(item.id) !== String(testId));
+  window.SEED_TESTS = remaining;
+  setWorkspaceSnapshot({
+    tests: remaining,
+    testsById: toWorkspaceIndex(remaining),
+  });
+  window.dispatchEvent(new Event('optidx-tests-updated'));
+  showToast('Test removed from the library', 'success');
+  return true;
 }
 
 async function optimizePathways(payload) {
@@ -1025,6 +1374,53 @@ async function loadPathwayIntoWorkspace(pathway) {
   window.dispatchEvent(new CustomEvent('optidx-pathway-loaded', { detail: canvasDraft }));
   showToast(`Imported "${canvasDraft.metadata?.label || 'pathway'}"`, 'success');
   return response;
+}
+
+async function importPresetTestToPathway(test) {
+  if (!test || typeof test !== 'object') {
+    return null;
+  }
+
+  const baseDraft = window.OptiDxCurrentPathway || window.OptiDxCanvasDraft || createStarterCanvasGraph();
+  const canvasDraft = buildCanvasDraftFromPathway(baseDraft);
+  const nodes = Array.isArray(canvasDraft.nodes)
+    ? canvasDraft.nodes.map(node => ({
+        ...node,
+        members: Array.isArray(node.members) ? node.members.map(member => ({ ...member })) : node.members,
+      }))
+    : [];
+
+  const placedNodes = nodes.filter(node => node.type !== 'terminal' && node.type !== 'annotation');
+  const rightmostX = placedNodes.length
+    ? Math.max(...placedNodes.map(node => Number(node.x) || 0))
+    : 360;
+  const averageY = placedNodes.length
+    ? placedNodes.reduce((sum, node) => sum + (Number(node.y) || 0), 0) / placedNodes.length
+    : 260;
+  const offsetY = (placedNodes.length % 3) * 88 - 88;
+  const safeId = String(test.id || test.name || 'preset-test')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  const nextNode = {
+    id: `preset-${safeId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    type: 'test',
+    testId: test.id ?? null,
+    label: test.name || 'Preset test',
+    x: rightmostX + 280,
+    y: averageY + offsetY,
+  };
+
+  const nextDraft = {
+    ...canvasDraft,
+    nodes: [...nodes, nextNode],
+  };
+
+  setActivePathwayDraft(nextDraft);
+  window.dispatchEvent(new CustomEvent('optidx-pathway-loaded', { detail: nextDraft }));
+  showToast(`Added "${test.name || 'preset test'}" to the active pathway`, 'success');
+  return nextDraft;
 }
 
 async function openPathwayRecord(pathway) {
@@ -1075,35 +1471,16 @@ async function importEvidenceTest(test) {
   if (!test || typeof test !== 'object') {
     return null;
   }
-
-  const payload = {
-    name: test.name || 'Imported evidence test',
-    category: test.category || 'clinical',
-    sensitivity: Number(test.sens ?? test.sensitivity ?? 0),
-    specificity: Number(test.spec ?? test.specificity ?? 0),
-    cost: Number(test.cost ?? 0),
-    currency: test.currency || 'USD',
-    turnaround_time: Number(test.tat ?? test.turnaround_time ?? 0),
-    turnaround_time_unit: test.tatUnit || test.turnaround_time_unit || 'min',
-    sample_types: Array.isArray(test.sample_types) ? test.sample_types : test.sample ? [test.sample] : [],
-    skill_level: test.skill_level ?? test.skill ?? 3,
+  const normalized = await persistDiagnosticTest({
+    ...test,
+    name: String(test.name || test.test || test.label || test.title || 'Imported evidence test').trim(),
     notes: test.notes || test.evidence || 'Imported from evidence library.',
     availability: true,
     provenance: {
       source: test.source || test.provenance?.source || 'Evidence library',
-      country: test.country || null,
-      year: test.year || null,
+      country: test.country || test.provenance?.country || null,
+      year: test.year || test.provenance?.year || null,
     },
-  };
-
-  const response = await request('post', '/api/evidence/tests', payload);
-  const normalized = normalizeDiagnosticTestRecord(response);
-  const existing = getWorkspaceTests().filter(item => String(item.id) !== String(normalized.id));
-  const nextTests = [normalized, ...existing];
-  window.SEED_TESTS = nextTests;
-  setWorkspaceSnapshot({
-    tests: nextTests,
-    testsById: toWorkspaceIndex(nextTests),
   });
   showToast(`Imported "${normalized.name}"`, 'success');
   return normalized;
@@ -1191,13 +1568,17 @@ window.OptiDxActions = {
   normalizePathwayGraph,
   buildCanvasDraftFromPathway,
   loadPathwayIntoWorkspace,
+  importPresetTestToPathway,
   openPathwayRecord,
   savePathway,
   optimizePathways,
   evaluatePathway,
   buildEvaluationView,
   buildOptimizationScenarios,
+  openDiagnosticTestEditor,
   addManualTest,
+  deleteDiagnosticTest,
+  saveDiagnosticTest,
   duplicatePathwayRecord,
   importEvidenceTest,
   downloadReport,

@@ -16,10 +16,29 @@ class DiagnosticTest:
     sensitivity: float
     specificity: float
     turnaround_time: Optional[float] = None
+    turnaround_time_unit: Optional[str] = None
     sample_types: List[str] = field(default_factory=list)
     skill_level: Optional[int] = None
     cost: Optional[float] = None
     joint_probabilities: Dict[DiseaseState, Dict[Tuple[Tuple[str, str], ...], float]] = field(default_factory=dict)
+
+    def turnaround_time_hours(self) -> float:
+        if self.turnaround_time is None:
+            return 0.0
+
+        unit = (self.turnaround_time_unit or 'hr').strip().lower()
+        value = float(self.turnaround_time)
+
+        if unit in {'min', 'minute', 'minutes'}:
+            return value / 60.0
+        if unit in {'hr', 'hour', 'hours', 'h'}:
+            return value
+        if unit in {'day', 'days', 'd'}:
+            return value * 24.0
+        if unit in {'week', 'weeks', 'w'}:
+            return value * 168.0
+
+        return value
 
     def outcome_probability_independent(self, outcome: ResultLabel, disease_state: DiseaseState) -> float:
         if disease_state == 'D':
@@ -161,7 +180,7 @@ class DiagnosticPathwayEngine:
     def _node_turnaround(self, node: Node) -> float:
         if node.action is None:
             return 0.0
-        times = [self.tests[t].turnaround_time or 0.0 for t in node.action.test_names]
+        times = [self.tests[t].turnaround_time_hours() for t in node.action.test_names]
         return (max(times) if node.action.parallel_time else sum(times)) if times else 0.0
 
     def _node_cost(self, node: Node) -> float:
@@ -351,6 +370,7 @@ class DiagnosticPathwayEngine:
                 sensitivity=raw['sensitivity'],
                 specificity=raw['specificity'],
                 turnaround_time=raw.get('turnaround_time'),
+                turnaround_time_unit=raw.get('turnaround_time_unit'),
                 sample_types=raw.get('sample_types', []),
                 skill_level=raw.get('skill_level'),
                 cost=raw.get('cost'),

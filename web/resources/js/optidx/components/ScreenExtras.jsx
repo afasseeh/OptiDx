@@ -22,7 +22,7 @@ function ScreenLibrary({ setScreen }) {
         crumbs={["OptiDx", "Workspace", "Pathway library"]}
         actions={<>
           <button className="btn" onClick={() => setScreen("home")}><Icon name="arrow-left"/>Back home</button>
-          <button className="btn btn--primary" onClick={() => setScreen("wizard")}><Icon name="plus"/>New pathway</button>
+          <button className="btn btn--primary" onClick={() => setScreen("wizard")}><Icon name="plus"/>New project</button>
         </>}
       />
       <div className="page" style={{maxWidth:1320}}>

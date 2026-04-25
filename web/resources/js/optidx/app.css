@@ -496,7 +496,8 @@ input, select, textarea { font-family: inherit; font-size: inherit; color: inher
 .bar--neg .bar__fill { background: var(--neg); }
 
 /* ---------- Modal ---------- */
-.modal-overlay {
+.modal-overlay,
+.modal-backdrop {
   position: fixed; inset: 0; background: rgba(44,51,56,0.45);
   z-index: 100; display: grid; place-items: center;
   backdrop-filter: blur(4px);

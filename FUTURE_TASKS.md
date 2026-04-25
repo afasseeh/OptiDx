@@ -111,3 +111,26 @@
 - **Improvement:** Teach the Laravel pathway graph validation layer to require and preserve explicit terminal roles for mandatory positive/negative endpoints.
 - **Benefit:** Prevents malformed graphs from bypassing the UI and keeps imports, API writes, and future editor clients aligned with the same endpoint contract.
 - **Priority:** Medium
+
+## 15. Legacy parallel-member id backfill
+
+- **Context:** New parallel members now get stable per-entry ids so duplicate tests can be added, displayed, and compiled independently.
+- **Limitation:** Historical saved graphs may still contain parallel members without those ids, which leaves exact duplicate-member removal less deterministic until the graph is rewritten.
+- **Improvement:** Backfill stable member ids during graph hydration or run a one-time migration over stored pathway JSON so legacy parallel blocks carry the same per-entry identity as newly authored ones.
+- **Benefit:** Makes duplicate-member editing fully deterministic for old pathways and keeps the editor state model consistent across imported and newly created graphs.
+
+## 16. Shared modal shell primitive
+
+- **Context:** Legacy screens still use a `modal-backdrop` class name while the main stylesheet also exposes `modal-overlay`.
+- **Limitation:** The overlay behavior currently relies on class aliasing instead of one shared dialog primitive.
+- **Improvement:** Consolidate these into a single reusable modal shell and migrate all callers to it.
+- **Benefit:** Reduces CSS drift and keeps popup behavior consistent across the shell.
+- **Priority:** Low
+
+## 17. Terminology cleanup for legacy pathway copy
+
+- **Context:** The new-project wizard and evidence screens are now project-oriented, but a few older secondary labels and comments still say pathway.
+- **Limitation:** Mixed terminology can confuse users and future maintainers even when the underlying behavior is correct.
+- **Improvement:** Sweep remaining user-facing copy and comments so the new creation flow consistently says project while reserved pathway wording stays only where it refers to the actual graph/result model.
+- **Benefit:** Keeps the product language aligned with the project-level workflow and reduces future copy drift.
+- **Priority:** Low

@@ -2,6 +2,7 @@
 function ScreenTrace({ setScreen }) {
   const r = window.OptiDxLatestEvaluationView || window.SEED_RESULTS;
   const pathwayLabel = window.OptiDxLatestEvaluationPathway?.metadata?.label || "Latest pathway";
+  const pathCount = Number(r.pathCount ?? (Array.isArray(r.paths) ? r.paths.length : 0)) || 0;
   const csv = [
     ["Path", "Sequence", "Terminal", "P(path | D+)", "P(path | D-)", "Cost", "TAT", "Samples", "Skill"],
     ...r.paths.map(p => [
@@ -25,7 +26,7 @@ function ScreenTrace({ setScreen }) {
           <div>
             <div className="sme-eyebrow" style={{marginBottom:6}}>Detailed trace</div>
             <h1>Path-level probability decomposition</h1>
-            <p>Every terminal branch in the pathway, with conditional probabilities, cost, TAT, samples, and skill.</p>
+            <p>{pathCount} unique pathways, with conditional probabilities, cost, TAT, samples, and skill.</p>
           </div>
         </div>
         <div className="card card--flush">
@@ -58,8 +59,8 @@ function ScreenTrace({ setScreen }) {
                 <td colSpan="3"><b>Totals</b></td>
                 <td className="num mono"><b>100.0%</b></td>
                 <td className="num mono"><b>100.0%</b></td>
-                <td className="num mono"><b>$5.62</b></td>
-                <td className="num mono"><b>2.8h</b></td>
+                <td className="num mono"><b>${Number(r.summary?.expectedCost ?? r.cost ?? 0).toFixed(2)}</b></td>
+                <td className="num mono"><b>{r.tatAverageLabel || r.tat || "n/a"}</b></td>
                 <td/><td/>
               </tr>
             </tbody>
@@ -67,7 +68,7 @@ function ScreenTrace({ setScreen }) {
         </div>
         <div className="banner banner--info" style={{marginTop:16}}>
           <Icon name="info" size={16} className="banner__icon"/>
-          <div>Probabilities sum to 1.0 within each cohort (D+ and D−). Cost and TAT shown are path-specific; aggregates are probability-weighted.</div>
+          <div>Probabilities sum to 1.0 within each cohort (D+ and D−). The totals row shows probability-weighted aggregates, while each path row shows the unique pathway outcome.</div>
         </div>
       </div>
     </>
@@ -203,7 +204,7 @@ function ScatterChart() {
   );
 }
 
-function ScreenEvidence() {
+function ScreenEvidence({ setScreen }) {
   const [q, setQ] = useState("");
   const [area, setArea] = useState("all");
   const [cat, setCat] = useState("all");
@@ -264,7 +265,7 @@ function ScreenEvidence() {
           </h1>
           <p style={{fontSize:13, color:"#B0B5B9", lineHeight:1.55, maxWidth:640, marginBottom:12}}>
             Sensitivity, specificity, turnaround time and cost, peer-reviewed, WHO-endorsed where available, and continuously curated by Syreon's clinical evidence team.
-            Drop a preset into your pathway and override any field. Read-only library access is rolling out in <b style={{color:"#fff"}}>Q3 2027</b>.
+            Drop a preset into your project and override any field. Read-only library access is rolling out in <b style={{color:"#fff"}}>Q3 2027</b>.
           </p>
           <div className="row" style={{gap:6, fontSize:11, color:"#8A9299"}}>
             <Icon name="check" size={12}/> Source-cited
@@ -273,7 +274,7 @@ function ScreenEvidence() {
             <span style={{marginLeft:8}}>·</span>
             <Icon name="check" size={12}/> Region-specific
             <span style={{marginLeft:8}}>·</span>
-            <Icon name="check" size={12}/> Editable per-pathway
+            <Icon name="check" size={12}/> Editable per-project
           </div>
         </div>
         <div style={{position:"relative", display:"flex", justifyContent:"flex-end"}}>
@@ -411,7 +412,7 @@ function ScreenEvidence() {
         </main>
       </div>
 
-      {previewing && <PresetInspectModal preset={previewing} onClose={() => setPreviewing(null)} onRequest={() => { setPreviewing(null); setShowAccess(true); }}/>}
+      {previewing && <PresetInspectModal preset={previewing} setScreen={setScreen} onClose={() => setPreviewing(null)} onRequest={() => { setPreviewing(null); setShowAccess(true); }}/>}
       {showAccess && <RequestAccessModal onClose={() => setShowAccess(false)} requested={requested} onRequest={() => setRequested(true)}/>}
     </>
   );
@@ -534,7 +535,7 @@ function PresetPreviewCard({ preset:p }) {
   );
 }
 
-function PresetInspectModal({ preset:p, onClose, onRequest }) {
+function PresetInspectModal({ preset:p, setScreen, onClose, onRequest }) {
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal modal--lg" onClick={e => e.stopPropagation()} style={{maxWidth:680}}>
@@ -576,7 +577,7 @@ function PresetInspectModal({ preset:p, onClose, onRequest }) {
 
           {/* Locked editor preview */}
           <h4 style={{fontSize:11, textTransform:"uppercase", letterSpacing:"0.08em", color:"var(--fg-3)", marginBottom:8}}>
-            <Icon name="lock" size={11} style={{verticalAlign:"middle"}}/> Override values for this pathway
+            <Icon name="lock" size={11} style={{verticalAlign:"middle"}}/> Override values for this project
           </h4>
           <div className="card card--pad" style={{position:"relative", overflow:"hidden"}}>
             <div style={{
@@ -589,7 +590,7 @@ function PresetInspectModal({ preset:p, onClose, onRequest }) {
                 </div>
                 <div style={{fontSize:13, fontWeight:700, marginBottom:4}}>Editing presets is part of the curated library</div>
                 <div className="u-meta" style={{fontSize:11, lineHeight:1.5, marginBottom:10}}>
-                  When access rolls out, you'll be able to override sens/spec, TAT and cost per pathway. Source defaults are preserved for audit.
+                  When access rolls out, you'll be able to override sens/spec, TAT and cost per project. Source defaults are preserved for audit.
                 </div>
                 <button className="btn btn--primary btn--sm" onClick={onRequest}>Request early access</button>
               </div>
@@ -605,15 +606,16 @@ function PresetInspectModal({ preset:p, onClose, onRequest }) {
         <div className="modal__foot">
           <button className="btn" onClick={onClose}>Close</button>
           <div className="spacer"/>
-          <button className="btn" onClick={() => window.OptiDxActions.comingSoon("View source PDF")}><Icon name="file"/>View source PDF</button>
+          <button className="btn" onClick={() => window.OptiDxActions.showToast?.("This feature is coming soon.", "info")}><Icon name="file"/>View source PDF</button>
           <button className="btn btn--primary" onClick={async () => {
             try {
               await window.OptiDxActions.importEvidenceTest?.(p);
               onClose?.();
+              setScreen?.("wizard");
             } catch (error) {
-              window.OptiDxActions.showToast?.(error?.message || "Unable to import to pathway", "error");
+              window.OptiDxActions.showToast?.(error?.message || "Unable to import to project", "error");
             }
-          }}><Icon name="plus"/>Import to pathway</button>
+          }}><Icon name="plus"/>Import to project</button>
         </div>
       </div>
     </div>

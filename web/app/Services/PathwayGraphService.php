@@ -41,6 +41,7 @@ class PathwayGraphService
         $graph = $this->canonicalizeCanvas($payload);
         $nodes = $graph['nodes'];
         $edges = $graph['edges'];
+        $parallelMembersByNode = $this->parallelMembersByNode($nodes, array_keys($graph['tests']));
         $engineNodes = [];
 
         foreach ($nodes as $nodeId => $node) {
@@ -56,8 +57,8 @@ class PathwayGraphService
                 continue;
             }
 
-            $action = $this->compileAction($node, $graph['tests']);
-            $branches = $this->compileBranches($node, $edges);
+            $action = $this->compileAction($node, $parallelMembersByNode[$nodeId] ?? []);
+            $branches = $this->compileBranches($node, $edges, $parallelMembersByNode[$nodeId] ?? []);
 
             $engineNodes[$nodeId] = [
                 'action' => $action,
@@ -69,7 +70,7 @@ class PathwayGraphService
         return [
             'schema_version' => $graph['schema_version'],
             'start_node' => $graph['start_node'],
-            'tests' => $this->compileTests($graph['tests']),
+            'tests' => $this->compileTests($graph['tests'], $parallelMembersByNode),
             'nodes' => $engineNodes,
             'metadata' => $graph['metadata'],
         ];
@@ -85,7 +86,7 @@ class PathwayGraphService
         ];
     }
 
-    private function compileTests(array $tests): array
+    private function compileTests(array $tests, array $parallelMembersByNode = []): array
     {
         $compiled = [];
 
@@ -100,6 +101,7 @@ class PathwayGraphService
                 'sensitivity' => (float) ($test['sensitivity'] ?? $test['sens'] ?? 0),
                 'specificity' => (float) ($test['specificity'] ?? $test['spec'] ?? 0),
                 'turnaround_time' => $this->numberOrNull($test['turnaround_time'] ?? $test['tat'] ?? null),
+                'turnaround_time_unit' => $test['turnaround_time_unit'] ?? $test['tatUnit'] ?? null,
                 'sample_types' => array_values(array_filter(array_map('strval', $sampleTypes), static fn ($value) => $value !== '')),
                 'skill_level' => $skillLevel,
                 'cost' => $this->numberOrNull($test['cost'] ?? null),
@@ -114,17 +116,29 @@ class PathwayGraphService
             }
         }
 
+        foreach ($parallelMembersByNode as $members) {
+            foreach ($members as $member) {
+                $alias = $member['alias'] ?? null;
+                $testId = $member['testId'] ?? null;
+                if (! $alias || ! $testId || ! isset($tests[$testId]) || isset($compiled[$alias])) {
+                    continue;
+                }
+
+                $compiled[$alias] = $compiled[$testId];
+            }
+        }
+
         return $compiled;
     }
 
-    private function compileAction(array $node, array $tests): array
+    private function compileAction(array $node, array $parallelMembers = []): array
     {
         $testNames = [];
 
         if (! empty($node['type']) && $node['type'] === 'parallel') {
-            foreach ($node['members'] ?? [] as $member) {
-                if (! empty($member['testId'])) {
-                    $testNames[] = $member['testId'];
+            foreach ($parallelMembers as $member) {
+                if (! empty($member['alias'])) {
+                    $testNames[] = $member['alias'];
                 }
             }
         } elseif (! empty($node['testId'])) {
@@ -138,7 +152,7 @@ class PathwayGraphService
         ];
     }
 
-    private function compileBranches(array $node, array $edges): array
+    private function compileBranches(array $node, array $edges, array $parallelMembers = []): array
     {
         $branches = [];
         $nodeId = $node['id'] ?? null;
@@ -157,7 +171,7 @@ class PathwayGraphService
                 continue;
             }
 
-            foreach ($this->branchConditionsForPort($node, $port) as $conditions) {
+            foreach ($this->branchConditionsForPort($node, $port, $parallelMembers) as $conditions) {
                 $branches[] = [
                     'conditions' => $conditions,
                     'next_node' => $target,
@@ -168,12 +182,12 @@ class PathwayGraphService
         return $branches;
     }
 
-    private function branchConditionsForPort(array $node, string $port): array
+    private function branchConditionsForPort(array $node, string $port, array $parallelMembers = []): array
     {
         if (($node['type'] ?? null) === 'parallel') {
             $members = array_values(array_filter(array_map(
-                static fn (array $member): ?string => $member['testId'] ?? null,
-                $node['members'] ?? []
+                static fn (array $member): ?string => $member['alias'] ?? null,
+                $parallelMembers
             )));
 
             return match ($port) {
@@ -194,6 +208,46 @@ class PathwayGraphService
             'neg' => [[ $testId => 'neg' ]],
             default => [[]],
         };
+    }
+
+    private function parallelMembersByNode(array $nodes, array $reservedTestIds = []): array
+    {
+        $aliasesByNode = [];
+        $used = array_fill_keys(array_map('strval', $reservedTestIds), true);
+
+        foreach ($nodes as $nodeId => $node) {
+            if (($node['type'] ?? null) !== 'parallel') {
+                continue;
+            }
+
+            $members = [];
+            foreach (array_values($node['members'] ?? []) as $index => $member) {
+                $testId = (string) ($member['testId'] ?? '');
+                if ($testId === '') {
+                    continue;
+                }
+
+                $baseAlias = (string) ($member['id'] ?? ($nodeId . '__member_' . ($index + 1) . '__' . $testId));
+                $alias = $baseAlias;
+                $suffix = 2;
+                while (isset($used[$alias])) {
+                    $alias = $baseAlias . '__' . $suffix;
+                    $suffix++;
+                }
+
+                $used[$alias] = true;
+                $members[] = [
+                    'alias' => $alias,
+                    'testId' => $testId,
+                ];
+            }
+
+            if ($members !== []) {
+                $aliasesByNode[(string) $nodeId] = $members;
+            }
+        }
+
+        return $aliasesByNode;
     }
 
     private function uniformOutcomeConditions(array $testIds, string $outcome): array

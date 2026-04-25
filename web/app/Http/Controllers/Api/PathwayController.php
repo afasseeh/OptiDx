@@ -122,16 +122,21 @@ class PathwayController extends Controller
         }
 
         $pathway = $prepared['editor_definition'];
-        if (array_key_exists('prevalence', $payload)) {
-            $pathway['prevalence'] = $payload['prevalence'];
-        }
-
-        $result = $this->bridge->evaluate($prepared['engine_definition'] + ['prevalence' => $payload['prevalence'] ?? null]);
 
         $pathwayRecord = null;
         if (! empty($payload['pathway_id'])) {
-            $pathwayRecord = Pathway::query()->find($payload['pathway_id']);
+            $pathwayRecord = Pathway::query()->with('project')->find($payload['pathway_id']);
         }
+
+        $resolvedPrevalence = array_key_exists('prevalence', $payload)
+            ? $payload['prevalence']
+            : $pathwayRecord?->project?->prevalence;
+
+        if ($resolvedPrevalence !== null) {
+            $pathway['prevalence'] = $resolvedPrevalence;
+        }
+
+        $result = $this->bridge->evaluate($prepared['engine_definition'] + ['prevalence' => $resolvedPrevalence]);
 
         $pathwayData = [
             'name' => $pathway['metadata']['label'] ?? $pathwayRecord?->name ?? 'Untitled pathway',
@@ -153,7 +158,7 @@ class PathwayController extends Controller
 
         EvaluationResult::create([
             'pathway_id' => $pathwayRecord->id,
-            'prevalence' => $payload['prevalence'] ?? null,
+            'prevalence' => $resolvedPrevalence,
             'result_payload' => $result,
             'engine_version' => $result['engine_version'] ?? null,
             'evaluation_mode' => 'server',
@@ -161,6 +166,7 @@ class PathwayController extends Controller
 
         return response()->json([
             ...$result,
+            'prevalence' => $resolvedPrevalence,
             'pathway' => $pathwayRecord,
         ]);
     }
@@ -240,10 +246,19 @@ class PathwayController extends Controller
     private function buildReportData(Pathway $pathway, array $evaluation): array
     {
         $metrics = $evaluation['metrics'] ?? [];
-        $warnings = array_values(array_filter(array_merge(
+        $warnings = [];
+        $seenWarnings = [];
+        foreach (array_merge(
             array_map(fn ($warning) => (string) $warning, $evaluation['warnings'] ?? []),
             array_map(fn ($warning) => (string) $warning, $evaluation['validation']['warnings'] ?? [])
-        )));
+        ) as $warning) {
+            $normalized = trim($warning);
+            if ($normalized === '' || isset($seenWarnings[$normalized])) {
+                continue;
+            }
+            $seenWarnings[$normalized] = true;
+            $warnings[] = $normalized;
+        }
 
         return [
             'title' => $pathway->name,

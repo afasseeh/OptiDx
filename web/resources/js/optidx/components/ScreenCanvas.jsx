@@ -125,9 +125,22 @@ function NodeTestCard({ node, test, selected, onSelect, onDragNode, onDragNodeSt
 }
 
 // ---------- Parallel block ----------
-function NodeParallel({ node, selected, onSelect, onDragNode, onDragNodeStart, invalid, onPortDown }) {
+function NodeParallel({ node, selected, onSelect, onDragNode, onDragNodeStart, invalid, onPortDown, onAddMember, onRemoveMember }) {
   const drag = useRef({});
-  const tests = (node.members || []).map(m => window.SEED_TESTS.find(t => t.id === m.testId)).filter(Boolean);
+  const [isDropActive, setIsDropActive] = useState(false);
+  const memberRows = (node.members || [])
+    .map((member, index) => {
+      const test = window.SEED_TESTS.find(t => t.id === member.testId);
+      if (!test) return null;
+      return {
+        member,
+        test,
+        key: member.id || `${member.testId}-${index}`,
+        occurrence: index + 1,
+      };
+    })
+    .filter(Boolean);
+  const tests = memberRows.map(row => row.test);
   const onDown = e => {
     if (e.target.classList.contains("port")) return;
     e.stopPropagation();
@@ -141,6 +154,30 @@ function NodeParallel({ node, selected, onSelect, onDragNode, onDragNodeStart, i
     window.addEventListener("mousemove", move);
     window.addEventListener("mouseup", up);
   };
+  const handleAddTest = (testId) => {
+    if (!testId) return;
+    onAddMember?.(node.id, testId);
+  };
+  const handleDrop = (e) => {
+    const testId = e.dataTransfer.getData("text/testId");
+    if (!testId) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDropActive(false);
+    handleAddTest(testId);
+  };
+  const handleDragOver = (e) => {
+    if (!e.dataTransfer.types?.includes("text/testId")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "copy";
+    if (!isDropActive) setIsDropActive(true);
+  };
+  const handleDragLeave = (e) => {
+    if (!e.relatedTarget || !e.currentTarget.contains(e.relatedTarget)) {
+      setIsDropActive(false);
+    }
+  };
   const totalCost = tests.reduce((s,t) => s + t.cost, 0);
   const maxTAT = tests.reduce((m,t) => {
     const mins = t.tatUnit === "min" ? t.tat : t.tatUnit === "hr" ? t.tat*60 : t.tat*1440;
@@ -153,16 +190,37 @@ function NodeParallel({ node, selected, onSelect, onDragNode, onDragNodeStart, i
       data-node-id={node.id}
       style={{left: node.x, top: node.y}}
       onMouseDown={onDown}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+      onDragLeave={handleDragLeave}
       onClick={e => { e.stopPropagation(); onSelect(node.id); }}>
       <div className="parallel__label"><Icon name="merge" size={10}/>Parallel testing block</div>
       <div className="parallel__title">{node.label || "Parallel block"}</div>
+      <div className={"parallel__dropzone" + (isDropActive ? " is-active" : "")}>
+        <Icon name="download" size={10}/>
+        <span>Drop a test here or use the Add button in the inspector</span>
+      </div>
       <div className="parallel__inner">
-        {tests.map((t,i) => (
-          <div className="parallel__row" key={i}>
-            <Icon name={t.icon} size={11}/>
-            <span className="parallel__name">{t.name}</span>
-            <span className="mono parallel__se">Se {t.sens.toFixed(2)}</span>
-            <span className="mono parallel__sp">Sp {t.spec.toFixed(2)}</span>
+        {memberRows.map(({ member, test, key, occurrence }) => (
+          <div className="parallel__row" key={key}>
+            <Icon name={test.icon} size={11}/>
+            <span className="parallel__name">
+              {test.name}
+              <span className="parallel__duplicate-tag">#{occurrence}</span>
+            </span>
+            <span className="mono parallel__se">Se {test.sens.toFixed(2)}</span>
+            <span className="mono parallel__sp">Sp {test.spec.toFixed(2)}</span>
+            <button
+              className="btn btn--xs btn--icon parallel__remove"
+              title="Remove this member"
+              onClick={e => {
+                e.stopPropagation();
+                e.preventDefault();
+                onRemoveMember?.(node.id, member.id || member.testId);
+              }}
+            >
+              <Icon name="x" size={10}/>
+            </button>
           </div>
         ))}
       </div>
@@ -807,6 +865,10 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
     }));
     flash("Auto-laid out");
   };
+  const makeParallelMember = (testId) => ({
+    id: `pm-${testId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    testId,
+  });
   const addParallelMember = (nodeId, testId) => {
     const test = window.SEED_TESTS.find(t => t.id === testId);
     if (!test) {
@@ -816,21 +878,20 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
 
     setNodes(ns => ns.map(n => {
       if (n.id !== nodeId || n.type !== "parallel") return n;
-      const members = n.members ? [...n.members] : [];
-      if (members.some(m => m.testId === testId)) {
-        flash("That test is already in the block");
-        return n;
-      }
       flash(`Added ${test.name} to the block`);
-      return { ...n, members: [...members, { testId }] };
+      return { ...n, members: [...(n.members || []), makeParallelMember(testId)] };
     }));
   };
-  const removeParallelMember = (nodeId, testId) => {
+  const removeParallelMember = (nodeId, memberRef) => {
     setNodes(ns => ns.map(n => {
       if (n.id !== nodeId || n.type !== "parallel") return n;
-      const members = (n.members || []).filter(m => m.testId !== testId);
-      flash(`Removed ${window.SEED_TESTS.find(t => t.id === testId)?.name || "test"} from the block`);
-      return { ...n, members };
+      const members = n.members || [];
+      const removeIndex = members.findIndex(member => member.id === memberRef || member.testId === memberRef);
+      if (removeIndex < 0) return n;
+      const removed = members[removeIndex];
+      const nextMembers = [...members.slice(0, removeIndex), ...members.slice(removeIndex + 1)];
+      flash(`Removed ${window.SEED_TESTS.find(t => t.id === removed.testId)?.name || "test"} from the block`);
+      return { ...n, members: nextMembers };
     }));
   };
   const updateParallelRule = (nodeId, rule) => {
@@ -843,7 +904,7 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
     setNodes(ns => [...ns, {
       id, type: "parallel", x: 700, y: 600,
       label: "New parallel block",
-      members: [ { testId: "t_xpert" }, { testId: "t_smear" } ],
+      members: [ makeParallelMember("t_xpert"), makeParallelMember("t_smear") ],
       rule: "BOTH_POS"
     }]);
     setSelected(id);
@@ -1101,7 +1162,9 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
                 invalid={inv === "error"}
                 onSelect={id => { setSelected(id); setOpenPanel("node"); }}
                 onDragNode={dragNode} onDragNodeStart={dragNodeStart}
-                onPortDown={startLink}/>;
+                onPortDown={startLink}
+                onAddMember={addParallelMember}
+                onRemoveMember={removeParallelMember}/>;
             }
             if (n.type === "terminal") {
               return <NodeTerminal key={n.id} node={n}

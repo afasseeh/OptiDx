@@ -12,6 +12,8 @@ function App() {
   const [openPanel, setOpenPanel] = useState(null);
   const [showSpec, setShowSpec] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [showTestEditor, setShowTestEditor] = useState(false);
+  const [testEditorSeed, setTestEditorSeed] = useState(null);
 
   // Tweaks panel
   useEffect(() => {
@@ -63,6 +65,16 @@ function App() {
     };
   }, [authed]);
 
+  useEffect(() => {
+    const handler = event => {
+      setTestEditorSeed(event?.detail || null);
+      setShowTestEditor(true);
+    };
+
+    window.addEventListener('optidx-open-test-editor', handler);
+    return () => window.removeEventListener('optidx-open-test-editor', handler);
+  }, []);
+
   if (!sessionChecked && !authed) {
     return (
       <div className="app" style={{minHeight:"100vh", display:"grid", placeItems:"center", background:"var(--surface)"}}>
@@ -90,12 +102,19 @@ function App() {
       {screen === "results"  && <ResultsWrapper variant={variant.results} setVariant={v => setVariant(s => ({...s, results:v}))} setScreen={setScreen} onShare={() => setShowShare(true)}/>}
       {screen === "trace"    && <Frame><ScreenTrace setScreen={setScreen}/></Frame>}
       {screen === "compare"  && <Frame><ScreenCompare setScreen={setScreen}/></Frame>}
-      {screen === "evidence" && <Frame><ScreenEvidence/></Frame>}
+      {screen === "evidence" && <Frame><ScreenEvidence setScreen={setScreen}/></Frame>}
       {screen === "report"   && <Frame fullBleed><ScreenReport setScreen={setScreen} onShare={() => setShowShare(true)}/></Frame>}
       {screen === "settings" && <Frame><ScreenSettingsFull/></Frame>}
       {screen === "teams"    && <Frame><ScreenTeams/></Frame>}
 
       {openPanel === "parallel" && <ParallelModal onClose={() => setOpenPanel(null)}/>}
+      {showTestEditor && <DiagnosticTestEditorModal
+        seed={testEditorSeed}
+        onClose={() => {
+          setShowTestEditor(false);
+          setTestEditorSeed(null);
+        }}
+      />}
       {showShare && <ShareModal onClose={() => setShowShare(false)}/>}
       {showTweaks && <OptiTweaks variant={variant} setVariant={setVariant} onClose={() => { setShowTweaks(false); window.parent.postMessage({type:"__edit_mode_dismissed"},"*"); }}/>}
 
@@ -220,6 +239,180 @@ function SpecModal({ onClose }) {
           <SpecContent/>
         </div>
       </div>
+    </div>
+  );
+}
+
+function buildDiagnosticTestDraft(seed = null) {
+  const sampleTypes = Array.isArray(seed?.sample_types)
+    ? seed.sample_types.join(", ")
+    : seed?.sample
+      ? seed.sample
+      : "blood";
+  const skillLabel = String(seed?.skill_level ?? seed?.skill ?? "3").toLowerCase();
+  const skillLevel = Number(seed?.skill_level ?? seed?.skill);
+
+  return {
+    name: seed?.name || seed?.test || seed?.label || "",
+    category: seed?.category || "clinical",
+    sensitivity: seed?.sensitivity ?? seed?.sens ?? 0.8,
+    specificity: seed?.specificity ?? seed?.spec ?? 0.8,
+    cost: seed?.cost ?? 1,
+    currency: seed?.currency || "USD",
+    turnaround_time: seed?.turnaround_time ?? seed?.tat ?? 15,
+    turnaround_time_unit: seed?.turnaround_time_unit || seed?.tatUnit || "min",
+    sample_types: sampleTypes,
+    skill_level: Number.isFinite(skillLevel)
+      ? skillLevel
+      : skillLabel.includes("chw") || skillLabel.includes("self")
+        ? 1
+        : skillLabel.includes("nurse")
+          ? 2
+          : skillLabel.includes("lab")
+            ? 3
+            : skillLabel.includes("radiolog") || skillLabel.includes("specialist")
+              ? 4
+              : 3,
+    availability: seed?.availability ?? true,
+    notes: seed?.notes || "",
+    source: seed?.source || seed?.provenance?.source || "",
+    country: seed?.country || seed?.provenance?.country || "",
+    year: seed?.year || seed?.provenance?.year || "",
+  };
+}
+
+function DiagnosticTestEditorModal({ seed, onClose }) {
+  const [form, setForm] = useState(() => buildDiagnosticTestDraft(seed));
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setForm(buildDiagnosticTestDraft(seed));
+  }, [seed]);
+
+  const update = (key, value) => {
+    setForm(current => ({ ...current, [key]: value }));
+  };
+
+  const submit = async event => {
+    event.preventDefault();
+    if (saving) {
+      return;
+    }
+
+    try {
+      setSaving(true);
+      await window.OptiDxActions.saveDiagnosticTest?.(form);
+      onClose?.();
+    } catch (error) {
+      window.OptiDxActions.showToast?.(error?.message || "Unable to save test", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <form className="modal modal--lg" onClick={e => e.stopPropagation()} onSubmit={submit} style={{width:920}}>
+        <div className="modal__head">
+          <div>
+            <div className="u-meta" style={{textTransform:"uppercase", letterSpacing:"0.08em", fontSize:10, marginBottom:2}}>Diagnostic test</div>
+            <h2>Create test</h2>
+            <div className="u-meta">Capture the full record now instead of prompting for a name later.</div>
+          </div>
+          <button type="button" className="btn btn--icon" onClick={onClose}><Icon name="x"/></button>
+        </div>
+        <div className="modal__body">
+          <div className="grid" style={{gridTemplateColumns:"1.4fr 0.8fr", gap:14}}>
+            <div className="field">
+              <label className="field__label">Test name</label>
+              <input className="input" value={form.name} onChange={e => update("name", e.target.value)} required />
+            </div>
+            <div className="field">
+              <label className="field__label">Category</label>
+              <select className="select" value={form.category} onChange={e => update("category", e.target.value)}>
+                {["clinical","molecular","imaging","rapid","biomarker","pathology"].map(option => <option key={option} value={option}>{option}</option>)}
+              </select>
+            </div>
+
+            <div className="field">
+              <label className="field__label">Sensitivity</label>
+              <input className="input" type="number" min="0" max="1" step="0.01" value={form.sensitivity} onChange={e => update("sensitivity", e.target.value)} />
+            </div>
+            <div className="field">
+              <label className="field__label">Specificity</label>
+              <input className="input" type="number" min="0" max="1" step="0.01" value={form.specificity} onChange={e => update("specificity", e.target.value)} />
+            </div>
+
+            <div className="field">
+              <label className="field__label">Cost</label>
+              <input className="input" type="number" min="0" step="0.01" value={form.cost} onChange={e => update("cost", e.target.value)} />
+            </div>
+            <div className="field">
+              <label className="field__label">Currency</label>
+              <input className="input" value={form.currency} onChange={e => update("currency", e.target.value)} />
+            </div>
+
+            <div className="field">
+              <label className="field__label">Turnaround time</label>
+              <input className="input" type="number" min="0" step="0.1" value={form.turnaround_time} onChange={e => update("turnaround_time", e.target.value)} />
+            </div>
+            <div className="field">
+              <label className="field__label">TAT unit</label>
+              <select className="select" value={form.turnaround_time_unit} onChange={e => update("turnaround_time_unit", e.target.value)}>
+                <option value="min">Minutes</option>
+                <option value="hr">Hours</option>
+                <option value="day">Days</option>
+              </select>
+            </div>
+
+            <div className="field">
+              <label className="field__label">Sample types</label>
+              <input className="input" value={form.sample_types} onChange={e => update("sample_types", e.target.value)} placeholder="blood, urine, sputum" />
+              <div className="field__hint">Use commas to separate multiple sample types.</div>
+            </div>
+            <div className="field">
+              <label className="field__label">Skill level</label>
+              <select className="select" value={form.skill_level} onChange={e => update("skill_level", e.target.value)}>
+                <option value={1}>1 - CHW / self</option>
+                <option value={2}>2 - Nurse</option>
+                <option value={3}>3 - Lab tech</option>
+                <option value={4}>4 - Specialist</option>
+                <option value={5}>5 - Specialist</option>
+              </select>
+            </div>
+
+            <div className="field">
+              <label className="field__label">Evidence source</label>
+              <input className="input" value={form.source} onChange={e => update("source", e.target.value)} placeholder="WHO, journal article, internal catalog" />
+            </div>
+            <div className="field">
+              <label className="field__label">Availability</label>
+              <label className="row" style={{gap:8, alignItems:"center"}}>
+                <input type="checkbox" checked={Boolean(form.availability)} onChange={e => update("availability", e.target.checked)} />
+                <span className="u-meta">Available for selection in the library</span>
+              </label>
+            </div>
+
+            <div className="field">
+              <label className="field__label">Country</label>
+              <input className="input" value={form.country} onChange={e => update("country", e.target.value)} />
+            </div>
+            <div className="field">
+              <label className="field__label">Year</label>
+              <input className="input" type="number" min="1900" max="2100" value={form.year} onChange={e => update("year", e.target.value)} />
+            </div>
+
+            <div className="field" style={{gridColumn:"1 / -1"}}>
+              <label className="field__label">Notes</label>
+              <textarea className="input" rows={4} value={form.notes} onChange={e => update("notes", e.target.value)} style={{resize:"vertical", minHeight:96}} />
+            </div>
+          </div>
+        </div>
+        <div className="modal__foot">
+          <button type="button" className="btn" onClick={onClose}>Cancel</button>
+          <button type="submit" className="btn btn--primary" disabled={saving}>{saving ? "Saving..." : "Create test"}</button>
+        </div>
+      </form>
     </div>
   );
 }
@@ -534,7 +727,7 @@ function FeedbackModal({ onClose }) {
               <select className="select" defaultValue="">
                 <option value="" disabled>Select a screen...</option>
                 <option>Home</option>
-                <option>New pathway wizard</option>
+                <option>New project wizard</option>
                 <option>Builder (canvas)</option>
                 <option>Results</option>
                 <option>Compare</option>
