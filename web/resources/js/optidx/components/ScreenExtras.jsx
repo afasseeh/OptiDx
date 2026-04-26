@@ -107,6 +107,28 @@ function ScreenLibrary({ setScreen }) {
   );
 }
 
+function useOptimizationRunState() {
+  const [optimization, setOptimization] = useState(() => window.OptiDxOptimizationResults || null);
+
+  useEffect(() => {
+    const syncOptimization = () => setOptimization(window.OptiDxOptimizationResults || null);
+    window.addEventListener('optidx-optimization-updated', syncOptimization);
+    syncOptimization();
+    return () => window.removeEventListener('optidx-optimization-updated', syncOptimization);
+  }, []);
+
+  return optimization;
+}
+
+function formatOptimizationProgress(value) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return "0.0%";
+  }
+
+  return `${numericValue.toFixed(1)}%`;
+}
+
 // ---------- SCENARIOS (optimization results view) --------------------------
 function LegacyScreenScenarios({ setScreen }) {
   const [selected, setSelected] = useState(0);
@@ -130,11 +152,15 @@ function LegacyScreenScenarios({ setScreen }) {
       notes:"Drops Xpert, uses sputum-smear microscopy only.",
       tests:["WHO-4","Chest exam","Sputum smear"], trade:"-0.07 sens · -$2.77 cost"},
   ];
-  const optimization = window.OptiDxOptimizationResults;
+  const optimization = useOptimizationRunState();
   const generatedScenarios = window.OptiDxOptimizationScenarios?.length
     ? window.OptiDxOptimizationScenarios
     : window.OptiDxActions.buildOptimizationScenarios?.(optimization) || [];
-  const scenarios = generatedScenarios.length ? generatedScenarios : fallbackScenarios;
+  const scenarios = generatedScenarios.length
+    ? generatedScenarios
+    : ['queued', 'running'].includes(String(optimization?.status || '').toLowerCase())
+      ? []
+      : fallbackScenarios;
   const runLabel = optimization?.feasible_candidate_count
     ? `${optimization.feasible_candidate_count} candidates`
     : "6 candidates";
@@ -148,6 +174,47 @@ function LegacyScreenScenarios({ setScreen }) {
     ? `${(optimization.run_ms / 1000).toFixed(1)}s`
     : optimization ? "completed just now" : "2.1s";
   const current = scenarios[selected];
+  const isRunning = ['queued', 'running'].includes(String(optimization?.status || '').toLowerCase());
+
+  if (isRunning && !scenarios.length) {
+    return (
+      <>
+        <TopBar
+          crumbs={["OptiDx","TB Community Screening","Optimization scenarios"]}
+          actions={<>
+            <button className="btn" onClick={() => setScreen("wizard")}>
+              <Icon name="arrow-left"/>Back to setup
+            </button>
+          </>}
+        />
+        <div className="page" style={{maxWidth:1280}}>
+          <div className="card card--pad" style={{borderLeft:"3px solid var(--sme-orange)"}}>
+            <div className="row" style={{marginBottom:10}}>
+              <div>
+                <div className="u-meta">Background run</div>
+                <h1 style={{fontSize:22, marginTop:4}}>The optimization is still running</h1>
+              </div>
+              <div className="spacer"/>
+              <span className="chip chip--orange">{String(optimization?.run_mode || "light").toUpperCase()}</span>
+            </div>
+            <div className="optimization-progress" aria-label="Optimization progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(optimization?.progress_percent || 0)}>
+              <div className="optimization-progress__bar is-running" style={{width:`${optimization?.progress_percent ?? 0}%`}} />
+            </div>
+            <div className="optimization-progress__meta">
+              <span>{optimization?.progress_stage || optimization?.status || "Running"}</span>
+              <span>{formatOptimizationProgress(optimization?.progress_percent ?? 0)}</span>
+            </div>
+            {optimization?.progress_message && (
+              <p style={{marginTop:8, color:"var(--fg-2)", fontSize:13, lineHeight:1.5}}>{optimization.progress_message}</p>
+            )}
+            <p style={{marginTop:8, color:"var(--fg-3)", fontSize:12}}>
+              Extensive runs continue in the background and will email the launching user when they finish.
+            </p>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
@@ -179,7 +246,7 @@ function LegacyScreenScenarios({ setScreen }) {
           <div>
             <div className="sme-eyebrow" style={{marginBottom:6}}>Optimization · {runLabel}</div>
             <h1>Pathway scenarios</h1>
-            <p>{optimization ? "Backend optimization results from the latest run. Select a candidate to load it back into the canvas." : "The optimizer searched 142 pathway configurations and surfaced six along the Pareto frontier. Select one to load into the canvas."}</p>
+            <p>{optimization ? "Optimization results from the latest run. Select a candidate to load it back into the canvas." : "The optimizer searched 142 pathway configurations and surfaced six along the Pareto frontier. Select one to load into the canvas."}</p>
           </div>
           <div className="row" style={{gap:12}}>
             <div style={{textAlign:"right"}}>
@@ -193,6 +260,32 @@ function LegacyScreenScenarios({ setScreen }) {
             </div>
           </div>
         </div>
+
+        {isRunning && (
+          <div className="card card--pad" style={{marginBottom:16, borderLeft:"3px solid var(--sme-orange)"}}>
+            <div className="row" style={{marginBottom:10}}>
+              <div>
+                <div className="u-meta">Background run</div>
+                <h2 style={{fontSize:18, marginTop:4}}>The optimization is still running</h2>
+              </div>
+              <div className="spacer"/>
+              <span className="chip chip--orange">{String(optimization?.run_mode || "light").toUpperCase()}</span>
+            </div>
+            <div className="optimization-progress" aria-label="Optimization progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(optimization?.progress_percent || 0)}>
+              <div className="optimization-progress__bar is-running" style={{width:`${optimization?.progress_percent ?? 0}%`}} />
+            </div>
+            <div className="optimization-progress__meta">
+              <span>{optimization?.progress_stage || optimization?.status || "Running"}</span>
+              <span>{formatOptimizationProgress(optimization?.progress_percent ?? 0)}</span>
+            </div>
+            {optimization?.progress_message && (
+              <p style={{marginTop:8, color:"var(--fg-2)", fontSize:13, lineHeight:1.5}}>{optimization.progress_message}</p>
+            )}
+            <p style={{marginTop:8, color:"var(--fg-3)", fontSize:12}}>
+              Extensive runs keep working after you leave the page. You will receive an email when the run finishes.
+            </p>
+          </div>
+        )}
 
         {/* Scatter + table */}
         <div className="grid" style={{gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:16}}>
@@ -215,7 +308,7 @@ function LegacyScreenScenarios({ setScreen }) {
               <text x="20" y="130" textAnchor="middle" fontSize="10" fill="var(--fg-3)" transform="rotate(-90 20 130)" style={{letterSpacing:"0.1em"}}>SENSITIVITY →</text>
               {/* Pareto line */}
               <path d="M70 220 Q 160 180 230 110 Q 300 70 420 45" stroke="var(--sme-orange)" strokeWidth="1.5" fill="none" strokeDasharray="3 3"/>
-              {scenarios.map((s, i) => {
+              {(scenarios.length ? scenarios : []).map((s, i) => {
                 const x = 40 + (s.cpdc / 100) * 460;
                 const y = 240 - ((s.sens - 0.75) / 0.15) * 220;
                 const isSel = i === selected;
@@ -248,7 +341,7 @@ function LegacyScreenScenarios({ setScreen }) {
                 <tr><th></th><th>Scenario</th><th className="num">Sens</th><th className="num">Spec</th><th className="num">$/case</th><th className="num">TAT</th></tr>
               </thead>
               <tbody>
-                {scenarios.map((s, i) => (
+                {(scenarios.length ? scenarios : []).map((s, i) => (
                   <tr key={s.id} onClick={() => setSelected(i)}
                     style={{cursor:"pointer", background: i === selected ? "var(--sme-orange-050)" : undefined}}>
                     <td>
@@ -342,7 +435,7 @@ function LegacyScreenScenarios({ setScreen }) {
 function ScreenScenarios({ setScreen }) {
   const [selected, setSelected] = useState(0);
   const [sortKey, setSortKey] = useState("expected_cost_population");
-  const optimization = window.OptiDxOptimizationResults;
+  const optimization = useOptimizationRunState();
   const scenarios = window.OptiDxOptimizationScenarios?.length
     ? window.OptiDxOptimizationScenarios
     : window.OptiDxActions.buildOptimizationScenarios?.(optimization) || [];
@@ -361,6 +454,95 @@ function ScreenScenarios({ setScreen }) {
   const timeLabel = optimization?.run_ms
     ? `${(optimization.run_ms / 1000).toFixed(1)}s`
     : optimization ? "completed just now" : "n/a";
+  const isRunning = ['queued', 'running'].includes(String(optimization?.status || '').toLowerCase());
+
+  if (isRunning && !scenarios.length) {
+    return (
+      <>
+        <TopBar
+          crumbs={["OptiDx","TB Community Screening","Optimization scenarios"]}
+          actions={<>
+            <button className="btn" onClick={() => setScreen("wizard")}>
+              <Icon name="arrow-left"/>Back to setup
+            </button>
+          </>}
+        />
+        <div className="page" style={{maxWidth:1280}}>
+          <div className="card card--pad" style={{borderLeft:"3px solid var(--sme-orange)"}}>
+            <div className="row" style={{marginBottom:10}}>
+              <div>
+                <div className="u-meta">Background run</div>
+                <h1 style={{fontSize:22, marginTop:4}}>The optimization is still running</h1>
+              </div>
+              <div className="spacer"/>
+              <span className="chip chip--orange">{String(optimization?.run_mode || "light").toUpperCase()}</span>
+            </div>
+            <div className="optimization-progress" aria-label="Optimization progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(optimization?.progress_percent || 0)}>
+              <div className="optimization-progress__bar is-running" style={{width:`${optimization?.progress_percent ?? 0}%`}} />
+            </div>
+            <div className="optimization-progress__meta">
+              <span>{optimization?.progress_stage || optimization?.status || "Running"}</span>
+              <span>{formatOptimizationProgress(optimization?.progress_percent ?? 0)}</span>
+            </div>
+            {optimization?.progress_message && (
+              <p style={{marginTop:8, color:"var(--fg-2)", fontSize:13, lineHeight:1.5}}>{optimization.progress_message}</p>
+            )}
+            <p style={{marginTop:8, color:"var(--fg-3)", fontSize:12}}>
+              Extensive runs continue in the background and will email the launching user when they finish.
+            </p>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  if (!scenarios.length) {
+    const statusTitle = optimization?.status === 'infeasible'
+      ? 'No feasible pathway was found'
+      : optimization?.status === 'no_feasible_found_time_limit'
+        ? 'The search timed out before finding a feasible pathway'
+        : 'No optimization scenarios are available yet';
+    const statusMessage = optimization?.message
+      || optimization?.failure_reason
+      || (optimization?.status === 'infeasible'
+        ? 'No pathway can fulfil the selected constraints.'
+        : optimization?.status === 'no_feasible_found_time_limit'
+          ? 'No feasible pathway was found within the time limit. Because the search was not exhaustive, the system cannot claim that no feasible pathway exists.'
+          : 'Run the optimizer to populate the named scenario buckets and the sortable feasible-candidate table.');
+
+    return (
+      <>
+        <TopBar
+          crumbs={["OptiDx","TB Community Screening","Optimization scenarios"]}
+          actions={<>
+            <button className="btn" onClick={() => setScreen("wizard")}>
+              <Icon name="arrow-left"/>Back to setup
+            </button>
+          </>}
+        />
+        <div className="page" style={{maxWidth:1280}}>
+          <div className="card card--pad" style={{borderLeft:"3px solid var(--sme-orange)"}}>
+            <div className="row" style={{marginBottom:10}}>
+              <div>
+                <div className="u-meta">Optimization result</div>
+                <h1 style={{fontSize:22, marginTop:4}}>{statusTitle}</h1>
+              </div>
+              <div className="spacer"/>
+              <span className="chip chip--orange">{String(optimization?.run_mode || "light").toUpperCase()}</span>
+            </div>
+            <p style={{color:"var(--fg-2)", lineHeight:1.55, fontSize:13, marginBottom:12}}>
+              {statusMessage}
+            </p>
+            <div className="row" style={{justifyContent:"flex-end"}}>
+              <button className="btn btn--primary" onClick={() => setScreen("wizard")}>
+                Back to setup
+              </button>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   const sortableCandidates = [...candidates].sort((left, right) => {
     const leftMetrics = left?.metrics || {};

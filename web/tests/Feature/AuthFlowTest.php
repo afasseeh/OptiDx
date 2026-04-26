@@ -54,7 +54,7 @@ class AuthFlowTest extends TestCase
         $this->assertTrue(Hash::check('password123', $user->password));
         $this->assertNull($user->email_verified_at);
 
-        Notification::assertSentTo($user, VerifyEmailNotification::class);
+        Notification::assertSentToTimes($user, VerifyEmailNotification::class, 1);
     }
 
     public function test_login_rejects_unverified_accounts_and_resends_verification_email(): void

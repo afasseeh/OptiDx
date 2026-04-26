@@ -44,6 +44,12 @@ function dispatchWorkspaceEvent() {
   }));
 }
 
+function dispatchOptimizationEvent() {
+  window.dispatchEvent(new CustomEvent('optidx-optimization-updated', {
+    detail: window.OptiDxOptimizationResults || null,
+  }));
+}
+
 const ACTIVE_PROJECT_STORAGE_KEY = 'optidx.active-project-id';
 
 function dispatchAuthEvent(detail = null, type = 'optidx-auth-updated') {
@@ -117,6 +123,11 @@ function clearWorkspaceState(options = {}) {
   window.OptiDxLatestEvaluationPathway = null;
   window.OptiDxOptimizationResults = null;
   window.OptiDxOptimizationScenarios = null;
+  window.OptiDxOptimizationRun = null;
+  if (window.OptiDxOptimizationRunTimer) {
+    window.clearInterval(window.OptiDxOptimizationRunTimer);
+    window.OptiDxOptimizationRunTimer = null;
+  }
   window.OptiDxWizardStep = 0;
   window.SEED_PROJECTS = [];
   window.SEED_PATHWAYS = [];
@@ -204,13 +215,40 @@ function normalizeProjectRecord(project) {
   };
 }
 
-function formatProjectPercent(value, fallback = '') {
+function normalizePrevalenceFraction(value) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) {
+    return null;
+  }
+
+  if (numeric < 0) {
+    return null;
+  }
+
+  let normalized = numeric;
+  while (normalized > 1) {
+    normalized /= 100;
+  }
+
+  return normalized;
+}
+
+function normalizePrevalencePercent(value) {
+  const fraction = normalizePrevalenceFraction(value);
+  if (!Number.isFinite(fraction)) {
+    return null;
+  }
+
+  return fraction * 100;
+}
+
+function formatProjectPercent(value, fallback = '') {
+  const percent = normalizePrevalencePercent(value);
+  if (!Number.isFinite(percent)) {
     return fallback;
   }
 
-  return Number.parseFloat((numeric * 100).toFixed(1)).toString();
+  return Number.parseFloat(percent.toFixed(1)).toString();
 }
 
 function formatProjectDecimal(value, fallback = '') {
@@ -464,7 +502,7 @@ function buildProjectPayloadFromWizard(wizardState = {}, currentRecord = null) {
   const parsedMinimumSpecificity = Number.parseFloat(normalized.minSpecificity);
   const parsedMaximumCost = Number.parseFloat(normalized.maxCostPerPatientUsd);
   const parsedMaximumTat = Number.parseFloat(normalized.maxTurnaroundTimeHours);
-  const parsedPrevalence = Number.parseFloat(normalized.prevalence);
+  const parsedPrevalenceFraction = normalizePrevalenceFraction(normalized.prevalence);
   const metadata = normalizeProjectMetadata({
     ...(currentRecord?.metadata || {}),
     ...(wizardState?.metadata || {}),
@@ -491,7 +529,7 @@ function buildProjectPayloadFromWizard(wizardState = {}, currentRecord = null) {
     clinical_context: normalized.clinicalContext,
     condition_name: normalized.conditionName,
     target_population: normalized.targetPopulation,
-    prevalence: Number.isFinite(parsedPrevalence) ? parsedPrevalence : null,
+    prevalence: Number.isFinite(parsedPrevalenceFraction) ? parsedPrevalenceFraction : null,
   });
 
   return {
@@ -499,8 +537,8 @@ function buildProjectPayloadFromWizard(wizardState = {}, currentRecord = null) {
     disease_area: normalized.conditionName || null,
     intended_use: normalized.objective || null,
     target_population: normalized.targetPopulation || null,
-    prevalence: Number.isFinite(parsedPrevalence)
-      ? parsedPrevalence / 100
+    prevalence: Number.isFinite(parsedPrevalenceFraction)
+      ? parsedPrevalenceFraction
       : null,
     country: currentRecord?.country ?? null,
     setting: normalized.clinicalContext || null,
@@ -2198,6 +2236,10 @@ function buildOptimizationScenarios(result) {
   const prevalence = Number(result?.constraints?.prevalence ?? result?.prevalence ?? NaN);
   const resolvedPrevalence = Number.isFinite(prevalence) ? prevalence : null;
 
+  if (['queued', 'running'].includes(String(result?.status || '').toLowerCase())) {
+    return [];
+  }
+
   if (selectedOutputs) {
     return Object.entries(selectedOutputs).map(([key, entry], index) => buildScenarioFromSelectedOutput(key, entry, {
       ...result,
@@ -2261,25 +2303,115 @@ async function fetchOptimizationRun(runId) {
   return request('get', `/api/optimization-runs/${runId}`);
 }
 
-async function waitForOptimizationRun(runId, { intervalMs = 1000, timeoutMs = 600000 } = {}) {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
+function applyOptimizationRunState(run) {
+  const normalizedRun = run && typeof run === 'object' ? { ...run } : null;
+  window.OptiDxOptimizationRun = normalizedRun;
+  window.OptiDxOptimizationResults = normalizedRun
+    ? {
+        ...normalizedRun,
+        candidate_count: normalizedRun?.feasible_candidate_count ?? normalizedRun?.candidate_count ?? 0,
+        feasible_count: normalizedRun?.feasible_candidate_count ?? normalizedRun?.feasible_count ?? 0,
+      }
+    : null;
+  window.OptiDxOptimizationScenarios = buildOptimizationScenarios(window.OptiDxOptimizationResults);
+  dispatchOptimizationEvent();
+  return window.OptiDxOptimizationResults;
+}
+
+function stopOptimizationRunWatcher() {
+  if (window.OptiDxOptimizationRunTimer) {
+    window.clearInterval(window.OptiDxOptimizationRunTimer);
+    window.OptiDxOptimizationRunTimer = null;
+  }
+}
+
+function watchOptimizationRun(runId, { intervalMs = 2000, onUpdate } = {}) {
+  stopOptimizationRunWatcher();
+  const tick = async () => {
     const run = await fetchOptimizationRun(runId);
-    if (!['queued', 'running'].includes(run?.status)) {
-      return run;
+    const state = applyOptimizationRunState(run);
+    if (typeof onUpdate === 'function') {
+      onUpdate(state);
+    }
+
+    if (!['queued', 'running'].includes(String(state?.status || '').toLowerCase())) {
+      stopOptimizationRunWatcher();
+      return false;
+    }
+
+    return true;
+  };
+
+  const timer = window.setInterval(() => {
+    void tick().catch(() => {});
+  }, intervalMs);
+  window.OptiDxOptimizationRunTimer = timer;
+  void tick().catch(() => {});
+  return timer;
+}
+
+async function waitForOptimizationRun(runId, { intervalMs = 1000, timeoutMs = 420000, onUpdate } = {}) {
+  const startedAt = Date.now();
+  let lastState = null;
+  while (timeoutMs == null || Date.now() - startedAt < timeoutMs) {
+    const run = await fetchOptimizationRun(runId);
+    const state = applyOptimizationRunState(run);
+    lastState = state;
+    if (typeof onUpdate === 'function') {
+      onUpdate(state);
+    }
+    if (!['queued', 'running'].includes(state?.status)) {
+      return state;
     }
     await new Promise(resolve => window.setTimeout(resolve, intervalMs));
   }
 
-  throw new Error('Timed out while waiting for the optimization run to finish.');
+  return {
+    ...(lastState || {}),
+    wait_timed_out: true,
+  };
 }
 
-async function optimizePathways(payload) {
+async function optimizePathways(payload, options = {}) {
   const response = await request('post', '/api/pathways/optimize', payload);
+  const runMode = String(payload?.run_mode || response?.run_mode || 'light').toLowerCase();
+  const shouldWaitForCompletion = options.waitForCompletion ?? runMode !== 'extensive';
   let run = response;
 
+  applyOptimizationRunState(response);
+
   if (['queued', 'running'].includes(response?.status)) {
-    run = await waitForOptimizationRun(response.id);
+    if (shouldWaitForCompletion) {
+      run = await waitForOptimizationRun(response.id, {
+        timeoutMs: runMode === 'extensive' ? null : 420000,
+        onUpdate: applyOptimizationRunState,
+      });
+      if (run?.wait_timed_out && ['queued', 'running'].includes(String(run?.status || '').toLowerCase())) {
+        watchOptimizationRun(response.id);
+        window.OptiDxOptimizationRun = run;
+        window.OptiDxOptimizationResults = {
+          ...run,
+          candidate_count: run?.feasible_candidate_count ?? run?.candidate_count ?? 0,
+          feasible_count: run?.feasible_candidate_count ?? run?.feasible_count ?? 0,
+        };
+        window.OptiDxOptimizationScenarios = buildOptimizationScenarios(window.OptiDxOptimizationResults);
+        dispatchOptimizationEvent();
+        showToast('The light optimization is still running in the background. We will keep updating the run status.', 'info');
+        return window.OptiDxOptimizationResults;
+      }
+    } else {
+      watchOptimizationRun(response.id);
+      window.OptiDxOptimizationRun = response;
+      window.OptiDxOptimizationResults = {
+        ...response,
+        candidate_count: response?.feasible_candidate_count ?? response?.candidate_count ?? 0,
+        feasible_count: response?.feasible_candidate_count ?? response?.feasible_count ?? 0,
+      };
+      window.OptiDxOptimizationScenarios = buildOptimizationScenarios(window.OptiDxOptimizationResults);
+      dispatchOptimizationEvent();
+      showToast('Extensive optimization is running in the background. We will email you when it finishes.', 'info');
+      return window.OptiDxOptimizationResults;
+    }
   }
 
   const selectedOutputs = run?.result_payload?.selected_outputs || run?.selected_outputs || null;
@@ -2310,9 +2442,15 @@ async function optimizePathways(payload) {
     prevalence: payload?.constraints?.prevalence ?? payload?.prevalence ?? null,
   };
   window.OptiDxOptimizationScenarios = buildOptimizationScenarios(run.result_payload || run);
+  dispatchOptimizationEvent();
 
   const completionLabel = run?.result_payload?.status || run?.status || 'success';
-  showToast(`Optimization finished with status "${completionLabel}"`, completionLabel === 'failed' ? 'error' : 'success');
+  if (completionLabel === 'failed') {
+    showToast(run?.result_payload?.message || run?.failure_reason || 'Optimization failed.', 'error');
+  } else if (completionLabel === 'success') {
+    showToast('Optimization finished and the scenarios are ready to review.', 'success');
+  }
+
   return run.result_payload || run;
 }
 

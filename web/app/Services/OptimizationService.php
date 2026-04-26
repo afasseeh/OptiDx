@@ -2,7 +2,11 @@
 
 namespace App\Services;
 
+use App\Models\User;
+use App\Models\DiagnosticTest;
 use App\Models\OptimizationRun;
+use App\Notifications\OptimizationRunCompletedNotification;
+use Illuminate\Support\Facades\Notification;
 
 class OptimizationService
 {
@@ -11,23 +15,69 @@ class OptimizationService
     ) {
     }
 
-    public function prepareRunPayload(array $tests, array $constraints = [], array $searchConfig = []): array
+    public function prepareRunPayload(array $tests, array $constraints = [], array $searchConfig = [], ?string $runMode = null): array
     {
+        $resolvedRunMode = $this->normalizeRunMode($runMode ?? $constraints['run_mode'] ?? 'light');
+
         return [
             'tests' => $this->normalizeTests($tests),
             'constraints' => $this->normalizeConstraints($constraints),
-            'search_config' => $this->normalizeSearchConfig($searchConfig),
+            'search_config' => $this->normalizeSearchConfig($searchConfig, $resolvedRunMode),
+            'run_mode' => $resolvedRunMode,
         ];
     }
 
-    public function optimize(array $tests, array $constraints = [], ?float $prevalence = null, array $searchConfig = []): array
+    public function optimize(array $tests, array $constraints = [], ?float $prevalence = null, array $searchConfig = [], ?string $runMode = null): array
     {
         $payload = $this->prepareRunPayload($tests, [
             ...$constraints,
             'prevalence' => $prevalence ?? $constraints['prevalence'] ?? null,
-        ], $searchConfig);
+        ], $searchConfig, $runMode);
 
         return $this->bridge->optimize($payload);
+    }
+
+    public function workspaceOptimizationTests(?int $userId, ?int $projectId = null): array
+    {
+        if (! $userId) {
+            return [];
+        }
+
+        $query = DiagnosticTest::query()->where('created_by', $userId);
+        if ($projectId) {
+            $query->where(function ($builder) use ($projectId): void {
+                $builder->whereNull('project_id')->orWhere('project_id', $projectId);
+            });
+        }
+
+        return $query
+            ->latest('id')
+            ->get()
+            ->map(fn (DiagnosticTest $test) => $test->toArray())
+            ->all();
+    }
+
+    public function optimizeRun(OptimizationRun $run, ?callable $progressCallback = null): array
+    {
+        $payload = $run->input_payload ?? [];
+
+        return $this->bridge->optimize($payload, function (array $snapshot) use ($run, $progressCallback): void {
+            $this->recordRunProgress($run, $snapshot);
+
+            if ($progressCallback) {
+                $progressCallback($snapshot);
+            }
+        });
+    }
+
+    public function runOptimizationRun(OptimizationRun $run, ?callable $progressCallback = null): OptimizationRun
+    {
+        $this->recordRunStart($run);
+        $result = $this->optimizeRun($run, $progressCallback);
+        $updatedRun = $this->recordRunResult($run, $result);
+        $this->notifyCompletionIfNeeded($updatedRun);
+
+        return $updatedRun;
     }
 
     public function normalizeConstraints(array $constraints): array
@@ -41,7 +91,7 @@ class OptimizationService
         $roleFlags = $this->normalizeRoleFlags($constraints);
 
         return [
-            'prevalence' => (float) $prevalence,
+            'prevalence' => $this->normalizePrevalence($prevalence),
             'min_sensitivity' => (float) ($constraints['min_sensitivity'] ?? $constraints['minimum_sensitivity'] ?? 0.0),
             'min_specificity' => (float) ($constraints['min_specificity'] ?? $constraints['minimum_specificity'] ?? 0.0),
             'max_cost_per_patient_usd' => $this->numberOrNull($constraints['max_cost_per_patient_usd'] ?? $constraints['maximum_total_cost'] ?? $constraints['max_expected_cost'] ?? null),
@@ -63,17 +113,9 @@ class OptimizationService
         ];
     }
 
-    public function normalizeSearchConfig(array $searchConfig): array
+    public function normalizeSearchConfig(array $searchConfig, ?string $runMode = null): array
     {
-        return [
-            'max_stages' => max(1, (int) ($searchConfig['max_stages'] ?? 4)),
-            'max_tests_per_realized_path' => max(1, (int) ($searchConfig['max_tests_per_realized_path'] ?? $searchConfig['max_invocations_per_path'] ?? 6)),
-            'max_parallel_block_size' => max(1, (int) ($searchConfig['max_parallel_block_size'] ?? 3)),
-            'max_candidates' => max(1, (int) ($searchConfig['max_candidates'] ?? 5000)),
-            'time_limit_seconds' => max(1, (int) ($searchConfig['time_limit_seconds'] ?? 900)),
-            'allow_repeated_test' => (bool) ($searchConfig['allow_repeated_test'] ?? true),
-            'allow_same_test_in_different_branches' => (bool) ($searchConfig['allow_same_test_in_different_branches'] ?? true),
-        ];
+        return $this->applySearchModePreset($searchConfig, $this->normalizeRunMode($runMode ?? $searchConfig['run_mode'] ?? 'light'));
     }
 
     public function normalizeTests(array $tests): array
@@ -101,6 +143,31 @@ class OptimizationService
             'status' => 'running',
             'started_at' => now(),
             'failure_reason' => null,
+            'progress_percent' => 0,
+            'progress_stage' => 'starting',
+            'progress_message' => 'Optimization run is starting.',
+            'progress_payload' => [
+                'expanded_count' => 0,
+                'completed_count' => 0,
+                'pruned_count' => 0,
+                'frontier_size' => 0,
+                'queue_size' => 0,
+                'elapsed_seconds' => 0.0,
+                'search_exhaustive' => false,
+            ],
+        ]);
+        $run->save();
+
+        return $run->refresh();
+    }
+
+    public function recordRunProgress(OptimizationRun $run, array $progress): OptimizationRun
+    {
+        $run->fill([
+            'progress_percent' => $this->clampProgressPercent($progress['progress_percent'] ?? null),
+            'progress_stage' => (string) ($progress['stage'] ?? $run->progress_stage ?? 'searching'),
+            'progress_message' => (string) ($progress['message'] ?? $run->progress_message ?? ''),
+            'progress_payload' => $progress['progress_payload'] ?? $progress,
         ]);
         $run->save();
 
@@ -117,8 +184,20 @@ class OptimizationService
             'search_exhaustive' => (bool) ($result['search_exhaustive'] ?? false),
             'candidate_count' => (int) ($result['candidate_count'] ?? 0),
             'feasible_count' => (int) ($result['feasible_candidate_count'] ?? 0),
+            'progress_percent' => 100,
+            'progress_stage' => 'finalizing outputs',
+            'progress_message' => $result['message'] ?? 'Optimization run completed.',
+            'progress_payload' => array_merge($run->progress_payload ?? [], [
+                'expanded_count' => (int) ($result['search_summary']['expanded_count'] ?? ($run->progress_payload['expanded_count'] ?? 0)),
+                'completed_count' => (int) ($result['search_summary']['completed_count'] ?? ($run->progress_payload['completed_count'] ?? 0)),
+                'pruned_count' => (int) ($result['search_summary']['pruned_count'] ?? ($run->progress_payload['pruned_count'] ?? 0)),
+                'frontier_size' => (int) ($result['search_summary']['frontier_size'] ?? ($run->progress_payload['frontier_size'] ?? 0)),
+                'queue_size' => 0,
+                'elapsed_seconds' => (float) ($result['search_summary']['time_seconds'] ?? ($run->progress_payload['elapsed_seconds'] ?? 0)),
+                'search_exhaustive' => (bool) ($result['search_exhaustive'] ?? false),
+            ]),
             'warnings' => $warnings,
-            'failure_reason' => $result['message'] ?? null,
+            'failure_reason' => $status === 'failed' ? ($result['message'] ?? null) : null,
             'completed_at' => now(),
             'result_payload' => $result,
         ]);
@@ -133,6 +212,8 @@ class OptimizationService
             'status' => 'failed',
             'completed_at' => now(),
             'failure_reason' => $error->getMessage(),
+            'progress_stage' => 'failed',
+            'progress_message' => $error->getMessage(),
             'warnings' => array_values(array_filter(array_merge(
                 $run->warnings ?? [],
                 ['Optimization failed: ' . $error->getMessage()]
@@ -141,6 +222,25 @@ class OptimizationService
         $run->save();
 
         return $run->refresh();
+    }
+
+    public function notifyCompletionIfNeeded(OptimizationRun $run): void
+    {
+        if (($run->run_mode ?? 'light') !== 'extensive') {
+            return;
+        }
+
+        if ($run->notified_at) {
+            return;
+        }
+
+        $user = $run->user;
+        if (! $user instanceof User) {
+            return;
+        }
+
+        Notification::send($user, new OptimizationRunCompletedNotification($run));
+        $run->forceFill(['notified_at' => now()])->save();
     }
 
     private function normalizeTestRecord(string|int $resolvedKey, array $test): array
@@ -179,12 +279,18 @@ class OptimizationService
     private function resolveTestId(mixed $key, array $test): ?string
     {
         $resolved = $test['id'] ?? $test['name'] ?? null;
-        if (is_string($resolved) && $resolved !== '') {
-            return $resolved;
+        if (is_scalar($resolved)) {
+            $resolvedString = trim((string) $resolved);
+            if ($resolvedString !== '') {
+                return $resolvedString;
+            }
         }
 
-        if (is_string($key) && $key !== '') {
-            return $key;
+        if (is_scalar($key)) {
+            $keyString = trim((string) $key);
+            if ($keyString !== '') {
+                return $keyString;
+            }
         }
 
         return null;
@@ -301,6 +407,55 @@ class OptimizationService
         return ['lab_technician' => false, 'radiologist' => false, 'specialist_physician' => true];
     }
 
+    private function normalizeRunMode(mixed $runMode): string
+    {
+        $value = strtolower(trim((string) ($runMode ?? 'light')));
+        return in_array($value, ['light', 'extensive'], true) ? $value : 'light';
+    }
+
+    private function applySearchModePreset(array $searchConfig, string $runMode): array
+    {
+        $preset = $runMode === 'extensive'
+            ? [
+                'max_stages' => 4,
+                'max_tests_per_realized_path' => 6,
+                'max_parallel_block_size' => 3,
+                'max_candidates' => 20000,
+                'time_limit_seconds' => 14400,
+                'allow_repeated_test' => true,
+                'allow_same_test_in_different_branches' => true,
+            ]
+            : [
+                'max_stages' => 3,
+                'max_tests_per_realized_path' => 4,
+                'max_parallel_block_size' => 2,
+                'max_candidates' => 1500,
+                'time_limit_seconds' => 300,
+                'allow_repeated_test' => true,
+                'allow_same_test_in_different_branches' => true,
+            ];
+
+        return array_merge($searchConfig, $preset, [
+            'max_stages' => $preset['max_stages'],
+            'max_tests_per_realized_path' => $preset['max_tests_per_realized_path'],
+            'max_parallel_block_size' => $preset['max_parallel_block_size'],
+            'max_candidates' => $preset['max_candidates'],
+            'time_limit_seconds' => $preset['time_limit_seconds'],
+            'allow_repeated_test' => $preset['allow_repeated_test'],
+            'allow_same_test_in_different_branches' => $preset['allow_same_test_in_different_branches'],
+        ]);
+    }
+
+    private function clampProgressPercent(mixed $value): ?int
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        $numeric = (int) round((float) $value);
+        return max(0, min(100, $numeric));
+    }
+
     private function containsAny(array $haystack, array $needles): bool
     {
         foreach ($needles as $needle) {
@@ -344,5 +499,23 @@ class OptimizationService
         }
 
         return is_numeric($value) ? (float) $value : null;
+    }
+
+    private function normalizePrevalence(mixed $value): float
+    {
+        if (! is_numeric($value)) {
+            throw new \InvalidArgumentException('Prevalence must be numeric.');
+        }
+
+        $normalized = (float) $value;
+        if ($normalized < 0) {
+            throw new \InvalidArgumentException('Prevalence must be non-negative.');
+        }
+
+        while ($normalized > 1) {
+            $normalized /= 100;
+        }
+
+        return $normalized;
     }
 }

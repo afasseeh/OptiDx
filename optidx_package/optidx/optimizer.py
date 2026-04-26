@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import heapq
 from time import monotonic
-from typing import Any, Dict, Iterable, List, Mapping
+from typing import Any, Callable, Dict, Iterable, List, Mapping
 
 from .constraints import (
     normalize_project_constraints,
@@ -39,6 +39,7 @@ def optimize_pathways(
     tests: Mapping[str, Dict[str, Any]] | List[Dict[str, Any]],
     constraints: Mapping[str, Any],
     search_config: Mapping[str, Any] | None = None,
+    progress_callback: Callable[[Dict[str, Any]], None] | None = None,
 ) -> Dict[str, Any]:
     started_at = monotonic()
     normalized_constraints = normalize_project_constraints(constraints)
@@ -59,6 +60,21 @@ def optimize_pathways(
         for test_id, tool in normalized_tests.items()
         if tool_allowed(tool, normalized_constraints)
     }
+    _emit_progress(progress_callback, {
+        'type': 'progress',
+        'stage': 'prefiltering',
+        'progress_percent': 4,
+        'message': f'Prefiltered {len(filtered_tests)} of {len(normalized_tests)} tests.',
+        'progress_payload': {
+            'expanded_count': 0,
+            'completed_count': 0,
+            'pruned_count': 0,
+            'frontier_size': 0,
+            'queue_size': 1,
+            'elapsed_seconds': round(monotonic() - started_at, 3),
+            'search_exhaustive': True,
+        },
+    })
     for test_id, tool in normalized_tests.items():
         if test_id not in filtered_tests:
             _count_tool_rejections(tool, normalized_constraints, rejection_summary)
@@ -170,6 +186,19 @@ def optimize_pathways(
             sequence += 1
 
         expanded_count += 1
+        if expanded_count % 8 == 0 or completed_count > 0 and completed_count % 4 == 0:
+            _emit_progress(progress_callback, _progress_snapshot(
+                stage='searching',
+                started_at=started_at,
+                search_exhaustive=search_exhaustive,
+                expanded_count=expanded_count,
+                completed_count=completed_count,
+                pruned_count=pruned_count,
+                frontier_size=len(frontier),
+                queue_size=len(queue),
+                message=f'Expanded {expanded_count} partial pathways and completed {completed_count} feasible candidates.',
+                base_percent=18,
+            ))
 
     selected_outputs = _select_outputs(frontier)
     frontier_payload = [_candidate_to_payload(candidate) for candidate in frontier]
@@ -219,6 +248,20 @@ def optimize_pathways(
         result['message'] = message
     if status != 'success':
         result['rejection_summary'] = rejection_summary
+
+    _emit_progress(progress_callback, _progress_snapshot(
+        stage='finalizing outputs',
+        started_at=started_at,
+        search_exhaustive=search_exhaustive,
+        expanded_count=expanded_count,
+        completed_count=completed_count,
+        pruned_count=pruned_count,
+        frontier_size=len(frontier),
+        queue_size=0,
+        message=result.get('message') or 'Optimization run completed.',
+        base_percent=100,
+        terminal=True,
+    ))
     return result
 
 
@@ -557,3 +600,46 @@ def _dedupe_strings(items: Iterable[str]) -> List[str]:
             continue
         deduped.append(item)
     return deduped
+
+
+def _progress_snapshot(
+    *,
+    stage: str,
+    started_at: float,
+    search_exhaustive: bool,
+    expanded_count: int,
+    completed_count: int,
+    pruned_count: int,
+    frontier_size: int,
+    queue_size: int,
+    message: str,
+    base_percent: int,
+    terminal: bool = False,
+) -> Dict[str, Any]:
+    elapsed = max(0.0, monotonic() - started_at)
+    work_done = expanded_count + completed_count + pruned_count
+    estimated_total = max(work_done + max(queue_size, 1) + 25, 30)
+    dynamic_percent = int(round((work_done / estimated_total) * 90)) if estimated_total else 0
+    progress_percent = 100 if terminal else min(99, max(base_percent, dynamic_percent))
+
+    return {
+        'type': 'progress',
+        'stage': stage,
+        'progress_percent': progress_percent,
+        'message': message,
+        'progress_payload': {
+            'expanded_count': expanded_count,
+            'completed_count': completed_count,
+            'pruned_count': pruned_count,
+            'frontier_size': frontier_size,
+            'queue_size': queue_size,
+            'elapsed_seconds': round(elapsed, 3),
+            'search_exhaustive': search_exhaustive,
+        },
+    }
+
+
+def _emit_progress(progress_callback: Callable[[Dict[str, Any]], None] | None, payload: Dict[str, Any]) -> None:
+    if not progress_callback:
+        return
+    progress_callback(payload)

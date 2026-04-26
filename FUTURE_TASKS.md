@@ -59,8 +59,8 @@
 ## 8. Shared test-schema normalization
 
 - **Context:** The wizard still emits UI-oriented test records (`sens`, `spec`, `tat`, `sample`, `skill`) while the Python engine consumes canonical fields (`sensitivity`, `specificity`, `turnaround_time`, `sample_types`, `skill_level`).
-- **Limitation:** The backend currently performs the translation inside `OptimizationService`, which keeps the run stable but duplicates schema knowledge that also exists in the browser seed data.
-- **Improvement:** Extract a shared test-schema adapter so the frontend and backend use the same canonical mapping rules for seed data, imported libraries, and optimization payloads.
+- **Limitation:** The backend currently performs the translation inside `OptimizationService`, which keeps the run stable but duplicates schema knowledge that also exists in the browser seed data. Numeric persisted ids and prevalence scaling rules have already shown that browser and backend adapters can drift in subtle ways.
+- **Improvement:** Extract a shared test-schema and constraint adapter so the frontend and backend use the same canonical mapping rules for seed data, imported libraries, optimization payloads, numeric database ids, and prevalence normalization.
 - **Benefit:** Reduces drift between UI fixtures and backend contracts and makes future optimizer inputs easier to validate.
 - **Priority:** Medium
 
@@ -212,4 +212,20 @@
 - **Limitation:** The app still ships one large main JavaScript chunk, which increases first-load cost and makes future UI additions more likely to regress bundle size further.
 - **Improvement:** Introduce route-level or screen-level dynamic imports and, if needed, explicit Rollup manual chunking for the optimizer/scenario surfaces.
 - **Benefit:** Reduces initial download size and keeps the browser shell responsive as the product grows.
+- **Priority:** Medium
+
+## 26. Verification-mail transport hardening
+
+- **Context:** Registration now relies on the framework's built-in `Registered` event listener for the initial verification email, which avoids duplicate notification sends.
+- **Limitation:** If the SMTP transport or recipient suppression list rejects a verification message, the registration controller still depends on that send path succeeding synchronously.
+- **Improvement:** Add explicit notification error handling and a retry/fallback path for registration and resend flows so account creation can complete even when mail delivery is temporarily unavailable.
+- **Benefit:** Prevents external mail-provider failures from surfacing as opaque registration errors and gives support a clearer recovery path.
+- **Priority:** Medium
+
+## 27. Optimization progress calibration and run detail view
+
+- **Context:** The optimizer now streams live progress snapshots from Python into `optimization_runs` and the browser renders those backend values directly.
+- **Limitation:** The progress percent is still an estimated score derived from search counters and configured budgets, and there is no dedicated run-detail screen for inspecting the full progress history or notification history of a long extensive run.
+- **Improvement:** Add a richer run history view, store progress snapshots as a small append-only audit trail, and refine the percent estimator once real large-catalog runs have been measured in production.
+- **Benefit:** Gives users a clearer audit trail for long-running optimization work and makes the visible progress bar more trustworthy over time.
 - **Priority:** Medium

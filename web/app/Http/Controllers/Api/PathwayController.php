@@ -15,6 +15,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\File;
 use Illuminate\Validation\Rule;
+use Symfony\Component\Process\Process;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class PathwayController extends Controller
@@ -200,9 +201,10 @@ class PathwayController extends Controller
                 'integer',
                 Rule::exists('projects', 'id')->where(fn ($query) => $query->where('created_by', $userId)),
             ],
-            'tests' => ['required', 'array'],
+            'tests' => ['present', 'array'],
             'constraints' => ['nullable', 'array'],
             'search_config' => ['nullable', 'array'],
+            'run_mode' => ['required', Rule::in(['light', 'extensive'])],
             'prevalence' => ['nullable', 'numeric', 'between:0,1'],
         ]);
 
@@ -211,14 +213,27 @@ class PathwayController extends Controller
             array_key_exists('prevalence', $payload) ? ['prevalence' => $payload['prevalence']] : []
         );
 
+        $tests = $payload['tests'];
+        if ($tests === [] && $userId) {
+            $tests = $this->optimizer->workspaceOptimizationTests($userId, $payload['project_id'] ?? null);
+        }
+
         $normalizedPayload = $this->optimizer->prepareRunPayload(
-            $payload['tests'],
+            $tests,
             $constraints,
-            $payload['search_config'] ?? []
+            $payload['search_config'] ?? [],
+            $payload['run_mode'],
         );
+
+        if (($normalizedPayload['tests'] ?? []) === []) {
+            return response()->json([
+                'message' => 'Add at least one diagnostic test before running the optimization.',
+            ], 422);
+        }
 
         $run = OptimizationRun::create([
             'project_id' => $payload['project_id'] ?? null,
+            'run_mode' => $payload['run_mode'],
             'status' => 'queued',
             'input_payload' => $normalizedPayload,
             'constraints' => $normalizedPayload['constraints'],
@@ -226,7 +241,23 @@ class PathwayController extends Controller
             'search_exhaustive' => false,
         ]);
 
-        ExecuteOptimizationRun::dispatch($run->id);
+        if ($payload['run_mode'] === 'light' && ! app()->runningUnitTests()) {
+            $this->bridge->ensureWritableProcessTempDirectory();
+            $optimizerService = $this->optimizer;
+            $optimizerService->recordRunStart($run);
+
+            $process = new Process([
+                $this->bridge->resolvePhpCliBinary(),
+                base_path('artisan'),
+                'optidx:run-optimization',
+                (string) $run->id,
+            ], base_path());
+            $process->setTimeout(null);
+            $process->disableOutput();
+            $process->start();
+        } else {
+            ExecuteOptimizationRun::dispatch($run->id);
+        }
 
         return response()->json($run->fresh(), 202);
     }

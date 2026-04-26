@@ -181,8 +181,10 @@ class AuthController extends Controller
             'timezone' => $data['timezone'] ?? config('app.timezone'),
         ]);
 
+        // The framework's Registered event already triggers the built-in
+        // email-verification listener for MustVerifyEmail users, so we only
+        // need to create the account and dispatch the event once here.
         event(new Registered($user));
-        $user->sendEmailVerificationNotification();
 
         return response()->json([
             'message' => 'Account created. Check your inbox to verify your email address.',

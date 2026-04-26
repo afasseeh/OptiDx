@@ -1,5 +1,68 @@
 # Change Log
 
+## 2026-04-27 - Fix false infeasible optimization runs from malformed wizard payloads
+
+- Summary: Fixed the optimization launch path so persisted workspace tests with numeric database ids are no longer dropped during backend normalization, prevalence values are defensively rescaled back into fractions on both the browser and Laravel sides, light runs now carry the active project id into the run record, and infeasible/time-limit completions no longer flash a transient toast over the scenarios screen.
+- Files or modules affected: `web/resources/js/optidx/components/ScreenWizard.jsx`, `web/resources/js/optidx/actions.js`, `web/app/Http/Controllers/Api/PathwayController.php`, `web/app/Services/OptimizationService.php`, `web/tests/Unit/OptimizationServiceTest.php`, `web/tests/Feature/PathwayApiTest.php`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: Feasible optimizer runs were being reported as infeasible because the request path could submit an empty effective catalog and an over-scaled prevalence value, especially when the library contained persisted evidence tests with numeric ids instead of UI seed ids.
+- Architecture impact: Optimization request normalization is now a defensive boundary in both the browser and Laravel orchestration layer, not just in the Python optimizer. The controller can recover from an empty submitted catalog by loading the authenticated workspace test library, and truly empty catalogs now fail with a validation-style message before a run record is created.
+- Migration or deployment impact: Rebuild the frontend bundle and redeploy the PHP app so the request normalization, numeric-id handling, and terminal-state UI changes ship together. No database migration was required for this slice.
+- Follow-up notes: Validation passed with `php artisan test --filter=OptimizationServiceTest`, `php artisan test --filter=PathwayApiTest`, and `npm run build`. The existing Vite large-chunk warning remains unchanged.
+
+## 2026-04-26 - Resolve CLI PHP correctly for detached light optimization runs
+
+- Summary: Fixed the light-run launcher so it resolves a CLI-capable PHP executable instead of blindly reusing the current request runtime, updated the initial run stage from `queued` to `starting`, and added a regression test that rejects `php-cgi` style launch paths.
+- Files or modules affected: `web/app/Services/PythonEngineBridge.php`, `web/app/Http/Controllers/Api/PathwayController.php`, `web/app/Services/OptimizationService.php`, `web/tests/Unit/PythonEngineBridgeTest.php`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: Light optimization runs could remain stuck because a Windows web request may execute under `php-cgi.exe`, which is not a safe detached Artisan runtime, and the UI also surfaced the misleading `queued` stage text even after the run had been marked as running.
+- Architecture impact: Detached optimization launches now use an explicit CLI-runtime resolution step shared with the existing process-bridge runtime rules, and the initial run-stage state now reflects launch progress instead of queue state.
+- Migration or deployment impact: Redeploy the PHP app so the new CLI-runtime resolution is active for light runs. No schema change was required.
+- Follow-up notes: If a deployment uses a non-standard CLI PHP path, set `PHP_CLI_BINARY` or `PHP_BINARY_CLI` explicitly to avoid relying on sibling binary discovery.
+
+## 2026-04-26 - Fix Process temp directory for detached optimization runs
+
+- Summary: Forced Symfony Process onto a project-local writable temp directory before launching detached light runs and added a regression test that proves a child process can start after the temp directory is initialized, which avoids the `C:\Windows\sf_proc_00.out.lock` permission failure.
+- Files or modules affected: `web/app/Services/PythonEngineBridge.php`, `web/app/Http/Controllers/Api/PathwayController.php`, `web/tests/Unit/PythonEngineBridgeTest.php`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: Light optimization launches were still failing on this Windows environment because Symfony Process was falling back to `C:\Windows` for its lock files, which is not writable for the app user.
+- Architecture impact: Process-based launches now share a project-local temp policy, so detached optimization execution and Python bridge calls no longer depend on machine-wide temp configuration.
+- Migration or deployment impact: Redeploy the PHP app so the launcher and bridge changes ship, and ensure the `storage/app/process-temp` directory can be created by the application user.
+- Follow-up notes: If another environment overrides `TMP`, `TEMP`, or `TMPDIR` unexpectedly, the bridge now reasserts the project-local path at runtime before launching a child process.
+
+## 2026-04-26 - Fix light-run startup, empty-state, and Python runtime resolution
+
+- Summary: Fixed the live optimization launch path so light runs start through a detached Laravel command instead of waiting indefinitely on a worker, updated the Python bridge to resolve an actual installed interpreter on this Windows setup, and changed the scenarios view to keep a persistent readable message when the optimizer returns infeasible or no-feasible results instead of flashing a white screen.
+- Files or modules affected: `web/app/Http/Controllers/Api/PathwayController.php`, `web/app/Services/PythonEngineBridge.php`, `web/app/Services/OptimizationService.php`, `web/app/Jobs/ExecuteOptimizationRun.php`, `web/routes/console.php`, `web/resources/js/optidx/actions.js`, `web/resources/js/optidx/components/ScreenWizard.jsx`, `web/resources/js/optidx/components/ScreenExtras.jsx`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: The user-facing flow was still failing on this machine because the optimizer bridge could not reliably locate Python, light runs could remain queued too long, and infeasible results were not rendered as a stable screen state.
+- Architecture impact: Light runs now have their own detached execution entrypoint, the Python bridge explicitly resolves the interpreter before launching the optimizer, and the scenarios screen treats infeasible or empty results as terminal UI states with a visible exit path.
+- Migration or deployment impact: Redeploy the PHP app and rebuild the frontend bundle so the detached launch path, Python resolution, and persistent empty-state UI are live. No database migration was needed for this slice.
+- Follow-up notes: If a production environment uses a different Python installation path, set `PYTHON_EXECUTABLE` or `PYTHON_BIN` explicitly so the bridge does not depend on machine-specific defaults.
+
+## 2026-04-26 - Light optimization after-response start
+
+- Summary: Changed light optimization runs to use Laravel's after-response dispatch path so they start processing without depending on a continuously running queue worker, which was leaving the run stuck in `queued` on local SQLite setups. Extensive runs remain on the durable queued path.
+- Files or modules affected: `web/app/Http/Controllers/Api/PathwayController.php`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: Light runs were remaining in the queued state indefinitely in environments where the database queue existed but no worker was active, which made the optimizer look broken even though the backend code was correct.
+- Architecture impact: Light runs now use a request/response handoff to start work immediately after the response is sent, while extensive runs continue to require the queue worker for long-lived background execution.
+- Migration or deployment impact: No schema change. Rebuild and redeploy the PHP app so the controller dispatch change ships, and ensure the queue worker still runs for extensive jobs.
+- Follow-up notes: If a production environment does not support after-response work reliably, the next step is a tiny queue-worker supervision task rather than reverting light runs back to a synchronous browser wait.
+
+## 2026-04-26 - Light run timeout fallback and user-facing optimization overlay
+
+- Summary: Changed light-run polling so a slow queued optimization no longer throws a fatal client timeout; it now falls back to background monitoring and keeps the run state live. Also renamed the in-progress overlay from the technical backend label to a user-facing optimization title and added an explicit exit path into the run-status view.
+- Files or modules affected: `web/resources/js/optidx/actions.js`, `web/resources/js/optidx/components/ScreenWizard.jsx`, `web/resources/js/optidx/components/ScreenExtras.jsx`, `CHANGE_LOG.md`.
+- Reason for the change: Light runs were still surfacing a hard timeout message with no obvious way to leave the screen, which forced a manual refresh even though the backend run could continue.
+- Architecture impact: The browser now treats light-run timeouts as a presentation fallback rather than a fatal optimization failure, and the visible overlay wording is aligned with the product-facing search flow instead of backend implementation details.
+- Migration or deployment impact: Rebuild the frontend bundle so the new timeout fallback and overlay copy ship with the app. No schema or PHP deployment change was required for this slice.
+- Follow-up notes: If light runs still spend too long in queued state after the timeout fallback, the next step is queue-worker calibration rather than a UI timeout increase.
+
+## 2026-04-26 - Light/extensive optimization modes and backend progress snapshots
+
+- Summary: Added explicit `light` and `extensive` optimization run modes, switched the browser from the fake timer-based optimization progress bar to backend-driven progress snapshots, flattened queued optimization run polling responses so scenarios can consume the selected outputs directly, and sent completion notifications for extensive runs, including failures.
+- Files or modules affected: `web/app/Services/OptimizationService.php`, `web/app/Services/PythonEngineBridge.php`, `web/app/Http/Controllers/Api/OptimizationRunController.php`, `web/app/Http/Controllers/Api/PathwayController.php`, `web/app/Jobs/ExecuteOptimizationRun.php`, `web/app/Models/OptimizationRun.php`, `web/app/Notifications/OptimizationRunCompletedNotification.php`, `web/database/migrations/2026_04_26_000230_add_optimizer_progress_and_modes_to_optimization_runs_table.php`, `web/resources/js/optidx/actions.js`, `web/resources/js/optidx/components/ScreenWizard.jsx`, `web/resources/js/optidx/components/ScreenExtras.jsx`, `optidx_package/optidx/cli.py`, `optidx_package/optidx/optimizer.py`, `optidx_package/tests/test_optimizer.py`, `web/tests/Unit/OptimizationServiceTest.php`, `web/tests/Feature/PathwayApiTest.php`, `ARCHITECTURE.md`, `FUTURE_TASKS.md`, `CHANGE_LOG.md`.
+- Reason for the change: The optimizer was still presenting a hardcoded progress experience and the browser timed out on long runs even when the backend was still working, so the UI needed a real backend-owned run lifecycle with separate interactive and background budgets.
+- Architecture impact: The optimization run record now owns its mode, live progress, and notification state; Python emits structured progress events during search; Laravel persists those snapshots and sends completion mail for extensive runs; and the scenarios screen consumes the flattened result payload from the polling endpoint.
+- Migration or deployment impact: Run the new `optimization_runs` migration, rebuild the frontend bundle, and redeploy the Laravel queue worker so the progress snapshots and completion notifications are active. Validation passed with `python -m compileall optidx_package/optidx`, `pytest optidx_package/tests`, `php artisan test --filter=OptimizationServiceTest`, `php artisan test --filter=PathwayApiTest`, and `npm run build`.
+- Follow-up notes: The remaining follow-up is to add a richer run-history surface and tighten the progress estimator if large production catalogs show a better calibration curve.
+
 ## 2026-04-26 - CPBB-PF v3 branch-and-bound search rewrite and SQLite ownership repair
 
 - Summary: Replaced the optimizer's remaining template-enumeration path with a Python best-first branch-and-bound CPBB-PF v3 search, hard-renamed the external optimizer constraint contract to the new `*_allowed` fields, added search-state and Pareto-frontier test coverage, and repaired local SQLite schema drift with a defensive ownership-column migration so evidence-test imports succeed on older databases.
@@ -528,3 +591,12 @@
 - Architecture impact: None beyond keeping the settings/profile shell aligned with the shared `currentUser` state already introduced in the earlier auth/profile slice.
 - Migration or deployment impact: Requires another frontend rebuild and redeploy of the Laravel app image.
 - Follow-up notes: No schema or API changes were needed.
+
+## 2026-04-26 - Remove duplicate registration verification notification
+
+- Summary: Removed the extra direct `sendEmailVerificationNotification()` call from the registration controller so account creation now dispatches the `Registered` event once and lets Laravel's built-in verification listener send the initial email.
+- Files or modules affected: `web/app/Http/Controllers/AuthController.php`, `web/tests/Feature/AuthFlowTest.php`, `ARCHITECTURE.md`, `FUTURE_TASKS.md`, `CHANGE_LOG.md`.
+- Reason for the change: The registration path was sending the verification email twice, which made the flow fragile and could surface as a server error for recipients that were less tolerant of duplicate messages.
+- Architecture impact: Clarified that the framework event listener owns the first verification email, while the controller only creates the account and dispatches the event.
+- Migration or deployment impact: Requires a PHP code deploy and a frontend/backend test pass only; no schema migration.
+- Follow-up notes: The auth feature test now asserts that registration emits exactly one verification notification.

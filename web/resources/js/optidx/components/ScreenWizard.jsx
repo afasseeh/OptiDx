@@ -1,7 +1,7 @@
 // Wizard — New pathway setup (4 steps)
 const OPTIMIZATION_STAGES = [
   "Preparing the test library and constraints.",
-  "Enumerating feasible pathway templates.",
+  "Searching the grammar-constrained pathway space.",
   "Calling the backend optimization engine.",
   "Ranking the Pareto frontier candidates.",
   "Packaging the best pathways for review.",
@@ -80,6 +80,7 @@ function ScreenWizard({ setScreen }) {
   const initialProject = getWizardProjectState();
   const [step, setStep] = useState(() => Number(window.OptiDxWizardStep ?? 0) || 0);
   const [mode, setMode] = useState(null); // null | "test" | "optimize"
+  const [runMode, setRunMode] = useState("light");
   const [project, setProject] = useState(() => ({
     conditionName: initialProject.conditionName,
     clinicalContext: initialProject.clinicalContext,
@@ -111,6 +112,37 @@ function ScreenWizard({ setScreen }) {
   useEffect(() => {
     window.OptiDxWizardStep = step;
   }, [step]);
+
+  useEffect(() => {
+    const syncOptimizationState = () => {
+      const run = window.OptiDxOptimizationResults;
+      if (!run) {
+        return;
+      }
+
+      const normalizedStatus = String(run.status || '').toLowerCase();
+      const nextStage = run.progress_stage || run.progress_message || run.status || '';
+      setOptimization(current => ({
+        ...current,
+        status: normalizedStatus === 'failed'
+          ? 'error'
+          : ['queued', 'running'].includes(normalizedStatus)
+            ? 'running'
+            : 'done',
+        progress: Number.isFinite(Number(run.progress_percent))
+          ? Number(run.progress_percent)
+          : current.progress,
+        stage: nextStage,
+        error: normalizedStatus === 'failed'
+          ? run.failure_reason || run.progress_message || 'Optimization failed.'
+          : null,
+      }));
+    };
+
+    window.addEventListener('optidx-optimization-updated', syncOptimizationState);
+    syncOptimizationState();
+    return () => window.removeEventListener('optidx-optimization-updated', syncOptimizationState);
+  }, []);
 
   const projectRef = useRef(project);
   const lastSavedSnapshotRef = useRef(serializeWizardProjectState(project));
@@ -228,66 +260,76 @@ function ScreenWizard({ setScreen }) {
     return saved;
   };
 
+  const activeProjectId = window.OptiDxActions?.getActiveProjectRecord?.()?.id
+    ?? window.OptiDxCurrentProjectRecord?.id
+    ?? null;
+
   const runOptimization = async () => {
     if (optimization.status === "running") return;
 
-    const startedAt = performance.now();
-    const minimumVisibleMs = 30000;
-    setOptimization({ status: "running", progress: 8, stage: OPTIMIZATION_STAGES[0], error: null });
-    const updateProgress = () => {
-      const elapsed = performance.now() - startedAt;
-      const ratio = Math.min(1, elapsed / minimumVisibleMs);
-      const stageIndex = Math.min(
-        OPTIMIZATION_STAGES.length - 1,
-        Math.floor(ratio * (OPTIMIZATION_STAGES.length - 1)),
-      );
-
-      setOptimization(current => {
-        if (current.status !== "running") return current;
-        return {
-          ...current,
-          progress: Math.min(95, 8 + (ratio * 87)),
-          stage: OPTIMIZATION_STAGES[stageIndex],
-        };
-      });
-    };
-
-    const timer = window.setInterval(updateProgress, 180);
-    updateProgress();
+    setOptimization({ status: "running", progress: 2, stage: OPTIMIZATION_STAGES[0], error: null });
 
     try {
       await flushProjectDraft();
       const currentProject = projectRef.current;
-      const prevalence = Number.parseFloat(currentProject.prevalence);
       const minSensitivity = Number.parseFloat(currentProject.minSensitivity);
       const minSpecificity = Number.parseFloat(currentProject.minSpecificity);
       const maxCostPerPatientUsd = Number.parseFloat(currentProject.maxCostPerPatientUsd);
       const maxTurnaroundTimeHours = Number.parseFloat(currentProject.maxTurnaroundTimeHours);
-      const tests = (window.OptiDxActions.getWorkspaceTests?.() || window.SEED_TESTS || []).map(test => ({
-        id: test.id,
-        name: test.name,
-        sensitivity: test.sens,
-        specificity: test.spec,
-        turnaround_time: test.tat,
-        turnaround_time_unit: test.tatUnit,
-        sample_types: [test.sample],
-        skill_level: test.skill_level ?? test.skill,
-        cost: test.cost,
-        requires_lab_technician: test.requires_lab_technician ?? false,
-        requires_radiologist: test.requires_radiologist ?? false,
-        requires_specialist_physician: test.requires_specialist_physician ?? false,
-        sample_none: test.sample === "none",
-        sample_blood: test.sample === "blood",
-        sample_urine: test.sample === "urine",
-        sample_stool: test.sample === "stool",
-        sample_sputum: test.sample === "sputum",
-        sample_nasal_swab: test.sample === "nasal swab",
-        sample_imaging: test.sample === "imaging",
-      }));
+      const workspaceTests = window.OptiDxActions.getWorkspaceTests?.() || window.SEED_TESTS || [];
+      if (!workspaceTests.length) {
+        throw new Error("Add at least one diagnostic test before running the optimization.");
+      }
+
+      const normalizedPrevalencePercent = (() => {
+        const numeric = Number.parseFloat(currentProject.prevalence);
+        if (!Number.isFinite(numeric) || numeric < 0) {
+          return null;
+        }
+
+        let normalized = numeric;
+        while (normalized > 100) {
+          normalized /= 100;
+        }
+
+        return normalized;
+      })();
+
+      const tests = workspaceTests.map(test => {
+        const sampleTypes = (Array.isArray(test.sample_types) && test.sample_types.length
+          ? test.sample_types
+          : [test.sample].filter(Boolean))
+          .map(value => String(value).trim())
+          .filter(Boolean);
+        const normalizedSampleTypes = sampleTypes.map(value => value.toLowerCase().replace(/[\s-]+/g, "_"));
+
+        return {
+          id: test.id,
+          name: test.name,
+          sensitivity: test.sensitivity ?? test.sens,
+          specificity: test.specificity ?? test.spec,
+          turnaround_time: test.turnaround_time ?? test.tat,
+          turnaround_time_unit: test.turnaround_time_unit ?? test.tatUnit,
+          sample_types: sampleTypes,
+          skill_level: test.skill_level ?? test.skill,
+          cost: test.cost,
+          requires_lab_technician: test.requires_lab_technician ?? false,
+          requires_radiologist: test.requires_radiologist ?? false,
+          requires_specialist_physician: test.requires_specialist_physician ?? false,
+          sample_none: normalizedSampleTypes.includes("none"),
+          sample_blood: normalizedSampleTypes.includes("blood"),
+          sample_urine: normalizedSampleTypes.includes("urine"),
+          sample_stool: normalizedSampleTypes.includes("stool"),
+          sample_sputum: normalizedSampleTypes.includes("sputum"),
+          sample_nasal_swab: normalizedSampleTypes.includes("nasal_swab"),
+          sample_imaging: normalizedSampleTypes.includes("imaging"),
+        };
+      });
       const payload = {
+        project_id: activeProjectId,
         tests,
         constraints: {
-          prevalence: Number.isFinite(prevalence) ? prevalence / 100 : null,
+          prevalence: Number.isFinite(normalizedPrevalencePercent) ? normalizedPrevalencePercent / 100 : null,
           min_sensitivity: Number.isFinite(minSensitivity) ? minSensitivity : null,
           min_specificity: Number.isFinite(minSpecificity) ? minSpecificity : null,
           max_cost_per_patient_usd: Number.isFinite(maxCostPerPatientUsd) ? maxCostPerPatientUsd : null,
@@ -307,41 +349,41 @@ function ScreenWizard({ setScreen }) {
           community: !!currentProject.settingCommunity,
           mobile_unit: !!currentProject.settingMobileUnit,
         },
-        search_config: {
-          max_candidates: 5000,
-          max_parallel_block_size: 3,
-          max_tests_per_realized_path: 6,
-          max_stages: 4,
-          time_limit_seconds: 900,
-          allow_repeated_test: true,
-          allow_same_test_in_different_branches: true,
-        },
+        run_mode: runMode,
       };
 
-      const result = await window.OptiDxActions.optimizePathways(payload);
-      const elapsed = performance.now() - startedAt;
-      if (elapsed < minimumVisibleMs) {
-        await new Promise(resolve => window.setTimeout(resolve, minimumVisibleMs - elapsed));
+      const result = await window.OptiDxActions.optimizePathways(payload, {
+        waitForCompletion: runMode !== "extensive",
+      });
+      const finalState = window.OptiDxOptimizationResults || result;
+      const candidateCount = finalState?.pareto_frontier_ids?.length ?? finalState?.feasible_candidate_count ?? 0;
+
+      if (runMode === "extensive" || ['queued', 'running'].includes(String(finalState?.status || '').toLowerCase())) {
+        setOptimization({
+          status: "done",
+          progress: Number.isFinite(Number(finalState?.progress_percent)) ? Number(finalState.progress_percent) : 12,
+          stage: finalState?.progress_stage || "Optimization continues in the background.",
+          error: null,
+        });
+        setScreen("scenarios");
+        return;
       }
-      window.clearInterval(timer);
+
       setOptimization({
         status: "done",
         progress: 100,
-        stage: `Prepared ${result?.pareto_frontier_ids?.length ?? result?.feasible_candidate_count ?? 0} candidates.`,
+        stage: `Prepared ${candidateCount} candidates.`,
         error: null,
       });
-      window.setTimeout(() => {
-        setScreen("scenarios");
-      }, 650);
+      setScreen("scenarios");
     } catch (error) {
-      window.clearInterval(timer);
       setOptimization({
         status: "error",
         progress: 0,
         stage: "",
         error: error?.message || "Optimization failed.",
       });
-      window.OptiDxActions.showToast?.("Optimization failed", "error");
+      window.OptiDxActions.showToast?.(error?.message || "Optimization failed.", "error");
     }
   };
 
@@ -411,16 +453,16 @@ function ScreenWizard({ setScreen }) {
         }}/>}
         {step === 2 && <WizardStep3 project={project} setProject={setProject}/>}
         {step === 3 && <WizardStep4 project={project}/>}
-        {step === 4 && <WizardStep5 mode={mode} setMode={setMode}/>}
+        {step === 4 && <WizardStep5 mode={mode} setMode={setMode} runMode={runMode} setRunMode={setRunMode}/>}
         {optimization.status !== "idle" && (
-          <OptimizationOverlay optimization={optimization} />
+          <OptimizationOverlay optimization={optimization} onOpenScenarios={() => setScreen("scenarios")} />
         )}
       </div>
     </>
   );
 }
 
-function OptimizationOverlay({ optimization }) {
+function OptimizationOverlay({ optimization, onOpenScenarios }) {
   const currentStage = optimization.stage || "Preparing candidate pathways.";
   const currentStageIndex = Math.max(0, OPTIMIZATION_STAGES.findIndex(stage => stage === currentStage));
   return (
@@ -431,12 +473,14 @@ function OptimizationOverlay({ optimization }) {
             <span />
           </div>
           <div style={{flex:1}}>
-            <div className="sme-eyebrow" style={{marginBottom:6}}>Backend optimization</div>
+            <div className="sme-eyebrow" style={{marginBottom:6}}>Optimization run</div>
             <h3 style={{fontSize:18, marginBottom:6}}>
-              {optimization.status === "done" ? "Optimization completed" : optimization.status === "error" ? "Optimization failed" : "Finding the optimal pathway"}
+              {optimization.status === "done" ? "Optimization completed" : optimization.status === "error" ? "Optimization needs attention" : "Searching for the best pathway"}
             </h3>
             <p style={{fontSize:13, color:"var(--fg-2)", lineHeight:1.55, marginBottom:14}}>
-              {currentStage}
+              {optimization.status === "error"
+                ? "The run stopped before it finished. You can return to the wizard or open the run status view."
+                : currentStage}
             </p>
             <div className="optimization-progress__steps" aria-hidden="true">
               {OPTIMIZATION_STAGES.map((stage, index) => (
@@ -464,6 +508,11 @@ function OptimizationOverlay({ optimization }) {
                 <div>{optimization.error}</div>
               </div>
             )}
+            <div className="row" style={{marginTop:14, gap:8, justifyContent:"flex-end"}}>
+              <button className="btn" type="button" onClick={onOpenScenarios}>
+                Open run status
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -471,7 +520,7 @@ function OptimizationOverlay({ optimization }) {
   );
 }
 
-function WizardStep5({ mode, setMode }) {
+function WizardStep5({ mode, setMode, runMode, setRunMode }) {
   return (
     <div>
       <div className="sme-eyebrow" style={{marginBottom:6}}>Step 05</div>
@@ -520,13 +569,41 @@ function WizardStep5({ mode, setMode }) {
           </div>
         </div>
       </div>
+      {mode === "optimize" && (
+        <div className="card card--pad" style={{marginTop:18, borderLeft:"3px solid var(--sme-orange)"}}>
+          <div className="u-meta" style={{marginBottom:8}}>Optimization run mode</div>
+          <div className="grid" style={{gridTemplateColumns:"1fr 1fr", gap:10}}>
+            <button
+              type="button"
+              className={"btn " + (runMode === "light" ? "btn--primary" : "")}
+              onClick={() => setRunMode("light")}
+            >
+              Light
+            </button>
+            <button
+              type="button"
+              className={"btn " + (runMode === "extensive" ? "btn--primary" : "")}
+              onClick={() => setRunMode("extensive")}
+            >
+              Extensive
+            </button>
+          </div>
+          <div style={{marginTop:10, fontSize:12, color:"var(--fg-3)", lineHeight:1.5}}>
+            {runMode === "light"
+              ? "Light mode targets a result in about five minutes using a smaller search budget."
+              : "Extensive mode keeps searching in the background and emails you when it completes."}
+          </div>
+        </div>
+      )}
       {mode && (
         <div className="banner banner--info" style={{marginTop:18}}>
           <Icon name="info" size={16} className="banner__icon"/>
           <div>
             {mode === "test"
               ? "The canvas will open with required positive and negative endpoints already placed on the right side."
-              : "The optimizer will search the current test library and return the best feasible candidates along the Pareto frontier."}
+              : runMode === "extensive"
+                ? "Extensive mode keeps searching in the background and sends the launching user an email when it completes."
+                : "Light mode uses a smaller search budget and is tuned to return within about five minutes."}
           </div>
         </div>
       )}

@@ -21,13 +21,17 @@ def main() -> int:
         payload = _load_payload()
 
         if args.action == 'optimize':
+            def emit(event: dict) -> None:
+                print(json.dumps(event), flush=True)
+
             result = optimize_pathways(
                 payload.get('tests') or {},
                 payload.get('constraints') or {},
                 payload.get('search_config') or None,
+                progress_callback=emit,
             )
             result['engine_version'] = 'python-canonical'
-            print(json.dumps(result))
+            print(json.dumps({'type': 'result', 'payload': result}), flush=True)
             return 0
 
         try:

@@ -9,6 +9,12 @@ class OptimizationRunController extends Controller
 {
     public function show(OptimizationRun $optimizationRun)
     {
-        return $optimizationRun;
+        $run = $optimizationRun->load(['project', 'user']);
+        $resultPayload = is_array($run->result_payload ?? null) ? $run->result_payload : [];
+
+        return response()->json([
+            ...$run->toArray(),
+            ...$resultPayload,
+        ]);
     }
 }

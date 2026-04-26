@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Pathway;
+use App\Models\DiagnosticTest;
 use App\Models\OptimizationRun;
 use App\Models\Setting;
 use App\Models\User;
@@ -333,9 +334,11 @@ class PathwayApiTest extends TestCase
             ->assertOk()
             ->assertHeader('content-type', 'application/pdf');
 
-        $this->get("/api/pathways/{$created['id']}/export/report?format=docx")
-            ->assertOk()
-            ->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+        if (extension_loaded('zip')) {
+            $this->get("/api/pathways/{$created['id']}/export/report?format=docx")
+                ->assertOk()
+                ->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+        }
     }
 
     public function test_store_import_and_export_use_canonical_graph_shape(): void
@@ -467,6 +470,7 @@ class PathwayApiTest extends TestCase
             'search_config' => [
                 'max_candidates' => 100,
             ],
+            'run_mode' => 'light',
         ]);
 
         $response
@@ -485,10 +489,73 @@ class PathwayApiTest extends TestCase
         $run = OptimizationRun::query()->first();
         $this->assertNotNull($run);
         $this->assertSame('queued', $run?->status);
+        $this->assertSame('light', $run?->run_mode);
 
         $this->getJson("/api/optimization-runs/{$run->id}")
             ->assertOk()
-            ->assertJsonPath('id', $run->id);
+            ->assertJsonPath('id', $run->id)
+            ->assertJsonPath('run_mode', 'light')
+            ->assertJsonPath('progress_percent', null);
+    }
+
+    public function test_optimize_falls_back_to_workspace_tests_and_normalizes_prevalence(): void
+    {
+        $user = $this->workspaceUser('optimizer-fallback@example.com');
+        $this->actingAs($user);
+        Queue::fake();
+
+        DiagnosticTest::create([
+            'created_by' => $user->id,
+            'name' => 'Existing workspace test',
+            'category' => 'clinical',
+            'sensitivity' => 0.91,
+            'specificity' => 0.93,
+            'cost' => 4.5,
+            'currency' => 'USD',
+            'turnaround_time' => 2,
+            'turnaround_time_unit' => 'hr',
+            'sample_types' => ['blood'],
+            'skill_level' => 2,
+            'availability' => true,
+        ]);
+
+        $response = $this->postJson('/api/pathways/optimize', [
+            'tests' => [],
+            'constraints' => [
+                'prevalence' => 800,
+                'min_sensitivity' => 0.85,
+                'min_specificity' => 0.90,
+            ],
+            'run_mode' => 'light',
+        ]);
+
+        $response
+            ->assertAccepted()
+            ->assertJsonPath('input_payload.constraints.prevalence', 0.08);
+
+        $run = OptimizationRun::query()->latest('id')->first();
+        $this->assertNotNull($run);
+        $tests = $run->input_payload['tests'] ?? [];
+        $this->assertCount(1, $tests);
+        $this->assertSame('Existing workspace test', array_values($tests)[0]['name'] ?? null);
+    }
+
+    public function test_optimize_returns_validation_error_when_no_tests_are_available(): void
+    {
+        $this->actingAs($this->workspaceUser('optimizer-empty@example.com'));
+        Queue::fake();
+
+        $this->postJson('/api/pathways/optimize', [
+            'tests' => [],
+            'constraints' => [
+                'prevalence' => 0.08,
+                'min_sensitivity' => 0.85,
+                'min_specificity' => 0.90,
+            ],
+            'run_mode' => 'light',
+        ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Add at least one diagnostic test before running the optimization.');
     }
 
     public function test_evidence_test_import_persists_created_by_after_migrations(): void

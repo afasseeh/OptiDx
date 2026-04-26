@@ -28,19 +28,10 @@ class ExecuteOptimizationRun implements ShouldQueue
         }
 
         try {
-            $optimizationService->recordRunStart($run);
-
-            $payload = $run->input_payload ?? [];
-            $result = $optimizationService->optimize(
-                $payload['tests'] ?? [],
-                $payload['constraints'] ?? [],
-                $payload['constraints']['prevalence'] ?? null,
-                $payload['search_config'] ?? []
-            );
-
-            $optimizationService->recordRunResult($run, $result);
+            $optimizationService->runOptimizationRun($run);
         } catch (\Throwable $throwable) {
-            $optimizationService->recordRunFailure($run, $throwable);
+            $failedRun = $optimizationService->recordRunFailure($run, $throwable);
+            $optimizationService->notifyCompletionIfNeeded($failedRun);
             throw $throwable;
         }
     }

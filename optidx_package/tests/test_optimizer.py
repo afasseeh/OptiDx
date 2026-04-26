@@ -245,7 +245,7 @@ def test_pareto_frontier_removes_dominated_pathways_and_selects_outputs():
 def test_time_limit_behavior_returns_non_exhaustive_no_result():
     calls = iter([0.0, 2.0, 2.0, 2.0])
     original_monotonic = optimizer_module.monotonic
-    optimizer_module.monotonic = lambda: next(calls)
+    optimizer_module.monotonic = lambda: next(calls, 2.0)
     try:
         result = optimize_pathways(
             _tool_catalog(),
