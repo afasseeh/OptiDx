@@ -1,5 +1,32 @@
 # Change Log
 
+## 2026-04-26 - Builder run-pathway discordant port compatibility
+
+- Summary: Updated the canvas graph compiler to treat `disc` as an alias for `discord` when compiling discordant parallel branches, and added a regression test that verifies mixed-outcome branches are emitted correctly instead of collapsing to empty conditions.
+- Files or modules affected: `web/app/Services/PathwayGraphService.php`, `web/tests/Unit/PathwayGraphServiceTest.php`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: The builder's saved discordant-referee pathways were compiling empty branch-condition arrays, which the Python evaluator then rejected with a bridge error during `Run pathway`.
+- Architecture impact: The backend compiler now accepts both canvas spellings for discordant branches, which keeps old and current builder payloads compatible with the same evaluation engine contract.
+- Migration or deployment impact: Rebuild and redeploy the web app so the updated compiler and regression test are active in production.
+- Follow-up notes: The live failing pathway should evaluate normally again after the container is rebuilt with this patch.
+
+## 2026-04-26 - Optimization runtime deployment repair
+
+- Summary: Rebuilt the live OptiDx Docker Compose stack on the VPS so the PHP container now includes `python` and mounts the shared `optidx_package` source tree, then verified the optimization API end to end against `http://127.0.0.1:8082/api/pathways/optimize`.
+- Files or modules affected: `web/Dockerfile`, `web/docker-compose.yml`, `ARCHITECTURE.md`, `FUTURE_TASKS.md`, `CHANGE_LOG.md`.
+- Reason for the change: The optimization wizard was returning a backend server error because the production container had not yet been rebuilt with the Python runtime and package mount required by `PythonEngineBridge`.
+- Architecture impact: The deployment contract is now explicit: the app container must ship a `python` executable and the compose stack must bind-mount the canonical Python package into `/var/www/optidx_package` so Laravel can invoke the engine bridge directly.
+- Migration or deployment impact: Recreated the live app, queue, and scheduler containers on the VPS; the optimize endpoint now returns `200 OK` with ranked candidates instead of a generic server error.
+- Follow-up notes: A small repeatable deployment helper remains on the future-task list so the runtime check is not manual next time.
+
+## 2026-04-26 - Syreon favicon applied to OptiDx
+
+- Summary: Replaced the empty OptiDx favicon with Syreon's published `favicon.png`, added explicit favicon/apple-touch-icon metadata to the app Blade layout, and kept both `favicon.png` and `favicon.ico` paths serving the same asset.
+- Files or modules affected: `web/resources/views/app.blade.php`, `web/public/favicon.png`, `web/public/favicon.ico`, `CHANGE_LOG.md`.
+- Reason for the change: The OptiDx site needed to match the Syreon brand favicon used on `syreon.me`.
+- Architecture impact: None. This is a static asset and document-head update only.
+- Migration or deployment impact: Rebuilt and redeployed the OptiDx containers so the new favicon is live on `https://optidx.syreon.me/`.
+- Follow-up notes: Verified both `/favicon.png` and `/favicon.ico` return `200 OK` from the VPS origin.
+
 ## 2026-04-26 - Homepage 500 fix for containerized OptiDx
 
 - Summary: Fixed the production container startup script so it creates Laravel's full `storage/framework/*` subtree and `storage/logs` before boot, which resolved the homepage 500 while keeping `/api/health` healthy.

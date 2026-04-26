@@ -103,6 +103,7 @@ Current bridge shape:
 - `optidx_package/optidx/cli.py` loads canonical engine payloads, evaluates them, and returns JSON
 - `web/app/Services/PathwayDefinitionService.php` performs Laravel-side graph validation before evaluation
 - `web/app/Services/PathwayGraphService.php` canonicalizes canvas graphs, hydrates saved graphs back into canvas-ready data, and compiles the engine-facing definition
+- `web/app/Services/PathwayGraphService.php` also normalizes discordant branch labels emitted by the canvas (`disc` and `discord`) so legacy and current builder payloads compile into the same engine branch shape
 - `web/app/Services/OptimizationService.php` canonicalizes wizard test-library records into the engine contract, expands the bounded diagnostic grammar across serial, parallel, and discordant-referee motifs, and then generates/evaluates candidate pathways within the synchronous optimize request before returning both the ranked set and Pareto frontier
 - `web/app/Services/OptimizationService.php` also enriches each feasible candidate with derived ranking metrics and emits a `named_rankings` payload so the scenarios screen can render deterministic fixed buckets instead of relying on placeholder titles or array position
 - `web/app/Http/Controllers/AuthController.php` owns the session-backed auth endpoints used by the React shell
@@ -186,6 +187,7 @@ Implemented tables in `web/database/migrations`:
 - Docker is the standard runtime envelope for the VPS deployment path, while local development can remain non-containerized when that is simpler.
 - The `web/` app now ships with a production Docker Compose stack that builds the Laravel/PHP runtime, compiles Vite assets, and exposes the OptiDx container on host port `8082` for the shared Cloudflare tunnel.
 - The live Cloudflare deployment uses a shared tunnel on the `Main` account. `journalrecommendation.syreon.me` maps to `http://127.0.0.1:8081`, and `optidx.syreon.me` maps to `http://127.0.0.1:8082` so both websites can coexist on the same VPS without competing for the public ports.
+- The production compose image installs the system `python` entrypoint and bind-mounts `/opt/optidx/optidx_package` into `/var/www/optidx_package` for all runtime services so the Laravel optimizer can invoke the canonical Python engine without a separate Python container.
 - The browser shell currently uses local file downloads for some export controls; those should be replaced with server-side DOCX/PDF generation when the reporting pipeline is finalized.
 - The reporting pipeline now returns real DOCX/PDF files from Laravel, but the layout remains intentionally minimal and should be upgraded when the product team is ready for production-grade publishing.
 - The signed email-verification flow assumes the app URL matches the live dev host. In local development the host is `http://127.0.0.1:8000`, which keeps signed verification links and redirects consistent during browser testing.

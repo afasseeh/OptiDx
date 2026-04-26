@@ -193,7 +193,7 @@ class PathwayGraphService
             return match ($port) {
                 'both_pos' => [$this->uniformOutcomeConditions($members, 'pos')],
                 'both_neg' => [$this->uniformOutcomeConditions($members, 'neg')],
-                'discord' => $this->mixedParallelConditions($members),
+                'discord', 'disc' => $this->mixedParallelConditions($members),
                 default => [[]],
             };
         }
@@ -346,12 +346,13 @@ class PathwayGraphService
         }
 
         $normalized = [];
+        $seen = [];
         foreach ($edges as $edge) {
             if (! is_array($edge) || empty($edge['from']) || empty($edge['to'])) {
                 continue;
             }
 
-            $normalized[] = [
+            $resolved = [
                 'id' => $edge['id'] ?? $edge['from'] . '->' . $edge['to'] . ':' . ($edge['fromPort'] ?? $edge['from_port'] ?? 'out'),
                 'from' => (string) $edge['from'],
                 'fromPort' => (string) ($edge['fromPort'] ?? $edge['from_port'] ?? 'out'),
@@ -359,6 +360,21 @@ class PathwayGraphService
                 'kind' => $edge['kind'] ?? null,
                 'label' => $edge['label'] ?? null,
             ];
+
+            $signature = hash('sha256', json_encode([
+                $resolved['from'],
+                $resolved['fromPort'],
+                $resolved['to'],
+                $resolved['kind'],
+                $resolved['label'],
+            ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+
+            if (isset($seen[$signature])) {
+                continue;
+            }
+
+            $seen[$signature] = true;
+            $normalized[] = $resolved;
         }
 
         return $normalized;

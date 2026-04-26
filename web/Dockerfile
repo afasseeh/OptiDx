@@ -33,6 +33,8 @@ RUN apt-get update \
         libonig-dev \
         libsqlite3-dev \
         libzip-dev \
+        python3 \
+        python-is-python3 \
         unzip \
     && docker-php-ext-install intl mbstring opcache pdo_sqlite zip \
     && rm -rf /var/lib/apt/lists/*
