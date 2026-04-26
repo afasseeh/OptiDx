@@ -183,7 +183,9 @@ Implemented tables in `web/database/migrations`:
 - Laragon-friendly local setup is the primary deployment target for the first implementation slice.
 - Redis is reserved for queueing and transient coordination.
 - PostgreSQL remains the preferred long-term system of record, but the Laragon MVP can use MariaDB if needed for local ergonomics.
-- Docker should be documented later, but it is not the initial local runtime dependency.
+- Docker is the standard runtime envelope for the VPS deployment path, while local development can remain non-containerized when that is simpler.
+- The `web/` app now ships with a production Docker Compose stack that builds the Laravel/PHP runtime, compiles Vite assets, and exposes the OptiDx container on host port `8082` for the shared Cloudflare tunnel.
+- The live Cloudflare deployment uses a shared tunnel on the `Main` account. `journalrecommendation.syreon.me` maps to `http://127.0.0.1:8081`, and `optidx.syreon.me` maps to `http://127.0.0.1:8082` so both websites can coexist on the same VPS without competing for the public ports.
 - The browser shell currently uses local file downloads for some export controls; those should be replaced with server-side DOCX/PDF generation when the reporting pipeline is finalized.
 - The reporting pipeline now returns real DOCX/PDF files from Laravel, but the layout remains intentionally minimal and should be upgraded when the product team is ready for production-grade publishing.
 - The signed email-verification flow assumes the app URL matches the live dev host. In local development the host is `http://127.0.0.1:8000`, which keeps signed verification links and redirects consistent during browser testing.

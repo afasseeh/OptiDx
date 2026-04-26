@@ -150,3 +150,11 @@
 - **Improvement:** Add concise inline definitions and help text for each derived optimization metric, ideally sourced from one shared glossary.
 - **Benefit:** Reduces interpretation mistakes during scenario review and keeps stakeholder-facing exports consistent with the optimizer math.
 - **Priority:** Medium
+
+## 20. VPS container bootstrap for OptiDx
+
+- **Context:** Cloudflare now routes `optidx.syreon.me` through the shared tunnel to `127.0.0.1:8082`.
+- **Limitation:** The compose stack is deployed and verified, but repeat releases still require manual SSH steps to rebuild and restart the containers.
+- **Improvement:** Add a small provisioning script or deployment helper that pulls the latest code, refreshes the environment file if needed, runs `docker compose up -d --build`, and checks the tunnel health endpoint.
+- **Benefit:** Makes future releases safer and removes the remaining manual step from the deployment path.
+- **Priority:** High

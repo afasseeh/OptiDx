@@ -60,6 +60,17 @@ Open:
 
 After signing in, the workspace home loads persisted pathways, evidence tests, and settings from the API. Pathways that have not been evaluated yet will render with placeholder summary values instead of crashing the shell.
 
+Production deployment currently routes through Cloudflare Tunnel at `https://optidx.syreon.me`, which forwards to the VPS origin on `127.0.0.1:8082` so it can share the server with the other Syreon website already running on the same machine.
+
+To run the production container locally or on the VPS:
+
+```bash
+cd web
+docker compose up -d --build
+```
+
+The stack exposes the app on `8082` and includes a queue worker. The first container start runs Laravel migrations automatically unless `RUN_MIGRATIONS=0` is set.
+
 ## Validation
 
 ```bash

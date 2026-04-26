@@ -1,5 +1,41 @@
 # Change Log
 
+## 2026-04-26 - Homepage 500 fix for containerized OptiDx
+
+- Summary: Fixed the production container startup script so it creates Laravel's full `storage/framework/*` subtree and `storage/logs` before boot, which resolved the homepage 500 while keeping `/api/health` healthy.
+- Files or modules affected: `web/docker/entrypoint.sh`, `CHANGE_LOG.md`.
+- Reason for the change: The tunnel and container were working, but the root homepage route failed because Laravel could not resolve a valid compiled view cache path when the storage subdirectories were missing.
+- Architecture impact: None. This is a runtime bootstrap correction inside the existing Docker Compose deployment path.
+- Migration or deployment impact: Rebuilt and restarted the VPS containers. The public homepage now responds with `200 OK` through `https://optidx.syreon.me/`.
+- Follow-up notes: No further action required unless the storage layout or Laravel view cache configuration changes again.
+
+## 2026-04-26 - OptiDx VPS deployment verified
+
+- Summary: Deployed the OptiDx Docker Compose stack to `/opt/optidx/web` on the VPS, rebuilt the app, queue, and scheduler containers, and verified both the local origin on `127.0.0.1:8082` and the public `https://optidx.syreon.me/api/health` endpoint through Cloudflare Tunnel.
+- Files or modules affected: `web/Dockerfile`, `web/docker-compose.yml`, `web/docker/entrypoint.sh`, `web/.dockerignore`, VPS runtime under `/opt/optidx/web`.
+- Reason for the change: The host needed a working containerized origin so the shared tunnel could serve OptiDx without conflicting with the other site on the same VPS.
+- Architecture impact: The production deployment path is now live, containerized, and tunnel-backed, with a queue worker and scheduler running alongside the web container.
+- Migration or deployment impact: `docker compose up -d --build` completed successfully on the VPS, the app now listens on `127.0.0.1:8082`, and `optidx.syreon.me` returns `200 OK` from `/api/health`.
+- Follow-up notes: The only remaining operational refinement is a small scripted deployment helper for repeat releases.
+
+## 2026-04-26 - OptiDx Docker Compose runtime on port 8082
+
+- Summary: Added a production Docker Compose stack for the `web/` app, including a PHP 8.3 CLI runtime image, a Vite asset build stage, a queue worker service, an entrypoint that creates the SQLite database file and runs migrations, and a `.dockerignore` tuned for server builds.
+- Files or modules affected: `web/Dockerfile`, `web/docker-compose.yml`, `web/docker/entrypoint.sh`, `web/.dockerignore`, `ARCHITECTURE.md`, `README.md`, `FUTURE_TASKS.md`, `CHANGE_LOG.md`.
+- Reason for the change: The live OptiDx hostname needs a dedicated containerized origin on host port `8082` so it can coexist with the other Syreon site behind the shared Cloudflare tunnel.
+- Architecture impact: The VPS deployment path now has an explicit container boundary, a dedicated queue worker, and a repeatable startup path that matches the tunnel ingress target.
+- Migration or deployment impact: `docker compose up -d --build` in `web/` now builds the app image and exposes it on `8082`. The container will run migrations on first boot unless `RUN_MIGRATIONS=0` is set.
+- Follow-up notes: The server still needs a verified runtime launch and health check in a live VPS session.
+
+## 2026-04-26 - Shared Cloudflare tunnel deployment for OptiDx
+
+- Summary: Replaced the direct `optidx.syreon.me` A record with a proxied CNAME to the existing Cloudflare tunnel, added an `optidx.syreon.me -> http://127.0.0.1:8082` ingress to the shared tunnel alongside the existing `journalrecommendation.syreon.me -> http://127.0.0.1:8081` route, and documented the shared-tunnel deployment model in the project README and architecture notes.
+- Files or modules affected: `ARCHITECTURE.md`, `README.md`, `FUTURE_TASKS.md`, `CHANGE_LOG.md`, Cloudflare DNS and tunnel configuration for the `Main` account.
+- Reason for the change: The VPS already hosts another site on the same machine, so the OptiDx hostname needed to stop pointing at the raw public IP and instead flow through a tunnel-backed origin port that can coexist with the other deployment.
+- Architecture impact: The live deployment model is now shared-tunnel based, with hostname routing handled by Cloudflare and the OptiDx origin isolated behind `127.0.0.1:8082` rather than a public port.
+- Migration or deployment impact: Cloudflare DNS and tunnel config were updated in place. The VPS still needs the OptiDx service started on `127.0.0.1:8082` for the hostname to serve application traffic.
+- Follow-up notes: The remaining bootstrap step is tracked in `FUTURE_TASKS.md` as the VPS container/service definition for OptiDx.
+
 ## 2026-04-26 - Optimization grammar expansion and canvas hydration fix
 
 - Summary: Expanded the Laravel optimizer from a narrow pair-only search into a bounded diagnostic grammar covering single-test, serial, parallel, and discordant-referee candidates, ranked the feasible set with a Pareto frontier, preserved node ids when hydrating engine-style pathway payloads into canvas drafts, and replaced the wizard's thin loading state with a fixed orange-accented progress overlay.
