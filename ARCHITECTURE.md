@@ -50,6 +50,7 @@ The frontend owns:
 - the optimization wizard now keeps the progress card visible for at least 30 seconds on fast backend runs, using a gradual time-based progress ramp so short runs still feel deliberate
 - the authenticated shell layout, which uses a beta banner row plus a single content row; page top bars live inside the screen body so the shell does not reserve an empty middle track, and the full-bleed builder/report screens use an intrinsic-height top bar with a body that fills the remaining main area
 - the shared top bar now accepts clickable crumb descriptors so screens can expose a real previous-step navigation path instead of static directory text
+- the workspace home now hydrates the latest pathway evaluation summary into the recent-pathway cards and lets users rename pathways in-place through the pathway update endpoint
 
 The UI must preserve the Syreon orange/charcoal language, Carlito/Open Sans typography, and the workflow-builder visual style from UI V2.
 
@@ -102,6 +103,7 @@ The initial web integration should preserve the engine contract and extend it in
 13. The Builder and Results actions treat the active pathway record as first-class state; when a saved pathway is opened or re-evaluated, the backend preserves the existing pathway row and attaches the new evaluation to that record instead of creating a disconnected duplicate.
 14. Report exports are server-generated on demand: the controller materializes a real PDF or DOCX download from the current pathway and its latest evaluation payload rather than streaming browser-generated text files.
 15. Optimization candidates and imported engine-style pathway records are converted into canvas-ready builder graphs in the browser before they are mounted, with keyed object maps preserving their node ids during hydration so the canvas always receives node types, edge ports, and layout coordinates instead of a raw engine template or an empty graph.
+16. The workspace home recent-pathway cards read the persisted pathway name plus the latest evaluation summary from the workspace snapshot, and the card menu can rename the pathway through the same persisted `PUT /api/pathways/{id}` update path used by the canvas saver.
 
 Current bridge shape:
 
@@ -114,6 +116,7 @@ Current bridge shape:
 - `web/app/Services/OptimizationService.php` also enriches each feasible candidate with derived ranking metrics and emits a `named_rankings` payload so the scenarios screen can render deterministic fixed buckets instead of relying on placeholder titles or array position
 - `web/app/Http/Controllers/AuthController.php` owns the session-backed auth endpoints used by the React shell
 - `web/app/Http/Controllers/AuthController.php` resolves the authenticated user from the guard after a successful login attempt so verified accounts are not misclassified as guests inside the same request
+- `web/app/Http/Controllers/Api/PathwayController.php` eager-loads the latest evaluation result on pathway index/show/update responses so the workspace home can render summary metrics without a separate round-trip
 - `web/resources/js/app.js` bootstraps the browser runtime with Axios, CSRF/session defaults, and the component registry before mounting the React shell
 - `web/resources/js/optidx/actions.js` now owns the shared browser helpers for save, optimize, manual test creation, canonical pathway serialization, import hydration, evaluation normalization, and canvas export
 - `web/resources/js/optidx/actions.js` also bootstraps the workspace snapshot from `/api/pathways`, `/api/evidence/tests`, and `/api/settings`, tracks the active pathway record, and routes report/share/file-download interactions through the real backend endpoints
@@ -170,6 +173,7 @@ Important implementation details:
 - `web/resources/js/optidx/actions.js` exposes a shared browser action helper for clipboard, download, and temporary UX messaging so the UI can progress from mockup screens to functional controls without duplicating logic in every component.
 - The same helper layer now also owns workspace bootstrap, scoped settings writes, persisted pathway duplication/opening, live evidence import, and server-generated report downloads so the UI no longer depends on static seed data for those controls.
 - The same helper layer now also handles live Builder save/optimize actions, manual test creation, and optimization result normalization for the scenarios screen.
+- The same helper layer now also normalizes pathway evaluation summaries from `latestEvaluationResult`, keeps the workspace pathway snapshot in sync after save/evaluate/import/duplicate/rename operations, and exposes a pathway update helper used by the workspace home rename action.
 - During the migration away from the prototype shell, the Vite entry also exposes the React hooks expected by the legacy component modules so the existing JSX structure can boot without a wholesale rewrite.
 
 ## Persistence Model

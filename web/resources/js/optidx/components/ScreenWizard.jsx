@@ -29,6 +29,15 @@ function getWizardProjectState(source = null) {
     };
 }
 
+function formatOptimizationProgress(value) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return "0.0%";
+  }
+
+  return `${numericValue.toFixed(1)}%`;
+}
+
 function serializeWizardProjectState(project) {
   const safeProject = getWizardProjectState(project);
   return JSON.stringify({
@@ -398,7 +407,7 @@ function OptimizationOverlay({ optimization }) {
             </div>
             <div className="optimization-progress__meta">
               <span>{optimization.status === "done" ? "Finished" : optimization.status === "error" ? "Stopped" : "Running"}</span>
-              <span>{optimization.progress}%</span>
+              <span>{formatOptimizationProgress(optimization.progress)}</span>
             </div>
             {optimization.error && (
               <div className="banner banner--err" style={{marginTop:12}}>

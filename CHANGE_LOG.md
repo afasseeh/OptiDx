@@ -1,5 +1,23 @@
 # Change Log
 
+## 2026-04-26 - Add pathway rename and workspace summaries
+
+- Summary: Updated the workspace Home cards to hydrate pathway names, timestamps, and latest evaluation summary metrics from the persisted pathway snapshot, added an in-card rename action that updates both the pathway name and metadata label, and taught the pathway API to eager-load the latest evaluation result on index/show/update responses.
+- Files or modules affected: `web/resources/js/optidx/actions.js`, `web/resources/js/optidx/components/ScreenHome.jsx`, `web/app/Http/Controllers/Api/PathwayController.php`, `web/tests/Feature/PathwayApiTest.php`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: The workspace list was still showing placeholder metrics and there was no user-facing way to rename a pathway into a more understandable label.
+- Architecture impact: The workspace snapshot now carries normalized pathway summary data from the latest evaluation result, and the Home screen can rename a pathway through the same persisted `PUT /api/pathways/{id}` flow used by the editor.
+- Migration or deployment impact: Rebuild the Vite frontend bundle and redeploy the Laravel app so the updated pathway summary hydration, rename action, and eager-loaded API responses are live.
+- Follow-up notes: If users need richer rename controls later, the next step would be an inline editable title field instead of the prompt-based menu action.
+
+## 2026-04-26 - Format wizard optimization progress label
+
+- Summary: Rounded the wizard optimization progress percentage to one decimal place in the overlay meta row instead of rendering the raw floating-point value.
+- Files or modules affected: `web/resources/js/optidx/components/ScreenWizard.jsx`, `CHANGE_LOG.md`.
+- Reason for the change: The progress label was exposing the full float precision from the timer-driven progress state, which looked noisy and inconsistent with the rest of the UI.
+- Architecture impact: None. This is a presentation-only change in the wizard overlay.
+- Migration or deployment impact: Rebuild and redeploy the frontend bundle so the formatted progress label is live.
+- Follow-up notes: If the team prefers a whole-number label later, the same helper can be switched from `toFixed(1)` to integer rounding without touching the overlay layout.
+
 ## 2026-04-26 - Scope workspace data by authenticated account
 
 - Summary: Added account-owned workspace scoping across projects, pathways, diagnostic tests, and settings; introduced a shared ownership trait that stamps `created_by` on create and filters model queries to the signed-in user; wrapped the workspace API routes in `web` + `auth`; cleared the browser workspace snapshot before reloading account data; and added regression coverage for cross-account isolation.

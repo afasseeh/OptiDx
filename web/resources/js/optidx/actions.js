@@ -242,6 +242,53 @@ function parseProjectSkillLevel(value) {
   return 3;
 }
 
+function numberOrNull(value) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function extractPathwayEvaluationSummary(pathway = {}) {
+  const latestEvaluationResult = pathway.latest_evaluation_result
+    ?? pathway.latestEvaluationResult
+    ?? null;
+  const resultPayload = latestEvaluationResult?.result_payload
+    ?? latestEvaluationResult?.resultPayload
+    ?? null;
+  const metrics = resultPayload?.metrics || {};
+  const summary = resultPayload?.summary || {};
+  const sensitivity = numberOrNull(metrics.sensitivity ?? pathway.sens ?? summary.sensitivity ?? null);
+  const specificity = numberOrNull(metrics.specificity ?? pathway.spec ?? summary.specificity ?? null);
+  const cost = numberOrNull(
+    metrics.expected_cost_population
+    ?? metrics.expected_cost_given_disease
+    ?? summary.expectedCost
+    ?? pathway.cost
+    ?? null
+  );
+  const tatHours = metrics.expected_turnaround_time_population
+    ?? metrics.expected_turnaround_time_given_disease
+    ?? summary.expectedTatHours
+    ?? pathway.tatHours
+    ?? null;
+  const updatedAt = pathway.updated_at ?? pathway.updatedAt ?? null;
+
+  return {
+    latestEvaluationResult,
+    sens: sensitivity,
+    spec: specificity,
+    cost,
+    tat: tatHours == null ? null : formatDurationHours(tatHours),
+    status: pathway.status ?? pathway.validation_status ?? 'Draft',
+    disease: pathway.disease ?? pathway.metadata?.disease ?? pathway.metadata?.label ?? pathway.name ?? null,
+    updated: updatedAt ? new Date(updatedAt).toLocaleDateString() : pathway.updated ?? null,
+    owner: pathway.owner ?? pathway.owner_name ?? null,
+  };
+}
+
 function buildProjectWizardState(source = {}) {
   const metadata = normalizeProjectMetadata(source.metadata);
   const wizard = source._wizard && typeof source._wizard === 'object' ? source._wizard : {};
@@ -447,11 +494,14 @@ function normalizePathwayRecord(pathway) {
 
   const definition = pathway.editor_definition || pathway.engine_definition || pathway.definition || null;
   const normalized = definition ? normalizePathwayGraph(definition) : null;
+  const summary = extractPathwayEvaluationSummary(pathway);
   return {
     ...pathway,
     editor_definition: normalized || pathway.editor_definition || null,
     engine_definition: pathway.engine_definition || null,
     prevalence: pathway.prevalence ?? normalized?.prevalence ?? pathway.metadata?.prevalence ?? null,
+    name: pathway.name ?? pathway.metadata?.label ?? 'Untitled pathway',
+    ...summary,
     _canonical: normalized,
   };
 }
@@ -479,6 +529,33 @@ function setWorkspaceSnapshot(partial) {
   };
   dispatchWorkspaceEvent();
   return window.OptiDxWorkspace;
+}
+
+function upsertWorkspacePathwayRecord(record) {
+  const normalized = normalizePathwayRecord(record);
+  if (!normalized) {
+    return null;
+  }
+
+  const existing = getWorkspacePathways().filter(item => String(item.id) !== String(normalized.id));
+  const nextPathways = [normalized, ...existing];
+  window.SEED_PATHWAYS = nextPathways;
+  setWorkspaceSnapshot({
+    pathways: nextPathways,
+    pathwaysById: toWorkspaceIndex(nextPathways),
+  });
+
+  if (String(window.OptiDxCurrentPathwayRecord?.id ?? '') === String(normalized.id)) {
+    window.OptiDxCurrentPathwayRecord = normalized;
+    const nextDraft = normalized._canonical || normalized.editor_definition || normalized.engine_definition || window.OptiDxCurrentPathway || null;
+    if (nextDraft) {
+      window.OptiDxCurrentPathway = nextDraft;
+      window.OptiDxCanvasDraft = nextDraft;
+      window.OptiDxCanvasState = nextDraft;
+    }
+  }
+
+  return normalized;
 }
 
 function getWorkspacePathways() {
@@ -1870,10 +1947,10 @@ async function savePathway(pathway = null) {
       schema_version: payload?.schema_version || 'canvas-v1',
       start_node_id: payload?.start_node || null,
       metadata: payload?.metadata || {},
-    });
+  });
 
   window.OptiDxSavedPathway = response;
-  window.OptiDxCurrentPathwayRecord = normalizePathwayRecord(response);
+  upsertWorkspacePathwayRecord(response);
   setActivePathwayDraft(response?.editor_definition || payload);
   showToast(`Saved "${name}"`, 'success');
   return response;
@@ -2154,7 +2231,7 @@ async function evaluatePathway(pathway = null, prevalence = null) {
   window.OptiDxLatestEvaluationSignature = buildPathwaySignature(canonicalPathway);
   window.OptiDxLatestEvaluationView = buildEvaluationView(response);
   if (response?.pathway) {
-    window.OptiDxCurrentPathwayRecord = normalizePathwayRecord(response.pathway);
+    upsertWorkspacePathwayRecord(response.pathway);
   }
   showToast('Pathway evaluation finished', 'success');
   return response;
@@ -2164,7 +2241,7 @@ async function loadPathwayIntoWorkspace(pathway) {
   const response = await request('post', '/api/pathways/import', { pathway });
   const canvasDraft = buildCanvasDraftFromPathway(response?.editor_definition || response?.engine_definition || pathway);
   window.OptiDxImportedPathway = response;
-  window.OptiDxCurrentPathwayRecord = normalizePathwayRecord(response);
+  upsertWorkspacePathwayRecord(response);
   setActivePathwayDraft(canvasDraft);
   window.dispatchEvent(new CustomEvent('optidx-pathway-loaded', { detail: canvasDraft }));
   showToast(`Imported "${canvasDraft.metadata?.label || 'pathway'}"`, 'success');
@@ -2224,10 +2301,20 @@ async function openPathwayRecord(pathway) {
   }
 
   const record = pathway.editor_definition || pathway.engine_definition ? pathway : await request('get', `/api/pathways/${pathway.id}`);
-  const normalized = normalizePathwayRecord(record);
-  window.OptiDxCurrentPathwayRecord = normalized;
+  const normalized = upsertWorkspacePathwayRecord(record);
   setActivePathwayDraft(normalized._canonical || normalized.editor_definition || normalized);
   window.dispatchEvent(new CustomEvent('optidx-pathway-loaded', { detail: window.OptiDxCurrentPathway }));
+  return normalized;
+}
+
+async function updatePathwayRecord(pathwayId, updates = {}) {
+  if (!pathwayId) {
+    return null;
+  }
+
+  const response = await request('put', `/api/pathways/${pathwayId}`, updates);
+  const normalized = upsertWorkspacePathwayRecord(response);
+  showToast(`Updated "${normalized?.name || 'pathway'}"`, 'success');
   return normalized;
 }
 
@@ -2251,14 +2338,7 @@ async function duplicatePathwayRecord(pathway) {
     },
   });
 
-  const normalized = normalizePathwayRecord(response);
-  const existing = getWorkspacePathways().filter(item => String(item.id) !== String(normalized.id));
-  const nextPathways = [normalized, ...existing];
-  window.SEED_PATHWAYS = nextPathways;
-  setWorkspaceSnapshot({
-    pathways: nextPathways,
-    pathwaysById: toWorkspaceIndex(nextPathways),
-  });
+  const normalized = upsertWorkspacePathwayRecord(response);
   return normalized;
 }
 
@@ -2402,6 +2482,7 @@ window.OptiDxActions = {
   loadPathwayIntoWorkspace,
   importPresetTestToPathway,
   openPathwayRecord,
+  updatePathwayRecord,
   savePathway,
   optimizePathways,
   evaluatePathway,

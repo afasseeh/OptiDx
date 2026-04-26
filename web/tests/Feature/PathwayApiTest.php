@@ -122,6 +122,70 @@ class PathwayApiTest extends TestCase
         $this->assertNotNull(Pathway::query()->first()?->latestEvaluationResult);
     }
 
+    public function test_pathway_index_includes_latest_evaluation_summary(): void
+    {
+        $this->actingAs($this->workspaceUser('workspace-summary@example.com'));
+
+        $payload = $this->canonicalPathwayPayload();
+
+        $created = $this->postJson('/api/pathways', [
+            'name' => 'Summary target',
+            'editor_definition' => $payload,
+        ])
+            ->assertCreated()
+            ->json();
+
+        $this->postJson('/api/pathways/evaluate', [
+            'pathway' => $payload,
+            'pathway_id' => $created['id'],
+            'prevalence' => 0.1,
+        ])->assertOk();
+
+        $this->getJson('/api/pathways')
+            ->assertOk()
+            ->assertJsonCount(1)
+            ->assertJsonStructure([
+                0 => [
+                    'latest_evaluation_result' => [
+                        'id',
+                        'result_payload',
+                    ],
+                ],
+            ]);
+    }
+
+    public function test_pathway_update_can_rename_workspace_entry(): void
+    {
+        $this->actingAs($this->workspaceUser('rename-owner@example.com'));
+
+        $created = $this->postJson('/api/pathways', [
+            'name' => 'Original pathway name',
+            'editor_definition' => $this->canonicalPathwayPayload(),
+            'metadata' => [
+                'label' => 'Original pathway name',
+            ],
+        ])
+            ->assertCreated()
+            ->json();
+
+        $updated = $this->putJson("/api/pathways/{$created['id']}", [
+            'name' => 'Readable pathway name',
+            'metadata' => [
+                'label' => 'Readable pathway name',
+                'source' => 'Workspace home rename',
+            ],
+        ])
+            ->assertOk()
+            ->json();
+
+        $this->assertSame('Readable pathway name', $updated['name']);
+        $this->assertSame('Readable pathway name', $updated['metadata']['label']);
+
+        $this->getJson('/api/pathways')
+            ->assertOk()
+            ->assertJsonPath('0.name', 'Readable pathway name');
+    }
+
     public function test_settings_are_scoped_by_scope_and_key(): void
     {
         $this->actingAs($this->workspaceUser('settings-owner@example.com'));

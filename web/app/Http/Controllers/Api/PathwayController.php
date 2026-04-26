@@ -27,7 +27,7 @@ class PathwayController extends Controller
 
     public function index()
     {
-        return Pathway::query()->latest()->get();
+        return Pathway::query()->with('latestEvaluationResult')->latest()->get();
     }
 
     public function store(Request $request)
@@ -56,12 +56,12 @@ class PathwayController extends Controller
         $data['engine_definition'] = $prepared['engine_definition'];
         $data['metadata'] = $prepared['metadata'];
 
-        return response()->json(Pathway::create($data), 201);
+        return response()->json(Pathway::create($data)->load('latestEvaluationResult'), 201);
     }
 
     public function show(Pathway $pathway)
     {
-        return $pathway;
+        return $pathway->load('latestEvaluationResult');
     }
 
     public function update(Request $request, Pathway $pathway)
@@ -94,7 +94,7 @@ class PathwayController extends Controller
 
         $pathway->update($data);
 
-        return $pathway->refresh();
+        return $pathway->refresh()->load('latestEvaluationResult');
     }
 
     public function destroy(Pathway $pathway)
@@ -180,6 +180,8 @@ class PathwayController extends Controller
             'evaluation_mode' => 'server',
         ]);
 
+        $pathwayRecord->load('latestEvaluationResult');
+
         return response()->json([
             ...$result,
             'prevalence' => $resolvedPrevalence,
@@ -225,7 +227,7 @@ class PathwayController extends Controller
             'engine_definition' => $prepared['engine_definition'],
             'validation_status' => 'draft',
             'metadata' => $pathway['metadata'] ?? [],
-        ]), 201);
+        ])->load('latestEvaluationResult'), 201);
     }
 
     public function exportJson(Pathway $pathway)

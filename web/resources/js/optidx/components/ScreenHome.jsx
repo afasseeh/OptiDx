@@ -117,6 +117,44 @@ function ScreenHome({ setScreen }) {
                             onClick={async e => {
                               e.stopPropagation();
                               setMenuFor(null);
+                              const currentName = p.name || p.metadata?.label || "Untitled pathway";
+                              const nextName = window.prompt("Rename pathway", currentName)?.trim();
+                              if (!nextName || nextName === currentName) {
+                                return;
+                              }
+
+                              try {
+                                const nextDefinition = p._canonical || p.editor_definition || null;
+                                await window.OptiDxActions.updatePathwayRecord?.(p.id, {
+                                  name: nextName,
+                                  metadata: {
+                                    ...(p.metadata || {}),
+                                    label: nextName,
+                                  },
+                                  ...(nextDefinition ? {
+                                    editor_definition: {
+                                      ...nextDefinition,
+                                      metadata: {
+                                        ...(nextDefinition.metadata || {}),
+                                        label: nextName,
+                                      },
+                                    },
+                                  } : {}),
+                                });
+                              } catch (error) {
+                                window.OptiDxActions.showToast?.(error?.message || "Unable to rename pathway", "error");
+                              }
+                            }}
+                          >
+                            Rename
+                          </button>
+                          <button
+                            type="button"
+                            className="btn"
+                            style={{width:"100%", justifyContent:"flex-start", borderRadius:0, border:0}}
+                            onClick={async e => {
+                              e.stopPropagation();
+                              setMenuFor(null);
                               if (!window.confirm(`Delete "${p.name || "Untitled pathway"}" from the workspace?`)) {
                                 return;
                               }
@@ -144,7 +182,7 @@ function ScreenHome({ setScreen }) {
                   <div><span className="u-meta">TAT</span> <b className="mono">{formatText(p.tat, "—")}</b></div>
                 </div>
                 <div style={{padding:"8px 16px", background:"var(--surface-2)", borderTop:"1px solid var(--edge)", fontSize:11, color:"var(--fg-3)"}}>
-                  Updated {p.updated} · {p.owner}
+                  Updated {formatText(p.updated, "—")} · {formatText(p.owner, "Workspace")}
                 </div>
               </article>
             ))}
