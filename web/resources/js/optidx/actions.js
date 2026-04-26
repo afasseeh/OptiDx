@@ -467,8 +467,18 @@ function toHours(value, unit) {
 function resolvePathwayTestCatalog(pathway) {
   const nodes = normalizeGraphItems(pathway?.nodes);
   const testsMap = pathway?.tests || {};
+  const workspaceTests = getWorkspaceTests();
   const entries = [];
   const labelCounts = new Map();
+
+  const findTestRecord = (testId) => {
+    const stringId = String(testId);
+    return testsMap[stringId]
+      || testsMap[testId]
+      || workspaceTests.find(item => String(item.id) === stringId)
+      || window.SEED_TESTS?.find(item => String(item.id) === stringId)
+      || {};
+  };
 
   const addEntry = (key, testId, label, payload = {}) => {
     if (!key || !testId) {
@@ -495,7 +505,7 @@ function resolvePathwayTestCatalog(pathway) {
 
   for (const node of nodes) {
     if (node?.type === 'test' && node.testId) {
-      const test = testsMap[node.testId] || window.SEED_TESTS?.find(x => x.id === node.testId) || {};
+      const test = findTestRecord(node.testId);
       const tatHours = toHours(test.turnaround_time ?? test.tat ?? 0, test.turnaround_time_unit ?? test.tatUnit ?? 'hr');
       addEntry(node.testId, node.testId, test.name || node.label || node.testId, {
         cost: Number(test.cost ?? 0),
@@ -513,7 +523,7 @@ function resolvePathwayTestCatalog(pathway) {
           continue;
         }
 
-        const test = testsMap[member.testId] || window.SEED_TESTS?.find(x => x.id === member.testId) || {};
+        const test = findTestRecord(member.testId);
         const tatHours = toHours(test.turnaround_time ?? test.tat ?? 0, test.turnaround_time_unit ?? test.tatUnit ?? 'hr');
         const alias = member.id || `${node.id}__member_${index + 1}__${member.testId}`;
         addEntry(alias, member.testId, test.name || member.testId, {
@@ -735,9 +745,48 @@ function snapshotCanvasTestRecord(test, fallbackLabel = null) {
   };
 }
 
+function resolveCanvasTestRecord(testRef, fallbackLabel = null) {
+  const stringId = testRef == null ? null : String(testRef?.testId ?? testRef?.id ?? testRef);
+  const liveRecord = stringId
+    ? getWorkspaceTests().find(item => String(item.id) === stringId)
+      || window.SEED_TESTS?.find(item => String(item.id) === stringId)
+      || null
+    : null;
+
+  const base = snapshotCanvasTestRecord(liveRecord || testRef, fallbackLabel);
+  if (!liveRecord || typeof liveRecord !== 'object') {
+    return base;
+  }
+
+  return {
+    ...base,
+    id: String(liveRecord.id ?? base.id),
+    name: liveRecord.name || base.name,
+    icon: liveRecord.icon || base.icon,
+    category: liveRecord.category || base.category,
+    sensitivity: Number(liveRecord.sens ?? liveRecord.sensitivity ?? base.sensitivity ?? 0),
+    specificity: Number(liveRecord.spec ?? liveRecord.specificity ?? base.specificity ?? 0),
+    turnaround_time: Number(liveRecord.tat ?? liveRecord.turnaround_time ?? base.turnaround_time ?? 0),
+    turnaround_time_unit: liveRecord.tatUnit || liveRecord.turnaround_time_unit || base.turnaround_time_unit || 'min',
+    sample_types: Array.isArray(liveRecord.sample_types) && liveRecord.sample_types.length
+      ? liveRecord.sample_types.filter(Boolean)
+      : base.sample_types,
+    skill_level: liveRecord.skill_level ?? base.skill_level,
+    cost: Number(liveRecord.cost ?? base.cost ?? 0),
+    evidence: liveRecord.evidence || liveRecord.provenance?.source || base.evidence,
+    provenance: liveRecord.provenance || base.provenance || null,
+    sample: liveRecord.sample || base.sample,
+    skill: liveRecord.skill || base.skill,
+  };
+}
+
 function collectCanvasTests(pathway) {
   const nodes = Array.isArray(pathway?.nodes) ? pathway.nodes : [];
   const tests = new Map();
+
+  const findTestRecord = (testId) => {
+    return resolveCanvasTestRecord(testId, testId);
+  };
 
   const addTest = (testRecord, aliases = []) => {
     if (!testRecord?.id) {
@@ -768,12 +817,13 @@ function collectCanvasTests(pathway) {
 
   for (const node of nodes) {
     if (node?.type === 'test' && node.testId) {
-      addTest(snapshotCanvasTestRecord(node, node.label || node.testId), [node.testId]);
+      const testRecord = findTestRecord(node.testId) || snapshotCanvasTestRecord(node, node.label || node.testId);
+      addTest(testRecord, [node.testId]);
     }
 
     if (node?.type === 'parallel') {
       for (const member of node.members || []) {
-        const testRecord = snapshotCanvasTestRecord(member, member?.label || member?.testId || member?.id);
+        const testRecord = findTestRecord(member?.testId) || snapshotCanvasTestRecord(member, member?.label || member?.testId || member?.id);
         addTest(testRecord, [member?.id, member?.testId]);
       }
     }
@@ -1012,14 +1062,18 @@ function normalizePathwayGraph(pathway) {
 
 function normalizeCanvasNode(node, fallbackId) {
   const members = Array.isArray(node.members)
-    ? node.members.map(member => ({ ...member }))
+    ? node.members.map(member => ({
+        ...resolveCanvasTestRecord(member, member?.label || member?.testId || member?.id),
+        ...member,
+      }))
     : null;
+  const resolvedTest = node.testId != null ? resolveCanvasTestRecord(node.testId, node.label || node.testId) : null;
 
   return {
     id: node.id || fallbackId,
     type: node.type || 'test',
     testId: node.testId ?? null,
-    label: node.label ?? null,
+    label: node.label ?? resolvedTest?.name ?? null,
     kind: node.kind ?? null,
     subtype: node.subtype ?? null,
     terminalRole: node.terminalRole ?? null,
@@ -1028,6 +1082,21 @@ function normalizeCanvasNode(node, fallbackId) {
     x: Number.isFinite(Number(node.x)) ? Number(node.x) : 0,
     y: Number.isFinite(Number(node.y)) ? Number(node.y) : 0,
     rule: node.rule ?? null,
+    ...(resolvedTest && node.type === 'test' ? {
+      icon: node.icon || resolvedTest.icon,
+      category: node.category || resolvedTest.category,
+      sens: node.sens ?? resolvedTest.sensitivity,
+      spec: node.spec ?? resolvedTest.specificity,
+      cost: node.cost ?? resolvedTest.cost,
+      tat: node.tat ?? resolvedTest.turnaround_time,
+      tatUnit: node.tatUnit || resolvedTest.turnaround_time_unit,
+      sample: node.sample || resolvedTest.sample,
+      sample_types: Array.isArray(node.sample_types) && node.sample_types.length ? node.sample_types : resolvedTest.sample_types,
+      skill: node.skill || resolvedTest.skill,
+      skill_level: node.skill_level ?? resolvedTest.skill_level,
+      evidence: node.evidence || resolvedTest.evidence,
+      availability: node.availability ?? resolvedTest.availability,
+    } : {}),
   };
 }
 

@@ -3,6 +3,115 @@ function isLockedTerminalNode(node) {
   return node?.type === "terminal" && (node.terminalRole === "required_positive" || node.terminalRole === "required_negative");
 }
 
+function getPanelTestCatalog() {
+  return window.OptiDxActions?.getWorkspaceTests?.() || window.SEED_TESTS || [];
+}
+
+function parsePanelSkillLevel(value) {
+  if (value == null || value === "") {
+    return null;
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.max(0, Math.min(5, Math.round(value)));
+  }
+
+  const numeric = Number(value);
+  if (!Number.isNaN(numeric)) {
+    return Math.max(0, Math.min(5, Math.round(numeric)));
+  }
+
+  const label = String(value).toLowerCase();
+  if (label.includes("chw") || label.includes("self")) return 1;
+  if (label.includes("nurse")) return 2;
+  if (label.includes("lab")) return 3;
+  if (label.includes("radiolog") || label.includes("specialist") || label.includes("patholog")) return 4;
+  return null;
+}
+
+function formatPanelSkillLabel(level) {
+  if (level == null || level === "") {
+    return "n/a";
+  }
+
+  const numeric = Number(level);
+  if (Number.isNaN(numeric)) {
+    return String(level);
+  }
+
+  const labels = {
+    1: "CHW / self",
+    2: "Nurse",
+    3: "Lab tech",
+    4: "Specialist",
+    5: "Specialist",
+  };
+
+  return labels[numeric] || `Skill ${numeric}`;
+}
+
+function getPanelRenderableTest(testRef, fallbackLabel = null) {
+  const catalog = getPanelTestCatalog();
+  const lookupId = typeof testRef === "string"
+    ? testRef
+    : testRef?.testId ?? testRef?.id ?? fallbackLabel ?? null;
+
+  if (lookupId != null) {
+    const found = catalog.find(item => String(item.id) === String(lookupId));
+    if (found) {
+      return found;
+    }
+  }
+
+  if (testRef && typeof testRef === "object") {
+    return testRef;
+  }
+
+  const resolvedId = String(lookupId ?? fallbackLabel ?? "test");
+  return {
+    id: resolvedId,
+    name: fallbackLabel || resolvedId,
+    icon: "flask-conical",
+    category: "clinical",
+    sens: 0,
+    spec: 0,
+    cost: 0,
+    tat: 0,
+    tatUnit: "min",
+    sample: "n/a",
+    sample_types: ["n/a"],
+    skill: "n/a",
+    skill_level: null,
+  };
+}
+
+function getPanelTatMinutes(test) {
+  const tat = Number(test?.tat ?? test?.turnaround_time ?? 0);
+  const unit = String(test?.tatUnit ?? test?.turnaround_time_unit ?? "min").toLowerCase();
+
+  if (!Number.isFinite(tat)) {
+    return 0;
+  }
+
+  if (unit === "min" || unit === "minute" || unit === "minutes") return tat;
+  if (unit === "hr" || unit === "h" || unit === "hour" || unit === "hours") return tat * 60;
+  if (unit === "day" || unit === "days" || unit === "d") return tat * 1440;
+  return tat;
+}
+
+function getPanelSkillRank(test) {
+  return parsePanelSkillLevel(test?.skill_level ?? test?.skill ?? null);
+}
+
+function getPanelSkillLabel(test) {
+  const rank = getPanelSkillRank(test);
+  if (rank != null) {
+    return formatPanelSkillLabel(rank);
+  }
+
+  return test?.skill || test?.skill_level || "n/a";
+}
+
 function PropertiesPanel({ selected, nodes, setOpenPanel, updateNode, deleteNode, duplicateNode, ungroupParallel, addParallelMember, removeParallelMember, updateParallelRule }) {
   const node = nodes.find(n => n.id === selected);
   if (!node) {
@@ -36,7 +145,7 @@ function PropertiesPanel({ selected, nodes, setOpenPanel, updateNode, deleteNode
 }
 
 function TestNodeProps({ node, updateNode }) {
-  const test = window.SEED_TESTS.find(t => t.id === node.testId);
+  const test = getPanelRenderableTest(node.testId, node.label || node.testId);
   if (!test) return null;
   return (
     <div>
@@ -75,13 +184,13 @@ function TestNodeProps({ node, updateNode }) {
 function ParallelBlockProps({ node, updateNode, ungroupParallel, addParallelMember, removeParallelMember, updateParallelRule }) {
   const memberRows = (node.members || [])
     .map((member, index) => {
-      const test = window.SEED_TESTS.find(t => t.id === member.testId);
+      const test = getPanelRenderableTest(member, member?.label || member?.testId || member?.id);
       if (!test) return null;
       return { member, test, key: member.id || `${member.testId}-${index}`, occurrence: index + 1 };
     })
     .filter(Boolean);
   const tests = memberRows.map(row => row.test);
-  const [selectedTestId, setSelectedTestId] = useState(window.SEED_TESTS[0]?.id || "");
+  const [selectedTestId, setSelectedTestId] = useState(getPanelTestCatalog()[0]?.id || "");
   const [isDropActive, setIsDropActive] = useState(false);
 
   const addMember = (testId) => {
@@ -131,7 +240,7 @@ function ParallelBlockProps({ node, updateNode, ungroupParallel, addParallelMemb
         </div>
         <div className="parallel-add-row">
           <select className="parallel-add-select" value={selectedTestId} onChange={e => setSelectedTestId(e.target.value)}>
-            {window.SEED_TESTS.map(test => (
+            {getPanelTestCatalog().map(test => (
               <option key={test.id} value={test.id}>{test.name}</option>
             ))}
           </select>
@@ -164,18 +273,27 @@ function ParallelBlockProps({ node, updateNode, ungroupParallel, addParallelMemb
       <div className="props__section">
         <h4>Combined parameters</h4>
         {(() => {
+          const combinedCost = tests.reduce((sum, test) => sum + Number(test?.cost ?? 0), 0);
           const maxTat = tests.length
-            ? Math.max(...tests.map(t => t.tatUnit === "min" ? t.tat : t.tatUnit === "hr" ? t.tat * 60 : t.tat * 1440))
+            ? Math.max(...tests.map(getPanelTatMinutes))
             : 0;
-          const sampleTypes = [...new Set(tests.map(t => t.sample))].filter(Boolean);
+          const sampleTypes = [...new Set(tests.flatMap(test => {
+            if (Array.isArray(test?.sample_types) && test.sample_types.length) {
+              return test.sample_types;
+            }
+            return test?.sample ? [test.sample] : [];
+          }))].filter(Boolean);
+          const skillRanks = tests.map(getPanelSkillRank).filter(rank => rank != null);
+          const maxSkill = skillRanks.length ? Math.max(...skillRanks) : null;
+          const maxSkillLabel = maxSkill != null ? formatPanelSkillLabel(maxSkill) : "n/a";
           return (
-        <dl className="kv">
-          <dt>Combined cost</dt><dd className="mono">${tests.reduce((s,t) => s + t.cost, 0).toFixed(2)}</dd>
-          <dt>TAT (max rule)</dt><dd className="mono">{maxTat ? `${maxTat} min` : "n/a"}</dd>
-          <dt>Sample types</dt><dd>{sampleTypes.length ? sampleTypes.join(", ") : "n/a"}</dd>
-          <dt>Max skill</dt><dd>Lab Tech</dd>
-          <dt>Independence</dt><dd><span className="chip chip--info">Conditional, given D</span></dd>
-        </dl>
+            <dl className="kv">
+              <dt>Combined cost</dt><dd className="mono">${combinedCost.toFixed(2)}</dd>
+              <dt>TAT (max rule)</dt><dd className="mono">{tests.length ? `${maxTat} min` : "n/a"}</dd>
+              <dt>Sample types</dt><dd>{sampleTypes.length ? sampleTypes.join(", ") : "n/a"}</dd>
+              <dt>Max skill</dt><dd>{maxSkillLabel}</dd>
+              <dt>Independence</dt><dd><span className="chip chip--info">Conditional, given D</span></dd>
+            </dl>
           );
         })()}
       </div>
@@ -457,7 +575,7 @@ function LivePropertiesPanel({ selected, nodes, edges, setOpenPanel, updateNode,
 }
 
 function LiveTestNodeProps({ node, nodes, edges, updateNode, upsertEdge }) {
-  const test = window.SEED_TESTS.find(t => t.id === node.testId);
+  const test = getPanelRenderableTest(node.testId, node.label || node.testId);
   if (!test) return null;
 
   return (
@@ -497,13 +615,13 @@ function LiveTestNodeProps({ node, nodes, edges, updateNode, upsertEdge }) {
 function LiveParallelBlockProps({ node, nodes, edges, updateNode, ungroupParallel, addParallelMember, removeParallelMember, updateParallelRule, upsertEdge }) {
   const memberRows = (node.members || [])
     .map((member, index) => {
-      const test = window.SEED_TESTS.find(t => t.id === member.testId);
+      const test = getPanelRenderableTest(member, member?.label || member?.testId || member?.id);
       if (!test) return null;
       return { member, test, key: member.id || `${member.testId}-${index}`, occurrence: index + 1 };
     })
     .filter(Boolean);
   const tests = memberRows.map(row => row.test);
-  const [selectedTestId, setSelectedTestId] = useState(window.SEED_TESTS[0]?.id || "");
+  const [selectedTestId, setSelectedTestId] = useState(getPanelTestCatalog()[0]?.id || "");
   const [isDropActive, setIsDropActive] = useState(false);
 
   const addMember = (testId) => {
@@ -554,7 +672,7 @@ function LiveParallelBlockProps({ node, nodes, edges, updateNode, ungroupParalle
         </div>
         <div className="parallel-add-row">
           <select className="parallel-add-select" value={selectedTestId} onChange={e => setSelectedTestId(e.target.value)}>
-            {window.SEED_TESTS.map(test => (
+            {getPanelTestCatalog().map(test => (
               <option key={test.id} value={test.id}>{test.name}</option>
             ))}
           </select>
@@ -587,10 +705,13 @@ function LiveParallelBlockProps({ node, nodes, edges, updateNode, ungroupParalle
       <div className="props__section">
         <h4>Combined parameters</h4>
         <dl className="kv">
-          <dt>Combined cost</dt><dd className="mono">${tests.reduce((s,t) => s + t.cost, 0).toFixed(2)}</dd>
-          <dt>TAT (max rule)</dt><dd className="mono">{tests.length ? `${Math.max(...tests.map(t => t.tatUnit === "min" ? t.tat : t.tatUnit === "hr" ? t.tat * 60 : t.tat * 1440))} min` : "n/a"}</dd>
-          <dt>Sample types</dt><dd>{[...new Set(tests.map(t => t.sample))].filter(Boolean).join(", ") || "n/a"}</dd>
-          <dt>Max skill</dt><dd>{tests.map(t => t.skill).filter(Boolean).slice(-1)[0] || "n/a"}</dd>
+          <dt>Combined cost</dt><dd className="mono">${tests.reduce((sum, test) => sum + Number(test?.cost ?? 0), 0).toFixed(2)}</dd>
+          <dt>TAT (max rule)</dt><dd className="mono">{tests.length ? `${Math.max(...tests.map(getPanelTatMinutes))} min` : "n/a"}</dd>
+          <dt>Sample types</dt><dd>{[...new Set(tests.flatMap(test => Array.isArray(test?.sample_types) && test.sample_types.length ? test.sample_types : (test?.sample ? [test.sample] : [])))].filter(Boolean).join(", ") || "n/a"}</dd>
+          <dt>Max skill</dt><dd>{(() => {
+            const skillRanks = tests.map(getPanelSkillRank).filter(rank => rank != null);
+            return skillRanks.length ? formatPanelSkillLabel(Math.max(...skillRanks)) : "n/a";
+          })()}</dd>
           <dt>Independence</dt><dd><span className="chip chip--info">Conditional, given D</span></dd>
         </dl>
       </div>

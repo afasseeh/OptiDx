@@ -1,5 +1,23 @@
 # Change Log
 
+## 2026-04-26 - Fix zero-valued pathway evaluation from id-mismatch serialization
+
+- Summary: Fixed the browser-side pathway hydration, serializer, and results catalog lookup so canvas test ids are matched against the live workspace catalog using string-safe ids before load, serialization, and result rendering, preventing saved graphs from compiling with zero-valued test metadata.
+- Files or modules affected: `web/resources/js/optidx/actions.js`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: A saved pathway with numeric test ids was being compiled with empty test definitions because the browser lookup used strict id equality and missed workspace tests whose ids arrived as strings or numbers in a different shape.
+- Architecture impact: The frontend now treats the live workspace test library as the authoritative source for test metadata during hydration, serialization, and results rendering, with string-safe id matching to keep numeric database ids and string node ids aligned.
+- Migration or deployment impact: Rebuild the Vite frontend bundle and redeploy/restart the OptiDx VPS stack so the corrected serializer and results lookup are active.
+- Follow-up notes: Existing saved pathways that already contain zero-valued test snapshots should be re-saved or re-evaluated once the rebuilt frontend is live so the new lookup path can repopulate the test metadata.
+
+## 2026-04-26 - Parallel block summary now resolves live workspace tests
+
+- Summary: Updated the Builder inspector so parallel blocks resolve member tests from the live workspace catalog first and fall back to the stored member snapshot, then recompute combined cost, max TAT, sample types, and max skill from the resolved member records instead of seed-only fixtures.
+- Files or modules affected: `web/resources/js/optidx/components/PropertiesPanel.jsx`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: The parallel block summary was incorrectly showing `$0.00`, `n/a`, and a hardcoded skill label because the inspector only looked at `SEED_TESTS`, which is too narrow for imported or workspace-authored tests.
+- Architecture impact: The properties panel now treats the live workspace test catalog as the primary lookup source and uses the member snapshot as a safe fallback, which keeps summary metrics aligned with the actual block contents.
+- Migration or deployment impact: Rebuild the Vite frontend bundle so the updated inspector summary logic is published. No database migration was required.
+- Follow-up notes: The same helper also improves the test picker options in the inspector so dynamically added workspace tests remain available there.
+
 ## 2026-04-26 - Builder run-pathway discordant port compatibility
 
 - Summary: Updated the canvas graph compiler to treat `disc` as an alias for `discord` when compiling discordant parallel branches, and added a regression test that verifies mixed-outcome branches are emitted correctly instead of collapsing to empty conditions.
