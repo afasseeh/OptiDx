@@ -3,9 +3,14 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Models\Project;
+use App\Models\Pathway;
+use App\Models\DiagnosticTest;
+use App\Models\Setting;
 use App\Notifications\ResetPasswordNotification;
 use App\Notifications\VerifyEmailNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Password;
@@ -27,14 +32,25 @@ class AuthFlowTest extends TestCase
             'password' => 'password123',
             'organization' => 'Syreon',
             'role' => 'Analyst',
+            'timezone' => 'Africa/Cairo',
         ]);
 
         $response->assertCreated()
             ->assertJsonPath('requires_verification', true)
-            ->assertJsonPath('email', 'sara@example.com');
+            ->assertJsonPath('email', 'sara@example.com')
+            ->assertJsonPath('user.first_name', 'Sara')
+            ->assertJsonPath('user.last_name', 'El-Sayed')
+            ->assertJsonPath('user.organization', 'Syreon')
+            ->assertJsonPath('user.title', 'Analyst')
+            ->assertJsonPath('user.timezone', 'Africa/Cairo');
 
         $user = User::query()->where('email', 'sara@example.com')->firstOrFail();
         $this->assertSame('Sara El-Sayed', $user->name);
+        $this->assertSame('Sara', $user->first_name);
+        $this->assertSame('El-Sayed', $user->last_name);
+        $this->assertSame('Syreon', $user->organization);
+        $this->assertSame('Analyst', $user->title);
+        $this->assertSame('Africa/Cairo', $user->timezone);
         $this->assertTrue(Hash::check('password123', $user->password));
         $this->assertNull($user->email_verified_at);
 
@@ -80,9 +96,128 @@ class AuthFlowTest extends TestCase
 
         $response->assertOk()
             ->assertJsonPath('message', 'Signed in successfully.')
-            ->assertJsonPath('user.email', $user->email);
+            ->assertJsonPath('user.email', $user->email)
+            ->assertJsonPath('user.first_name', 'Verified')
+            ->assertJsonPath('user.last_name', 'User');
 
         $this->assertAuthenticatedAs($user);
+    }
+
+    public function test_profile_update_persists_account_fields(): void
+    {
+        Notification::fake();
+
+        $user = User::create([
+            'name' => 'Profile User',
+            'first_name' => 'Profile',
+            'last_name' => 'User',
+            'email' => 'profile@example.com',
+            'password' => Hash::make('password123'),
+            'email_verified_at' => now(),
+        ]);
+
+        $response = $this->actingAs($user)->putJson('/auth/profile', [
+            'first_name' => 'Sara',
+            'last_name' => 'Elsayed',
+            'email' => 'sara.updated@example.com',
+            'organization' => 'Syreon',
+            'title' => 'Health economist',
+            'timezone' => 'Africa/Cairo',
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('message', 'Profile saved.')
+            ->assertJsonPath('user.first_name', 'Sara')
+            ->assertJsonPath('user.last_name', 'Elsayed')
+            ->assertJsonPath('user.email', 'sara.updated@example.com')
+            ->assertJsonPath('user.organization', 'Syreon')
+            ->assertJsonPath('user.title', 'Health economist')
+            ->assertJsonPath('user.timezone', 'Africa/Cairo');
+
+        $user->refresh();
+        $this->assertSame('Sara Elsayed', $user->name);
+        $this->assertSame('Sara', $user->first_name);
+        $this->assertSame('Elsayed', $user->last_name);
+        $this->assertSame('Syreon', $user->organization);
+        $this->assertSame('Health economist', $user->title);
+        $this->assertSame('Africa/Cairo', $user->timezone);
+        $this->assertNull($user->email_verified_at);
+        Notification::assertSentTo($user, VerifyEmailNotification::class);
+    }
+
+    public function test_logout_invalidates_session(): void
+    {
+        $user = User::create([
+            'name' => 'Logout User',
+            'first_name' => 'Logout',
+            'last_name' => 'User',
+            'email' => 'logout@example.com',
+            'password' => Hash::make('password123'),
+            'email_verified_at' => now(),
+        ]);
+
+        $this->actingAs($user)
+            ->postJson('/auth/logout')
+            ->assertOk()
+            ->assertJsonPath('message', 'Signed out.');
+
+        $this->assertGuest();
+        $this->getJson('/auth/me')->assertUnauthorized();
+    }
+
+    public function test_delete_account_preserves_workspace_rows_and_detaches_ownership(): void
+    {
+        $user = User::create([
+            'name' => 'Delete User',
+            'first_name' => 'Delete',
+            'last_name' => 'User',
+            'email' => 'delete@example.com',
+            'password' => Hash::make('password123'),
+            'email_verified_at' => now(),
+        ]);
+
+        $this->actingAs($user);
+
+        $project = Project::create([
+            'title' => 'Delete me project',
+            'created_by' => $user->id,
+            'metadata' => [],
+        ]);
+
+        $pathway = Pathway::create([
+            'project_id' => $project->id,
+            'name' => 'Delete me pathway',
+            'editor_definition' => ['nodes' => [], 'edges' => []],
+            'validation_status' => 'draft',
+            'created_by' => $user->id,
+        ]);
+
+        $test = DiagnosticTest::create([
+            'project_id' => $project->id,
+            'name' => 'Delete me test',
+            'sensitivity' => 0.9,
+            'specificity' => 0.95,
+            'created_by' => $user->id,
+        ]);
+
+        $setting = Setting::create([
+            'created_by' => $user->id,
+            'scope' => 'workspace',
+            'key' => 'profile',
+            'value' => ['name' => 'Delete User'],
+        ]);
+
+        $this->deleteJson('/auth/account', [
+                'password' => 'password123',
+            ])->assertOk()
+            ->assertJsonPath('message', 'Account deleted.');
+
+        $this->assertGuest();
+        $this->assertNull(User::query()->find($user->id));
+        $this->assertSame(null, DB::table('projects')->where('id', $project->id)->value('created_by'));
+        $this->assertSame(null, DB::table('pathways')->where('id', $pathway->id)->value('created_by'));
+        $this->assertSame(null, DB::table('diagnostic_tests')->where('id', $test->id)->value('created_by'));
+        $this->assertSame(null, DB::table('settings')->where('id', $setting->id)->value('created_by'));
     }
 
     public function test_verify_email_marks_the_user_as_verified(): void

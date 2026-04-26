@@ -46,6 +46,12 @@ function dispatchWorkspaceEvent() {
 
 const ACTIVE_PROJECT_STORAGE_KEY = 'optidx.active-project-id';
 
+function dispatchAuthEvent(detail = null, type = 'optidx-auth-updated') {
+  window.dispatchEvent(new CustomEvent(type, {
+    detail,
+  }));
+}
+
 function readActiveProjectId() {
   try {
     return window.localStorage?.getItem(ACTIVE_PROJECT_STORAGE_KEY) || null;
@@ -65,6 +71,79 @@ function writeActiveProjectId(projectId) {
   } catch {
     // Ignore storage failures in hardened browser contexts.
   }
+}
+
+function setCurrentUser(user, options = {}) {
+  const normalized = user && typeof user === 'object' ? { ...user } : null;
+  window.OptiDxCurrentUser = normalized;
+
+  if (options.emit !== false) {
+    dispatchAuthEvent(normalized);
+  }
+
+  return normalized;
+}
+
+function getCurrentUser() {
+  return window.OptiDxCurrentUser || null;
+}
+
+function clearWorkspaceState(options = {}) {
+  try {
+    window.localStorage?.removeItem(ACTIVE_PROJECT_STORAGE_KEY);
+  } catch {
+    // Ignore storage failures in hardened browser contexts.
+  }
+
+  window.OptiDxWorkspace = {
+    projects: [],
+    pathways: [],
+    tests: [],
+    settings: [],
+    projectsById: {},
+    pathwaysById: {},
+    testsById: {},
+    settingsByKey: {},
+  };
+  window.OptiDxCurrentProjectRecord = null;
+  window.OptiDxCurrentProjectDraft = null;
+  window.OptiDxCurrentProject = null;
+  window.OptiDxCurrentPathwayRecord = null;
+  window.OptiDxCurrentPathway = null;
+  window.OptiDxCanvasDraft = null;
+  window.OptiDxCanvasState = null;
+  window.OptiDxLatestEvaluationResult = null;
+  window.OptiDxLatestEvaluationView = null;
+  window.OptiDxLatestEvaluationPathway = null;
+  window.OptiDxOptimizationResults = null;
+  window.OptiDxOptimizationScenarios = null;
+  window.OptiDxWizardStep = 0;
+  window.SEED_PROJECTS = [];
+  window.SEED_PATHWAYS = [];
+  window.SEED_TESTS = [];
+  window.SEED_PATHWAY = null;
+
+  if (options.emit !== false) {
+    dispatchWorkspaceEvent();
+  }
+}
+
+function clearSessionState() {
+  setCurrentUser(null);
+  clearWorkspaceState();
+  dispatchAuthEvent(null, 'optidx-session-ended');
+}
+
+async function logout() {
+  const response = await request('post', '/auth/logout');
+  clearSessionState();
+  return response;
+}
+
+async function deleteAccount(password) {
+  const response = await request('delete', '/auth/account', { password });
+  clearSessionState();
+  return response;
 }
 
 function normalizeProjectMetadata(metadata) {
@@ -2306,6 +2385,12 @@ window.OptiDxActions = {
   setActivePathwayDraft,
   createStarterCanvasGraph,
   showToast,
+  setCurrentUser,
+  getCurrentUser,
+  clearWorkspaceState,
+  clearSessionState,
+  logout,
+  deleteAccount,
   normalizeTAT,
   copyText,
   copyShareLink,

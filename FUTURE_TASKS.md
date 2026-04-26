@@ -190,3 +190,11 @@
 - **Improvement:** Add an admin audit flow that reviews and reassigns or archives those ambiguous legacy rows explicitly.
 - **Benefit:** Preserves useful historical data while removing the last ambiguous shared-state leftovers and making ownership provenance explicit.
 - **Priority:** Low
+
+## 23. Reassignment workflow for preserved deleted-account records
+
+- **Context:** Account deletion now preserves created workspace rows but nulls ownership so the records can survive the user purge.
+- **Limitation:** Those preserved rows are currently invisible to normal account-scoped users until an admin or future workspace owner manually reassigns them.
+- **Improvement:** Add an admin-only reassignment surface that can search null-owned rows, restore ownership in bulk, and show what was preserved during deletion.
+- **Benefit:** Prevents useful pathway and test history from becoming stranded after a user leaves the system.
+- **Priority:** Medium

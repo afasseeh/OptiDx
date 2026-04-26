@@ -235,7 +235,7 @@ function SSORow() {
 }
 
 function LoginForm({ onAuthed, onForgot, onNeedVerification }) {
-  const [email, setEmail] = useState("sara.el-sayed@syreon.me");
+  const [email, setEmail] = useState("");
   const [pwd, setPwd] = useState("");
   const [remember, setRemember] = useState(true);
   const [busy, setBusy] = useState(false);

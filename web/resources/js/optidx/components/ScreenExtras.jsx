@@ -643,7 +643,7 @@ function Metric({ label, value, accent }) {
 }
 
 // ---------- SETTINGS (full tabbed experience) -----------------------------
-function ScreenSettingsFull() {
+function ScreenSettingsFull({ currentUser }) {
   const [tab, setTab] = useState("profile");
   const tabs = [
     { id:"profile", label:"Profile" },
@@ -670,8 +670,8 @@ function ScreenSettingsFull() {
               onClick={() => setTab(t.id)}>{t.label}</div>
           ))}
         </div>
-        {tab === "profile" && <SetProfile/>}
-        {tab === "workspace" && <SetWorkspace/>}
+        {tab === "profile" && <SetProfile currentUser={currentUser}/>}
+        {tab === "workspace" && <SetWorkspace currentUser={currentUser}/>}
         {tab === "defaults" && <SetDefaults/>}
         {tab === "branding" && <SetBranding/>}
         {tab === "integrations" && <SetIntegrations/>}
@@ -680,73 +680,177 @@ function ScreenSettingsFull() {
   );
 }
 
-function SetProfile() {
+function buildProfileDraft(currentUser) {
+  const fullName = String(currentUser?.name || "").trim();
+  const defaultFirstName = fullName.split(/\s+/)[0] || "";
+  const defaultLastName = fullName.split(/\s+/).slice(1).join(" ");
+
+  return {
+    first_name: String(currentUser?.first_name || defaultFirstName || "").trim(),
+    last_name: String(currentUser?.last_name || defaultLastName || "").trim(),
+    email: String(currentUser?.email || "").trim(),
+    organization: String(currentUser?.organization || "").trim(),
+    title: String(currentUser?.title || "").trim(),
+    timezone: String(currentUser?.timezone || "Africa/Cairo").trim() || "Africa/Cairo",
+  };
+}
+
+function getInitials(name = "") {
+  const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "U";
+  return parts.slice(0, 2).map(part => part[0]?.toUpperCase() || "").join("") || "U";
+}
+
+function SetProfile({ currentUser }) {
+  const [profile, setProfile] = useState(() => buildProfileDraft(currentUser));
+  const [saving, setSaving] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    setProfile(buildProfileDraft(currentUser));
+    setConfirmDelete(false);
+    setDeletePassword("");
+    setDeleteError("");
+  }, [currentUser]);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const response = await window.OptiDxActions.request("put", "/auth/profile", profile);
+      const nextUser = response?.user || null;
+      window.OptiDxActions.setCurrentUser?.(nextUser);
+      setProfile(buildProfileDraft(nextUser));
+      window.OptiDxActions.showToast?.(
+        nextUser?.email_verified_at ? "Profile saved" : "Profile saved. Verify your new email address.",
+        "success",
+      );
+    } catch (error) {
+      window.OptiDxActions.showToast?.(error?.message || "Unable to save profile", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const logout = async () => {
+    setLoggingOut(true);
+    try {
+      await window.OptiDxActions.logout?.();
+    } catch (error) {
+      window.OptiDxActions.showToast?.(error?.message || "Unable to sign out", "error");
+    } finally {
+      setLoggingOut(false);
+    }
+  };
+
+  const deleteAccount = async () => {
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      await window.OptiDxActions.deleteAccount?.(deletePassword);
+    } catch (error) {
+      setDeleteError(error?.message || "Unable to delete account");
+      window.OptiDxActions.showToast?.(error?.message || "Unable to delete account", "error");
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="grid" style={{gridTemplateColumns:"1fr 1fr", gap:16}}>
       <div className="card card--pad">
-        <h3 style={{fontSize:14, marginBottom:14}}>Personal information</h3>
+        <div className="row" style={{marginBottom:14}}>
+          <h3 style={{fontSize:14}}>Personal information</h3>
+          <div className="spacer"/>
+          <button type="button" className="btn btn--sm btn--primary" onClick={save} disabled={saving}>
+            {saving ? "Saving..." : "Save profile"}
+          </button>
+        </div>
         <div className="row" style={{gap:14, marginBottom:18}}>
           <div style={{width:72, height:72, borderRadius:"50%", background:"var(--sme-orange-050)",
             color:"var(--sme-orange-600)", display:"grid", placeItems:"center",
-            fontSize:24, fontWeight:700, fontFamily:"var(--font-display)"}}>SE</div>
+            fontSize:24, fontWeight:700, fontFamily:"var(--font-display)"}}>
+            {getInitials([profile.first_name, profile.last_name].filter(Boolean).join(" "))}
+          </div>
           <div>
-            <button className="btn btn--sm" onClick={() => window.OptiDxActions.comingSoon("Upload profile photo")}>Upload photo</button>
-            <div className="u-meta" style={{marginTop:4}}>JPG or PNG, max 2MB</div>
+            <div style={{fontSize:14, fontWeight:700}}>{[profile.first_name, profile.last_name].filter(Boolean).join(" ") || "Your profile"}</div>
+            <div className="u-meta">{profile.email || "No email on file"}</div>
+            <div className="u-meta" style={{marginTop:4}}>{profile.organization || "Organization not set"}</div>
           </div>
         </div>
         <div className="stack" style={{gap:12}}>
           <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:10}}>
-            <div className="field"><label className="field__label">First name</label><input className="input" defaultValue="Sara"/></div>
-            <div className="field"><label className="field__label">Last name</label><input className="input" defaultValue="El-Sayed"/></div>
+            <div className="field"><label className="field__label">First name</label><input className="input" value={profile.first_name || ""} onChange={e => setProfile(current => ({ ...current, first_name: e.target.value }))}/></div>
+            <div className="field"><label className="field__label">Last name</label><input className="input" value={profile.last_name || ""} onChange={e => setProfile(current => ({ ...current, last_name: e.target.value }))}/></div>
           </div>
-          <div className="field"><label className="field__label">Email</label><input className="input" defaultValue="sara.el-sayed@syreon.me"/></div>
-          <div className="field"><label className="field__label">Role / title</label><input className="input" defaultValue="Senior Health Economist"/></div>
+          <div className="field"><label className="field__label">Email</label><input className="input" type="email" value={profile.email || ""} onChange={e => setProfile(current => ({ ...current, email: e.target.value }))}/></div>
+          <div className="field"><label className="field__label">Organization</label><input className="input" value={profile.organization || ""} onChange={e => setProfile(current => ({ ...current, organization: e.target.value }))}/></div>
+          <div className="field"><label className="field__label">Role / title</label><input className="input" value={profile.title || ""} onChange={e => setProfile(current => ({ ...current, title: e.target.value }))}/></div>
           <div className="field"><label className="field__label">Time zone</label>
-            <select className="select" defaultValue="cai"><option value="cai">Cairo (GMT+2)</option><option>Istanbul (GMT+3)</option><option>Dubai (GMT+4)</option></select>
+            <select className="select" value={profile.timezone || "Africa/Cairo"} onChange={e => setProfile(current => ({ ...current, timezone: e.target.value }))}>
+              <option value="Africa/Cairo">Cairo (GMT+2)</option>
+              <option value="Europe/Istanbul">Istanbul (GMT+3)</option>
+              <option value="Asia/Dubai">Dubai (GMT+4)</option>
+              <option value="UTC">UTC</option>
+            </select>
           </div>
         </div>
       </div>
 
       <div className="stack" style={{gap:16}}>
         <div className="card card--pad">
-          <h3 style={{fontSize:14, marginBottom:14}}>Password & security</h3>
-          <div className="stack" style={{gap:10}}>
-            <button className="btn" style={{justifyContent:"space-between"}} onClick={() => window.OptiDxActions.comingSoon("Change password")}>
-              <span><Icon name="settings"/> Change password</span>
-              <Icon name="chevron-right" size={12}/>
+          <div className="row" style={{marginBottom:14}}>
+            <h3 style={{fontSize:14}}>Account actions</h3>
+            <div className="spacer"/>
+            <button type="button" className="btn btn--sm" onClick={logout} disabled={loggingOut}>
+              {loggingOut ? "Signing out..." : "Logout"}
             </button>
-            <button className="btn" style={{justifyContent:"space-between"}} onClick={() => window.OptiDxActions.comingSoon("Enable two-factor auth")}>
-              <span><Icon name="info"/> Enable two-factor auth</span>
-              <span className="chip chip--outline">Recommended</span>
-            </button>
-            <button className="btn" style={{justifyContent:"space-between"}} onClick={() => window.OptiDxActions.comingSoon("Active sessions")}>
-              <span><Icon name="database"/> Active sessions (3)</span>
-              <Icon name="chevron-right" size={12}/>
-            </button>
+          </div>
+          <div className="stack" style={{gap:10, fontSize:13, color:"var(--fg-2)", lineHeight:1.55}}>
+            <div>Use logout to end the current session on this device.</div>
+            <div>Profile changes save back to your account and are available across the shell after refresh.</div>
           </div>
         </div>
-        <div className="card card--pad">
-          <h3 style={{fontSize:14, marginBottom:14}}>Notifications</h3>
-          <div className="stack" style={{gap:8, fontSize:13}}>
-            {[
-              ["Pathway run completed", true],
-              ["Someone shared a pathway with me", true],
-              ["Evidence database monthly digest", false],
-              ["Feature announcements", false],
-            ].map(([l, d]) => (
-              <label key={l} className="row" style={{cursor:"pointer"}}>
-                <span style={{flex:1}}>{l}</span>
-                <Toggle defaultOn={d}/>
-              </label>
-            ))}
+
+        <div className="card card--pad" style={{borderColor:"#F0C2BE", background:"linear-gradient(180deg, rgba(255,245,244,0.96), rgba(255,255,255,1))"}}>
+          <h3 style={{fontSize:14, marginBottom:10, color:"#A13B33"}}>Delete account</h3>
+          <div style={{fontSize:13, color:"var(--fg-2)", lineHeight:1.55, marginBottom:12}}>
+            Permanently delete your login and personal account data. Workspace records you created are preserved, but ownership is removed so they can be reassigned later.
           </div>
+          <label className="row" style={{gap:8, alignItems:"flex-start", marginBottom:12, cursor:"pointer"}}>
+            <input type="checkbox" checked={confirmDelete} onChange={e => setConfirmDelete(e.target.checked)} style={{marginTop:3}}/>
+            <span style={{fontSize:12, color:"var(--fg-2)", lineHeight:1.4}}>
+              I understand this will permanently delete my account.
+            </span>
+          </label>
+          <div className="field" style={{marginBottom:12}}>
+            <label className="field__label">Re-enter password</label>
+            <input className="input" type="password" value={deletePassword} onChange={e => setDeletePassword(e.target.value)} placeholder="Current password"/>
+          </div>
+          {deleteError && (
+            <div className="banner banner--warn" style={{marginBottom:12}}>
+              <Icon name="alert-triangle" size={14} className="banner__icon"/>
+              <div>{deleteError}</div>
+            </div>
+          )}
+          <button
+            type="button"
+            className="btn"
+            style={{width:"100%", justifyContent:"center", borderColor:"#F0C2BE", color:"#A13B33"}}
+            onClick={deleteAccount}
+            disabled={!confirmDelete || !deletePassword || deleting}
+          >
+            {deleting ? "Deleting..." : "Delete account permanently"}
+          </button>
         </div>
       </div>
     </div>
   );
 }
 
-function SetWorkspace() {
+function SetWorkspace({ currentUser }) {
   const [profile, setProfile] = useState(() => window.OptiDxActions.getWorkspaceSetting?.("workspace_profile", "workspace") || {
     name: "Syreon MENA HTA",
     slug: "syreon-mena-hta",
@@ -754,6 +858,8 @@ function SetWorkspace() {
     language: "English",
   });
   const [saving, setSaving] = useState(false);
+  const currentMemberName = [currentUser?.first_name, currentUser?.last_name].filter(Boolean).join(" ") || currentUser?.name || "Current user";
+  const currentMemberInitials = getInitials(currentMemberName);
 
   const save = async () => {
     setSaving(true);
@@ -797,7 +903,7 @@ function SetWorkspace() {
         </div>
         <div className="stack" style={{gap:0}}>
           {[
-            ["Sara El-Sayed","Owner","SE","var(--sme-orange)"],
+            [currentMemberName, "Owner", currentMemberInitials, "var(--sme-orange)"],
             ["Ahmed Khalil","Editor","AK","var(--refer)"],
             ["Dr. Layla Haddad","Clinical reviewer","LH","var(--pos)"],
             ["Omar Fouad","Viewer","OF","var(--inconcl)"],

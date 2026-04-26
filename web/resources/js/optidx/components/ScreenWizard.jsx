@@ -200,20 +200,28 @@ function ScreenWizard({ setScreen }) {
     if (optimization.status === "running") return;
 
     const startedAt = performance.now();
-    const minimumVisibleMs = 1200;
-    setOptimization({ status: "running", progress: 12, stage: OPTIMIZATION_STAGES[0], error: null });
-    let stageIndex = 0;
-    const timer = window.setInterval(() => {
-      stageIndex = Math.min(stageIndex + 1, OPTIMIZATION_STAGES.length - 1);
+    const minimumVisibleMs = 30000;
+    setOptimization({ status: "running", progress: 8, stage: OPTIMIZATION_STAGES[0], error: null });
+    const updateProgress = () => {
+      const elapsed = performance.now() - startedAt;
+      const ratio = Math.min(1, elapsed / minimumVisibleMs);
+      const stageIndex = Math.min(
+        OPTIMIZATION_STAGES.length - 1,
+        Math.floor(ratio * (OPTIMIZATION_STAGES.length - 1)),
+      );
+
       setOptimization(current => {
         if (current.status !== "running") return current;
         return {
           ...current,
-          progress: Math.min(92, current.progress + (stageIndex < 2 ? 12 : 8)),
+          progress: Math.min(95, 8 + (ratio * 87)),
           stage: OPTIMIZATION_STAGES[stageIndex],
         };
       });
-    }, 850);
+    };
+
+    const timer = window.setInterval(updateProgress, 180);
+    updateProgress();
 
     try {
       await flushProjectDraft();

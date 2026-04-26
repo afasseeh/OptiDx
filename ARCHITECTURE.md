@@ -45,6 +45,9 @@ The frontend owns:
 - preset library preview details open in a fixed overlay modal, and the import action writes the selected evidence test into the workspace test library before returning the wizard to the test-library step
 - parallel block member management in the Builder, including drag/drop from the diagnostic library, explicit picker controls in the inspector, and repeated use of the same diagnostic test in one block
 - orchestration of the optimization run UX while the backend search executes
+- the authenticated shell now carries the current signed-in user profile in shared browser state, and the Settings/Profile view reads and writes that live account record instead of showing static Sara placeholders
+- the Settings/Profile view now exposes explicit logout and permanent-delete actions, with logout clearing the shell state and delete-account preserving created workspace rows while removing the user record and personal auth data
+- the optimization wizard now keeps the progress card visible for at least 30 seconds on fast backend runs, using a gradual time-based progress ramp so short runs still feel deliberate
 - the authenticated shell layout, which uses a beta banner row plus a single content row; page top bars live inside the screen body so the shell does not reserve an empty middle track, and the full-bleed builder/report screens use an intrinsic-height top bar with a body that fills the remaining main area
 - the shared top bar now accepts clickable crumb descriptors so screens can expose a real previous-step navigation path instead of static directory text
 
@@ -115,6 +118,7 @@ Current bridge shape:
 - `web/resources/js/optidx/actions.js` now owns the shared browser helpers for save, optimize, manual test creation, canonical pathway serialization, import hydration, evaluation normalization, and canvas export
 - `web/resources/js/optidx/actions.js` also bootstraps the workspace snapshot from `/api/pathways`, `/api/evidence/tests`, and `/api/settings`, tracks the active pathway record, and routes report/share/file-download interactions through the real backend endpoints
 - `web/resources/js/optidx/actions.js` now receives account-scoped workspace payloads from `/api/pathways`, `/api/evidence/tests`, and `/api/settings`, so the browser snapshot stays isolated to the current signed-in user
+- `web/resources/js/optidx/actions.js` now also carries the current authenticated user in shared browser state and exposes session cleanup helpers for logout and delete-account so the React shell can clear auth/workspace state consistently
 - `web/resources/js/optidx/actions.js` also bootstraps `/api/projects`, tracks the active project draft in local storage, and owns the browser helpers that create/update the draft project record behind the wizard
 - `web/resources/js/optidx/actions.js` also converts imported records and optimization templates into canvas-ready drafts with node types, edge ports, and layout coordinates before the builder mounts them
 - `web/resources/js/optidx/actions.js` also prefers the frozen test snapshot embedded in an optimization candidate or imported pathway when hydrating the canvas and rebuilding a canonical pathway, so rerunning a loaded scenario uses the same test costs, turnaround times, and sample metadata that were present when the candidate was produced
@@ -160,6 +164,9 @@ Important implementation details:
 - Verification uses a signed Laravel route at `/verify-email/{id}/{hash}`.
 - Password reset tokens are handled by Laravel's password broker.
 - The React shell reads auth state from `/auth/me` on startup and switches between auth, verified, and reset states based on query parameters.
+- The shell also persists the authenticated user profile in browser state so settings, logout, and destructive account flows can operate from the current signed-in identity without hardcoded placeholders.
+- The auth controller now exposes profile read/update endpoints and a delete-account endpoint under `/auth/*`; profile edits persist first name, last name, email, organization, title, and timezone on the user row.
+- Logout clears both the Laravel session and the browser-side workspace/auth state, while delete-account removes the user record, deletes login artifacts, and nulls ownership on preserved workspace rows so they can be reassigned later.
 - `web/resources/js/optidx/actions.js` exposes a shared browser action helper for clipboard, download, and temporary UX messaging so the UI can progress from mockup screens to functional controls without duplicating logic in every component.
 - The same helper layer now also owns workspace bootstrap, scoped settings writes, persisted pathway duplication/opening, live evidence import, and server-generated report downloads so the UI no longer depends on static seed data for those controls.
 - The same helper layer now also handles live Builder save/optimize actions, manual test creation, and optimization result normalization for the scenarios screen.
@@ -201,6 +208,8 @@ Ownership columns:
 
 These ownership columns are enforced by the model layer and authenticated API routes so the browser only sees records that belong to the current account.
 
+The `users` table now stores the signed-in account profile fields that the shell edits directly: first/last name, organization, title, and timezone. The `name` column remains the canonical display name, while the dedicated fields provide structured profile data for the settings UI and auth payloads.
+
 The `projects` table now serves as the persisted draft record for the new-project wizard, with wizard-only settings stored in `projects.metadata` so the browser can restore the same draft after leaving and returning to the setup flow.
 
 ## Operational Notes
@@ -216,3 +225,4 @@ The `projects` table now serves as the persisted draft record for the new-projec
 - The reporting pipeline now returns real DOCX/PDF files from Laravel, but the layout remains intentionally minimal and should be upgraded when the product team is ready for production-grade publishing.
 - The signed email-verification flow assumes the app URL matches the live dev host. In local development the host is `http://127.0.0.1:8000`, which keeps signed verification links and redirects consistent during browser testing.
 - The optimization wizard currently runs synchronously in the browser request/response cycle. The optimizer now batches candidate evaluation inside a single Python bridge call and filters sample-unsafe tests up front, but a queue-backed or workflow-backed runner will still be needed if the product needs the earlier sub-3-second UX target at larger test-library sizes.
+- The optimization wizard now enforces a 30-second minimum visible progress experience for fast runs, so the browser can present a deliberate-looking calculation phase even when the backend finishes early.

@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 // OptiDx — main app
 function App() {
   const [authed, setAuthed] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
   const [authMode, setAuthMode] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get("auth") === "reset" ? "reset" : "login";
@@ -35,7 +36,14 @@ function App() {
       .then(response => {
         if (!active) return;
         if (response?.data?.authenticated) {
+          window.OptiDxActions?.setCurrentUser?.(response?.data?.user || null, { emit: false });
+          setCurrentUser(response?.data?.user || null);
           setAuthed(true);
+        } else {
+          window.OptiDxActions?.setCurrentUser?.(null, { emit: false });
+          window.OptiDxActions?.clearWorkspaceState?.({ emit: false });
+          setCurrentUser(null);
+          setAuthed(false);
         }
       })
       .catch(() => {})
@@ -65,6 +73,47 @@ function App() {
   }, [authed]);
 
   useEffect(() => {
+    const onAuthUpdated = event => {
+      const nextUser = event?.detail || null;
+      setCurrentUser(nextUser);
+      setAuthed(Boolean(nextUser));
+
+      if (!nextUser) {
+        setWorkspaceLoaded(false);
+        setOpenPanel(null);
+        setShowShare(false);
+        setShowTestEditor(false);
+        setTestEditorSeed(null);
+        setShowFeedback(false);
+        setShowTweaks(false);
+        setScreen("home");
+        setAuthMode("login");
+      }
+    };
+
+    const onSessionEnded = () => {
+      setCurrentUser(null);
+      setAuthed(false);
+      setWorkspaceLoaded(false);
+      setOpenPanel(null);
+      setShowShare(false);
+      setShowTestEditor(false);
+      setTestEditorSeed(null);
+      setShowFeedback(false);
+      setShowTweaks(false);
+      setScreen("home");
+      setAuthMode("login");
+    };
+
+    window.addEventListener('optidx-auth-updated', onAuthUpdated);
+    window.addEventListener('optidx-session-ended', onSessionEnded);
+    return () => {
+      window.removeEventListener('optidx-auth-updated', onAuthUpdated);
+      window.removeEventListener('optidx-session-ended', onSessionEnded);
+    };
+  }, []);
+
+  useEffect(() => {
     const handler = event => {
       setTestEditorSeed(event?.detail || null);
       setShowTestEditor(true);
@@ -85,7 +134,12 @@ function App() {
     );
   }
 
-  if (!authed) return <AuthShell mode={authMode} setMode={setAuthMode} onAuthed={() => { setAuthed(true); setAuthMode("login"); }}/>;
+  if (!authed) return <AuthShell mode={authMode} setMode={setAuthMode} onAuthed={(user) => {
+    window.OptiDxActions?.setCurrentUser?.(user || null, { emit: false });
+    setCurrentUser(user || null);
+    setAuthed(true);
+    setAuthMode("login");
+  }}/>;
 
   return (
     <div className="app">
@@ -103,7 +157,7 @@ function App() {
       {screen === "compare"  && <Frame><ScreenCompare setScreen={setScreen}/></Frame>}
       {screen === "evidence" && <Frame><ScreenEvidence setScreen={setScreen}/></Frame>}
       {screen === "report"   && <Frame fullBleed><ScreenReport setScreen={setScreen} onShare={() => setShowShare(true)}/></Frame>}
-      {screen === "settings" && <Frame><ScreenSettingsFull/></Frame>}
+      {screen === "settings" && <Frame><ScreenSettingsFull currentUser={currentUser}/></Frame>}
       {screen === "teams"    && <Frame><ScreenTeams/></Frame>}
 
       {openPanel === "parallel" && <ParallelModal onClose={() => setOpenPanel(null)}/>}
