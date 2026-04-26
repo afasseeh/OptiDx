@@ -44,6 +44,285 @@ function dispatchWorkspaceEvent() {
   }));
 }
 
+const ACTIVE_PROJECT_STORAGE_KEY = 'optidx.active-project-id';
+
+function readActiveProjectId() {
+  try {
+    return window.localStorage?.getItem(ACTIVE_PROJECT_STORAGE_KEY) || null;
+  } catch {
+    return null;
+  }
+}
+
+function writeActiveProjectId(projectId) {
+  try {
+    if (projectId == null || projectId === '') {
+      window.localStorage?.removeItem(ACTIVE_PROJECT_STORAGE_KEY);
+      return;
+    }
+
+    window.localStorage?.setItem(ACTIVE_PROJECT_STORAGE_KEY, String(projectId));
+  } catch {
+    // Ignore storage failures in hardened browser contexts.
+  }
+}
+
+function normalizeProjectMetadata(metadata) {
+  const safeMetadata = metadata && typeof metadata === 'object' ? { ...metadata } : {};
+  const allowedSampleTypes = Array.isArray(safeMetadata.allowed_sample_types)
+    ? safeMetadata.allowed_sample_types
+    : Array.isArray(safeMetadata.sample_types)
+      ? safeMetadata.sample_types
+      : [];
+
+  return {
+    ...safeMetadata,
+    allowed_sample_types: allowedSampleTypes.filter(Boolean).map(value => String(value)),
+    sample_types: Array.isArray(safeMetadata.sample_types)
+      ? safeMetadata.sample_types.filter(Boolean).map(value => String(value))
+      : allowedSampleTypes.filter(Boolean).map(value => String(value)),
+    objective: safeMetadata.objective ?? null,
+    minimum_sensitivity: safeMetadata.minimum_sensitivity ?? null,
+    minimum_specificity: safeMetadata.minimum_specificity ?? null,
+    maximum_total_cost: safeMetadata.maximum_total_cost ?? null,
+    maximum_turnaround_time: safeMetadata.maximum_turnaround_time ?? null,
+    maximum_skill_level: safeMetadata.maximum_skill_level ?? null,
+    clinical_context: safeMetadata.clinical_context ?? null,
+    condition_name: safeMetadata.condition_name ?? null,
+    target_population: safeMetadata.target_population ?? null,
+    prevalence: safeMetadata.prevalence ?? null,
+  };
+}
+
+function normalizeProjectRecord(project) {
+  if (!project || typeof project !== 'object') {
+    return null;
+  }
+
+  const metadata = normalizeProjectMetadata(project.metadata);
+
+  return {
+    ...project,
+    metadata,
+    _wizard: buildProjectWizardState({
+      ...project,
+      metadata,
+    }),
+  };
+}
+
+function formatProjectPercent(value, fallback = '') {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return fallback;
+  }
+
+  return Number.parseFloat((numeric * 100).toFixed(1)).toString();
+}
+
+function formatProjectDecimal(value, fallback = '') {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return fallback;
+  }
+
+  return Number.parseFloat(numeric.toFixed(2)).toString();
+}
+
+function normalizeProjectSkillLabel(value) {
+  if (value == null || value === '') {
+    return 'Lab technician';
+  }
+
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) {
+    return formatSkillLabel(numeric);
+  }
+
+  return String(value);
+}
+
+function parseProjectSkillLevel(value) {
+  if (value == null || value === '') {
+    return 3;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.max(1, Math.min(5, Math.round(value)));
+  }
+
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) {
+    return Math.max(1, Math.min(5, Math.round(numeric)));
+  }
+
+  const label = String(value).toLowerCase();
+  if (label.includes('radiolog') || label.includes('specialist')) return 4;
+  if (label.includes('nurse')) return 2;
+  if (label.includes('chw') || label.includes('self')) return 1;
+  return 3;
+}
+
+function buildProjectWizardState(source = {}) {
+  const metadata = normalizeProjectMetadata(source.metadata);
+  const wizard = source._wizard && typeof source._wizard === 'object' ? source._wizard : {};
+  const conditionName = source.conditionName
+    ?? wizard.conditionName
+    ?? source.title
+    ?? metadata.condition_name
+    ?? 'Pulmonary tuberculosis';
+  const clinicalContext = source.clinicalContext
+    ?? wizard.clinicalContext
+    ?? source.setting
+    ?? metadata.clinical_context
+    ?? 'comm';
+  const targetPopulation = source.targetPopulation
+    ?? wizard.targetPopulation
+    ?? source.target_population
+    ?? metadata.target_population
+    ?? 'Adults >=15 yrs presenting with cough >2 weeks';
+  const prevalence = source.prevalence
+    ?? wizard.prevalence
+    ?? metadata.prevalence
+    ?? '';
+  const objective = source.objective
+    ?? wizard.objective
+    ?? metadata.objective
+    ?? source.intended_use
+    ?? 'Balanced MCDA';
+  const minimumSensitivity = source.minimumSensitivity
+    ?? wizard.minimumSensitivity
+    ?? metadata.minimum_sensitivity
+    ?? '0.85';
+  const minimumSpecificity = source.minimumSpecificity
+    ?? wizard.minimumSpecificity
+    ?? metadata.minimum_specificity
+    ?? '0.90';
+  const maximumCost = source.maximumCost
+    ?? wizard.maximumCost
+    ?? metadata.maximum_total_cost
+    ?? '10.00';
+  const maximumTat = source.maximumTat
+    ?? wizard.maximumTat
+    ?? metadata.maximum_turnaround_time
+    ?? '72';
+  const maxSkillLevel = source.maxSkillLevel
+    ?? wizard.maxSkillLevel
+    ?? metadata.maximum_skill_level
+    ?? 'Lab technician';
+  const sampleTypes = Array.isArray(source.sampleTypes)
+    ? source.sampleTypes
+    : Array.isArray(wizard.sampleTypes)
+      ? wizard.sampleTypes
+      : Array.isArray(metadata.allowed_sample_types)
+        ? metadata.allowed_sample_types
+        : Array.isArray(metadata.sample_types)
+          ? metadata.sample_types
+          : ['None', 'Blood', 'Urine', 'Stool', 'Sputum'];
+
+  return {
+    id: source.id ?? null,
+    title: source.title ?? conditionName,
+    conditionName,
+    clinicalContext,
+    targetPopulation,
+    prevalence: formatProjectPercent(prevalence, ''),
+    objective,
+    minimumSensitivity: formatProjectDecimal(minimumSensitivity, '0.85'),
+    minimumSpecificity: formatProjectDecimal(minimumSpecificity, '0.90'),
+    maximumCost: formatProjectDecimal(maximumCost, '10.00'),
+    maximumTat: formatProjectDecimal(maximumTat, '72'),
+    maxSkillLevel: normalizeProjectSkillLabel(maxSkillLevel),
+    sampleTypes: sampleTypes.filter(Boolean).map(value => String(value)),
+    metadata,
+  };
+}
+
+function buildProjectPayloadFromWizard(wizardState = {}, currentRecord = null) {
+  const normalized = buildProjectWizardState({
+    ...currentRecord,
+    ...wizardState,
+    metadata: {
+      ...(currentRecord?.metadata || {}),
+      ...(wizardState?.metadata || {}),
+    },
+  });
+  const sampleTypes = normalized.sampleTypes.filter(Boolean);
+  const parsedMinimumSensitivity = Number.parseFloat(normalized.minimumSensitivity);
+  const parsedMinimumSpecificity = Number.parseFloat(normalized.minimumSpecificity);
+  const parsedMaximumCost = Number.parseFloat(normalized.maximumCost);
+  const parsedMaximumTat = Number.parseFloat(normalized.maximumTat);
+  const parsedPrevalence = Number.parseFloat(normalized.prevalence);
+  const metadata = normalizeProjectMetadata({
+    ...(currentRecord?.metadata || {}),
+    ...(wizardState?.metadata || {}),
+    objective: normalized.objective,
+    minimum_sensitivity: Number.isFinite(parsedMinimumSensitivity) ? parsedMinimumSensitivity : null,
+    minimum_specificity: Number.isFinite(parsedMinimumSpecificity) ? parsedMinimumSpecificity : null,
+    maximum_total_cost: Number.isFinite(parsedMaximumCost) ? parsedMaximumCost : null,
+    maximum_turnaround_time: Number.isFinite(parsedMaximumTat) ? parsedMaximumTat : null,
+    maximum_skill_level: parseProjectSkillLevel(normalized.maxSkillLevel),
+    allowed_sample_types: sampleTypes,
+    sample_types: sampleTypes,
+    clinical_context: normalized.clinicalContext,
+    condition_name: normalized.conditionName,
+    target_population: normalized.targetPopulation,
+    prevalence: Number.isFinite(parsedPrevalence) ? parsedPrevalence : null,
+  });
+
+  return {
+    title: normalized.conditionName || 'Untitled project',
+    disease_area: normalized.conditionName || null,
+    intended_use: normalized.objective || null,
+    target_population: normalized.targetPopulation || null,
+    prevalence: Number.isFinite(parsedPrevalence)
+      ? parsedPrevalence / 100
+      : null,
+    country: currentRecord?.country ?? null,
+    setting: normalized.clinicalContext || null,
+    notes: currentRecord?.notes ?? null,
+    metadata,
+  };
+}
+
+function getWorkspaceProjects() {
+  return window.OptiDxWorkspace?.projects || window.SEED_PROJECTS || [];
+}
+
+function getActiveProjectRecord() {
+  return window.OptiDxCurrentProjectRecord || null;
+}
+
+function setActiveProjectRecord(record, options = {}) {
+  const normalized = normalizeProjectRecord(record);
+  window.OptiDxCurrentProjectRecord = normalized || null;
+
+  if (normalized) {
+    if (options.persistSelection !== false) {
+      writeActiveProjectId(normalized.id);
+    }
+
+    if (options.hydrateDraft !== false) {
+      const draft = buildProjectWizardState(normalized);
+      window.OptiDxCurrentProjectDraft = draft;
+      window.OptiDxCurrentProject = draft;
+    }
+  } else if (options.clearSelection !== false) {
+    writeActiveProjectId(null);
+    window.OptiDxCurrentProjectDraft = null;
+    window.OptiDxCurrentProject = null;
+  }
+
+  return normalized;
+}
+
+function setActiveProjectDraft(project = null) {
+  const draft = buildProjectWizardState(project || getActiveProjectRecord() || {});
+  window.OptiDxCurrentProjectDraft = draft;
+  window.OptiDxCurrentProject = draft;
+  return draft;
+}
+
 function normalizeDiagnosticTestRecord(test) {
   if (!test || typeof test !== 'object') {
     return null;
@@ -108,9 +387,11 @@ function toWorkspaceIndex(items, key = 'id') {
 
 function setWorkspaceSnapshot(partial) {
   window.OptiDxWorkspace = {
+    projects: window.OptiDxWorkspace?.projects || [],
     pathways: window.OptiDxWorkspace?.pathways || [],
     tests: window.OptiDxWorkspace?.tests || [],
     settings: window.OptiDxWorkspace?.settings || [],
+    projectsById: window.OptiDxWorkspace?.projectsById || {},
     pathwaysById: window.OptiDxWorkspace?.pathwaysById || {},
     testsById: window.OptiDxWorkspace?.testsById || {},
     settingsByKey: window.OptiDxWorkspace?.settingsByKey || {},
@@ -162,12 +443,16 @@ async function saveWorkspaceSetting(key, value, scope = 'workspace') {
 }
 
 async function loadWorkspaceData() {
-  const [pathwaysResponse, testsResponse, settingsResponse] = await Promise.allSettled([
+  const [projectsResponse, pathwaysResponse, testsResponse, settingsResponse] = await Promise.allSettled([
+    request('get', '/api/projects'),
     request('get', '/api/pathways'),
     request('get', '/api/evidence/tests'),
     request('get', '/api/settings'),
   ]);
 
+  const normalizedProjects = projectsResponse.status === 'fulfilled'
+    ? (Array.isArray(projectsResponse.value) ? projectsResponse.value : []).map(record => normalizeProjectRecord(record)).filter(Boolean)
+    : [];
   const pathways = pathwaysResponse.status === 'fulfilled'
     ? (Array.isArray(pathwaysResponse.value) ? pathwaysResponse.value : [])
     : [];
@@ -186,13 +471,27 @@ async function loadWorkspaceData() {
   })), 'compoundKey');
 
   setWorkspaceSnapshot({
+    projects: normalizedProjects,
     pathways: normalizedPathways,
     tests: normalizedTests,
     settings,
+    projectsById: toWorkspaceIndex(normalizedProjects),
     pathwaysById: toWorkspaceIndex(normalizedPathways),
     testsById: toWorkspaceIndex(normalizedTests),
     settingsByKey,
   });
+
+  if (normalizedProjects.length) {
+    window.SEED_PROJECTS = normalizedProjects;
+    const activeProjectId = readActiveProjectId();
+    const activeProject = activeProjectId
+      ? normalizedProjects.find(project => String(project.id) === String(activeProjectId))
+      : normalizedProjects[0];
+
+    if (activeProject) {
+      setActiveProjectRecord(activeProject, { persistSelection: true, hydrateDraft: true });
+    }
+  }
 
   if (normalizedPathways.length) {
     window.SEED_PATHWAYS = normalizedPathways;
@@ -1490,6 +1789,38 @@ async function savePathway(pathway = null) {
   return response;
 }
 
+function upsertWorkspaceProject(record) {
+  const normalized = normalizeProjectRecord(record);
+  if (!normalized) {
+    return null;
+  }
+
+  const existing = getWorkspaceProjects().filter(item => String(item.id) !== String(normalized.id));
+  const nextProjects = [normalized, ...existing];
+  window.SEED_PROJECTS = nextProjects;
+  setWorkspaceSnapshot({
+    projects: nextProjects,
+    projectsById: toWorkspaceIndex(nextProjects),
+  });
+
+  return normalized;
+}
+
+async function saveProjectDraft(draft = null) {
+  const currentRecord = getActiveProjectRecord();
+  const payload = buildProjectPayloadFromWizard(draft || window.OptiDxCurrentProject || buildProjectWizardState(), currentRecord);
+  const response = currentRecord?.id
+    ? await request('put', `/api/projects/${currentRecord.id}`, payload)
+    : await request('post', '/api/projects', payload);
+
+  const normalized = upsertWorkspaceProject(response);
+  if (normalized) {
+    setActiveProjectRecord(normalized, { persistSelection: true, hydrateDraft: true });
+  }
+
+  return normalized;
+}
+
 function scenarioTitle(index, label) {
   if (label) return label;
   const titles = ['Cost-optimal', 'Balanced MCDA', 'Sensitivity-maximal', 'Specificity-maximal', 'Fastest TAT', 'Low-resource'];
@@ -1947,12 +2278,18 @@ window.OptiDxActions = {
   api,
   request,
   loadWorkspaceData,
+  buildProjectWizardState,
+  getWorkspaceProjects,
   getWorkspacePathways,
   getWorkspaceTests,
   getWorkspaceSettings,
   getWorkspaceSetting,
   saveWorkspaceSetting,
   setWorkspaceSnapshot,
+  getActiveProjectRecord,
+  setActiveProjectRecord,
+  setActiveProjectDraft,
+  saveProjectDraft,
   getActivePathwayRecord,
   setActivePathwayRecord,
   setActivePathwayDraft,

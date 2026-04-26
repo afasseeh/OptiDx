@@ -34,6 +34,7 @@ The frontend owns:
 - required terminal-endpoint enforcement for considered-positive and considered-negative outcomes, with optional inconclusive endpoints
 - shared workspace bootstrap state for persisted pathways, diagnostic tests, and scoped settings
 - current-pathway record selection, duplication, and hydration into the live canvas
+- active-project draft selection, hydration, and debounced autosave for the new-project wizard
 - request/response presentation for evaluation and optimization
 - optimization candidate imports now preserve engine-style node ids during frontend hydration, so optimized pathways and imported records can render in the builder even when the source payload uses keyed object maps
 - the optimization overlay uses a fixed orange-accented progress card with staged feedback while the synchronous search runs
@@ -93,9 +94,10 @@ The initial web integration should preserve the engine contract and extend it in
 9. The optimization wizard posts the test library and constraints to `/api/pathways/optimize`, and Laravel prunes ineligible test samples, expands a bounded diagnostic grammar, batches candidate evaluation through the Python bridge in a single process, then renders the ranked candidates and Pareto frontier returned by the optimizer service.
 10. The optimizer service normalizes the wizard's UI-shaped test records into the Python engine schema before building single-test, serial, parallel, and discordant-referee templates, then sends the validated template set through one Python batch call so the browser can keep using the compact seed-library field names while the backend preserves the canonical engine contract.
 11. On authenticated load, the browser action layer fetches `/api/pathways`, `/api/evidence/tests`, and `/api/settings` once, then keeps the normalized workspace snapshot on `window.OptiDxWorkspace` so the Home, Wizard, Library, Evidence, Scenario, and Settings screens operate from persisted records instead of static seed arrays.
-12. The Builder and Results actions treat the active pathway record as first-class state; when a saved pathway is opened or re-evaluated, the backend preserves the existing pathway row and attaches the new evaluation to that record instead of creating a disconnected duplicate.
-13. Report exports are server-generated on demand: the controller materializes a real PDF or DOCX download from the current pathway and its latest evaluation payload rather than streaming browser-generated text files.
-14. Optimization candidates and imported engine-style pathway records are converted into canvas-ready builder graphs in the browser before they are mounted, with keyed object maps preserving their node ids during hydration so the canvas always receives node types, edge ports, and layout coordinates instead of a raw engine template or an empty graph.
+12. On authenticated load, the same browser action layer also fetches `/api/projects`, restores the active project draft from local storage when available, and hydrates the new-project wizard from that draft so prevalence, constraints, and sample-type selections survive screen changes and refreshes.
+13. The Builder and Results actions treat the active pathway record as first-class state; when a saved pathway is opened or re-evaluated, the backend preserves the existing pathway row and attaches the new evaluation to that record instead of creating a disconnected duplicate.
+14. Report exports are server-generated on demand: the controller materializes a real PDF or DOCX download from the current pathway and its latest evaluation payload rather than streaming browser-generated text files.
+15. Optimization candidates and imported engine-style pathway records are converted into canvas-ready builder graphs in the browser before they are mounted, with keyed object maps preserving their node ids during hydration so the canvas always receives node types, edge ports, and layout coordinates instead of a raw engine template or an empty graph.
 
 Current bridge shape:
 
@@ -111,6 +113,7 @@ Current bridge shape:
 - `web/resources/js/app.js` bootstraps the browser runtime with Axios, CSRF/session defaults, and the component registry before mounting the React shell
 - `web/resources/js/optidx/actions.js` now owns the shared browser helpers for save, optimize, manual test creation, canonical pathway serialization, import hydration, evaluation normalization, and canvas export
 - `web/resources/js/optidx/actions.js` also bootstraps the workspace snapshot from `/api/pathways`, `/api/evidence/tests`, and `/api/settings`, tracks the active pathway record, and routes report/share/file-download interactions through the real backend endpoints
+- `web/resources/js/optidx/actions.js` also bootstraps `/api/projects`, tracks the active project draft in local storage, and owns the browser helpers that create/update the draft project record behind the wizard
 - `web/resources/js/optidx/actions.js` also converts imported records and optimization templates into canvas-ready drafts with node types, edge ports, and layout coordinates before the builder mounts them
 - `web/resources/js/optidx/actions.js` also prefers the frozen test snapshot embedded in an optimization candidate or imported pathway when hydrating the canvas and rebuilding a canonical pathway, so rerunning a loaded scenario uses the same test costs, turnaround times, and sample metadata that were present when the candidate was produced
 - `web/resources/js/optidx/actions.js` also carries optimization prevalence through the candidate snapshot, canvas draft, and pathway evaluator so cost and turnaround metrics stay aligned with the optimization cohort assumptions when a scenario is loaded back into the Builder
@@ -135,6 +138,7 @@ Current bridge shape:
 - `web/resources/js/optidx/components/PropertiesPanel.jsx` restricts terminal editing to the supported endpoint classes (positive, negative, inconclusive) and locks the required positive/negative endpoints so their outcome role cannot drift
 - `web/app/Http/Controllers/Api/PathwayController.php` validates the compiled engine definition before invoking Python for evaluation and returns a structured `422` validation payload when the current graph cannot be evaluated, rather than surfacing a generic bridge `500`
 - `web/app/Http/Controllers/Api/PathwayController.php` also falls back to the project prevalence when an evaluation request omits prevalence, so results, PPV/NPV, and population metrics stay aligned with the project record
+- `web/app/Http/Controllers/Api/ProjectController.php` remains the minimal persistence endpoint for wizard draft records, with the frontend persisting wizard-only fields inside `projects.metadata`
 - `optidx_package/optidx/engine.py` now converts turnaround units into hours before node and pathway aggregation so mixed-unit pathways remain numerically consistent
 
 ### Auth and Email
@@ -185,6 +189,8 @@ Implemented tables in `web/database/migrations`:
 - `reports`
 - `benchmark_cases`
 - `settings`
+
+The `projects` table now serves as the persisted draft record for the new-project wizard, with wizard-only settings stored in `projects.metadata` so the browser can restore the same draft after leaving and returning to the setup flow.
 
 ## Operational Notes
 

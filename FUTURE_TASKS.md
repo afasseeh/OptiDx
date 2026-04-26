@@ -174,3 +174,11 @@
 - **Improvement:** Add a small provisioning script or deployment helper that pulls the latest code, refreshes the environment file if needed, runs `docker compose up -d --build`, confirms the `python` runtime and `/var/www/optidx_package` bind mount are present, and checks the tunnel health endpoint.
 - **Benefit:** Makes future releases safer and removes the remaining manual step from the deployment path.
 - **Priority:** High
+
+## 21. Project-scoped evidence libraries and project picker
+
+- **Context:** The new-project wizard now persists a draft project record, but the diagnostic test library remains shared workspace-wide for this incremental fix.
+- **Limitation:** There is still no first-class project picker, and tests are not yet scoped to an individual project record.
+- **Improvement:** Add a real project management surface with explicit draft selection, project-specific evidence libraries, and clear archive/delete actions for old drafts.
+- **Benefit:** Makes the project model match the persistence model and reduces ambiguity once multiple concurrent projects are supported.
+- **Priority:** Medium

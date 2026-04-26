@@ -7,21 +7,63 @@ const OPTIMIZATION_STAGES = [
   "Packaging the best pathways for review.",
 ];
 
+const DEFAULT_WIZARD_PROJECT = {
+  conditionName: "Pulmonary tuberculosis",
+  clinicalContext: "comm",
+  targetPopulation: "Adults >=15 yrs presenting with cough >2 weeks",
+  prevalence: "8.0",
+  objective: "Balanced MCDA",
+  minimumSensitivity: "0.85",
+  minimumSpecificity: "0.90",
+  maximumCost: "10.00",
+  maximumTat: "72",
+  maxSkillLevel: "Lab technician",
+  sampleTypes: ["None", "Blood", "Urine", "Stool", "Sputum"],
+};
+
+function getWizardProjectState(source = null) {
+  return window.OptiDxActions?.buildProjectWizardState?.(source || window.OptiDxCurrentProjectRecord || window.OptiDxCurrentProject || DEFAULT_WIZARD_PROJECT)
+    || {
+      ...DEFAULT_WIZARD_PROJECT,
+      sampleTypes: [...DEFAULT_WIZARD_PROJECT.sampleTypes],
+    };
+}
+
+function serializeWizardProjectState(project) {
+  const safeProject = getWizardProjectState(project);
+  return JSON.stringify({
+    conditionName: safeProject.conditionName,
+    clinicalContext: safeProject.clinicalContext,
+    targetPopulation: safeProject.targetPopulation,
+    prevalence: safeProject.prevalence,
+    objective: safeProject.objective,
+    minimumSensitivity: safeProject.minimumSensitivity,
+    minimumSpecificity: safeProject.minimumSpecificity,
+    maximumCost: safeProject.maximumCost,
+    maximumTat: safeProject.maximumTat,
+    maxSkillLevel: safeProject.maxSkillLevel,
+    sampleTypes: Array.isArray(safeProject.sampleTypes) ? [...safeProject.sampleTypes] : [],
+  });
+}
+
 function ScreenWizard({ setScreen }) {
+  const initialProject = getWizardProjectState();
   const [step, setStep] = useState(() => Number(window.OptiDxWizardStep ?? 0) || 0);
   const [mode, setMode] = useState(null); // null | "test" | "optimize"
-  const [objective, setObjective] = useState("Balanced MCDA");
-  const [sampleTypes, setSampleTypes] = useState(["None", "Blood", "Urine", "Stool", "Sputum"]);
+  const [objective, setObjective] = useState(initialProject.objective);
+  const [sampleTypes, setSampleTypes] = useState(initialProject.sampleTypes);
   const [project, setProject] = useState(() => ({
-    conditionName: "Pulmonary tuberculosis",
-    clinicalContext: "comm",
+    conditionName: initialProject.conditionName,
+    clinicalContext: initialProject.clinicalContext,
     targetPopulation: "Adults ≥15 yrs presenting with cough >2 weeks",
-    prevalence: "8.0",
-    minimumSensitivity: "0.85",
-    minimumSpecificity: "0.90",
-    maximumCost: "10.00",
-    maximumTat: "72",
-    maxSkillLevel: "Lab technician",
+    prevalence: initialProject.prevalence,
+    objective: initialProject.objective,
+    minimumSensitivity: initialProject.minimumSensitivity,
+    minimumSpecificity: initialProject.minimumSpecificity,
+    maximumCost: initialProject.maximumCost,
+    maximumTat: initialProject.maximumTat,
+    maxSkillLevel: initialProject.maxSkillLevel,
+    sampleTypes: initialProject.sampleTypes,
   }));
   const [optimization, setOptimization] = useState({ status: "idle", progress: 0, stage: "", error: null });
   const steps = ["Disease", "Test library", "Constraints", "Review", "Run"];
@@ -29,6 +71,130 @@ function ScreenWizard({ setScreen }) {
   useEffect(() => {
     window.OptiDxWizardStep = step;
   }, [step]);
+
+  const projectRef = useRef(project);
+  const lastSavedSnapshotRef = useRef(serializeWizardProjectState(project));
+  const saveTimerRef = useRef(null);
+  const hydratedRef = useRef(false);
+
+  useEffect(() => {
+    projectRef.current = project;
+  }, [project]);
+
+  useEffect(() => {
+    let active = true;
+    const hydratedProject = getWizardProjectState(window.OptiDxActions?.getActiveProjectRecord?.() || window.OptiDxActions?.getWorkspaceProjects?.()?.[0] || projectRef.current);
+
+    if (active) {
+      setObjective(hydratedProject.objective);
+      setSampleTypes(hydratedProject.sampleTypes);
+      setProject(hydratedProject);
+      projectRef.current = hydratedProject;
+      lastSavedSnapshotRef.current = serializeWizardProjectState(hydratedProject);
+      hydratedRef.current = true;
+    }
+
+    return () => {
+      active = false;
+      if (saveTimerRef.current) {
+        window.clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      if (hydratedRef.current && serializeWizardProjectState(projectRef.current) !== lastSavedSnapshotRef.current) {
+        void window.OptiDxActions?.saveProjectDraft?.(projectRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const onWorkspaceUpdated = () => {
+      const activeProject = window.OptiDxActions?.getActiveProjectRecord?.();
+      if (!activeProject) {
+        return;
+      }
+
+      const hydratedProject = getWizardProjectState(activeProject);
+      const snapshot = serializeWizardProjectState(hydratedProject);
+      if (snapshot === lastSavedSnapshotRef.current) {
+        return;
+      }
+
+      setObjective(hydratedProject.objective);
+      setSampleTypes(hydratedProject.sampleTypes);
+      setProject(hydratedProject);
+      projectRef.current = hydratedProject;
+      lastSavedSnapshotRef.current = snapshot;
+      hydratedRef.current = true;
+    };
+
+    window.addEventListener("optidx-workspace-updated", onWorkspaceUpdated);
+    return () => window.removeEventListener("optidx-workspace-updated", onWorkspaceUpdated);
+  }, []);
+
+  useEffect(() => {
+    if (!hydratedRef.current) {
+      return;
+    }
+
+    const snapshot = serializeWizardProjectState(project);
+    if (snapshot === lastSavedSnapshotRef.current) {
+      return;
+    }
+
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+    }
+
+    saveTimerRef.current = window.setTimeout(() => {
+      saveTimerRef.current = null;
+      void (async () => {
+        try {
+          const saved = await window.OptiDxActions?.saveProjectDraft?.(projectRef.current);
+          if (saved) {
+            const normalized = getWizardProjectState(saved);
+            projectRef.current = normalized;
+            setObjective(normalized.objective);
+            setSampleTypes(normalized.sampleTypes);
+            setProject(normalized);
+            lastSavedSnapshotRef.current = serializeWizardProjectState(normalized);
+          }
+        } catch (error) {
+          window.OptiDxActions.showToast?.(error?.message || "Unable to save project draft", "error");
+        }
+      })();
+    }, 350);
+
+    return () => {
+      if (saveTimerRef.current) {
+        window.clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+    };
+  }, [project]);
+
+  const flushProjectDraft = async () => {
+    const snapshot = serializeWizardProjectState(projectRef.current);
+    if (snapshot === lastSavedSnapshotRef.current) {
+      return null;
+    }
+
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+
+    const saved = await window.OptiDxActions?.saveProjectDraft?.(projectRef.current);
+    if (saved) {
+      const normalized = getWizardProjectState(saved);
+      projectRef.current = normalized;
+      setObjective(normalized.objective);
+      setSampleTypes(normalized.sampleTypes);
+      setProject(normalized);
+      lastSavedSnapshotRef.current = serializeWizardProjectState(normalized);
+    }
+
+    return saved;
+  };
 
   const runOptimization = async () => {
     if (optimization.status === "running") return;
@@ -50,13 +216,15 @@ function ScreenWizard({ setScreen }) {
     }, 850);
 
     try {
-      const prevalence = Number.parseFloat(project.prevalence);
-      const minimumSensitivity = Number.parseFloat(project.minimumSensitivity);
-      const minimumSpecificity = Number.parseFloat(project.minimumSpecificity);
-      const maximumCost = Number.parseFloat(project.maximumCost);
-      const maximumTat = Number.parseFloat(project.maximumTat);
-      const maxSkillLevel = project.maxSkillLevel === "Radiologist" || project.maxSkillLevel === "Specialist physician" ? 4 : 3;
-      const allowedSampleTypes = sampleTypes
+      await flushProjectDraft();
+      const currentProject = projectRef.current;
+      const prevalence = Number.parseFloat(currentProject.prevalence);
+      const minimumSensitivity = Number.parseFloat(currentProject.minimumSensitivity);
+      const minimumSpecificity = Number.parseFloat(currentProject.minimumSpecificity);
+      const maximumCost = Number.parseFloat(currentProject.maximumCost);
+      const maximumTat = Number.parseFloat(currentProject.maximumTat);
+      const maxSkillLevel = currentProject.maxSkillLevel === "Radiologist" || currentProject.maxSkillLevel === "Specialist physician" ? 4 : 3;
+      const allowedSampleTypes = currentProject.sampleTypes
         .filter(sample => sample && sample !== "None")
         .map(sample => sample.toLowerCase());
       const tests = (window.OptiDxActions.getWorkspaceTests?.() || window.SEED_TESTS || []).map(test => ({
@@ -73,7 +241,7 @@ function ScreenWizard({ setScreen }) {
       const payload = {
         tests,
         constraints: {
-          objective,
+          objective: currentProject.objective,
           minimum_sensitivity: Number.isFinite(minimumSensitivity) ? minimumSensitivity : null,
           minimum_specificity: Number.isFinite(minimumSpecificity) ? minimumSpecificity : null,
           maximum_total_cost: Number.isFinite(maximumCost) ? maximumCost : null,
@@ -112,11 +280,16 @@ function ScreenWizard({ setScreen }) {
   };
 
   const onContinue = async () => {
-    if (step < 4) setStep(step + 1);
-    else if (mode === "optimize") await runOptimization();
-    else {
-      window.OptiDxActions?.setActivePathwayDraft?.(window.OptiDxActions?.createStarterCanvasGraph?.());
-      setScreen("canvas");
+    try {
+      await flushProjectDraft();
+      if (step < 4) setStep(step + 1);
+      else if (mode === "optimize") await runOptimization();
+      else {
+        window.OptiDxActions?.setActivePathwayDraft?.(window.OptiDxActions?.createStarterCanvasGraph?.());
+        setScreen("canvas");
+      }
+    } catch (error) {
+      window.OptiDxActions.showToast?.(error?.message || "Unable to save project draft", "error");
     }
   };
 
@@ -125,7 +298,14 @@ function ScreenWizard({ setScreen }) {
       <TopBar
         crumbs={["OptiDx", "New project"]}
         actions={<>
-          <button className="btn btn--ghost" onClick={() => setScreen("home")}>Cancel</button>
+          <button className="btn btn--ghost" onClick={async () => {
+            try {
+              await flushProjectDraft();
+              setScreen("home");
+            } catch (error) {
+              window.OptiDxActions.showToast?.(error?.message || "Unable to save project draft", "error");
+            }
+          }}>Cancel</button>
           <button className="btn btn--primary" onClick={onContinue}
             disabled={step === 4 && !mode || optimization.status === "running"}>
             {step < 3 ? "Continue" : step === 3 ? "Continue" : (mode === "optimize" ? "Run optimization" : mode === "test" ? "Enter canvas" : "Choose a mode")}
@@ -155,7 +335,14 @@ function ScreenWizard({ setScreen }) {
         </div>
 
         {step === 0 && <WizardStep1 objective={objective} setObjective={setObjective} project={project} setProject={setProject}/>}
-        {step === 1 && <WizardStep2 setScreen={setScreen}/>}
+        {step === 1 && <WizardStep2 onOpenEvidence={async () => {
+          try {
+            await flushProjectDraft();
+            setScreen("evidence");
+          } catch (error) {
+            window.OptiDxActions.showToast?.(error?.message || "Unable to save project draft", "error");
+          }
+        }}/>}
         {step === 2 && <WizardStep3 sampleTypes={sampleTypes} setSampleTypes={setSampleTypes} project={project} setProject={setProject}/>}
         {step === 3 && <WizardStep4 objective={objective} sampleTypes={sampleTypes} project={project}/>}
         {step === 4 && <WizardStep5 mode={mode} setMode={setMode}/>}
@@ -336,7 +523,10 @@ function WizardStep1({ objective, setObjective, project, setProject }) {
           <label className="field__label">Pathway objective</label>
           <div className="row row--wrap" style={{gap:6}}>
             {["Minimize cost","Maximize sensitivity","Maximize specificity","Minimize TAT","Balanced MCDA","Custom"].map((o) =>
-              <button key={o} type="button" onClick={() => setObjective(o)} className={"btn btn--sm" + (objective === o ? " btn--ink" : "")}>{o}</button>
+              <button key={o} type="button" onClick={() => {
+                setObjective(o);
+                setProject(current => ({ ...current, objective: o }));
+              }} className={"btn btn--sm" + (objective === o ? " btn--ink" : "")}>{o}</button>
             )}
           </div>
         </div>
@@ -345,7 +535,7 @@ function WizardStep1({ objective, setObjective, project, setProject }) {
   );
 }
 
-function WizardStep2({ setScreen }) {
+function WizardStep2({ onOpenEvidence }) {
   const [, setLibraryRevision] = useState(0);
   const [menuFor, setMenuFor] = useState(null);
   useEffect(() => {
@@ -369,7 +559,7 @@ function WizardStep2({ setScreen }) {
             window.OptiDxActions.showToast?.(error?.message || "Unable to add test", "error");
           }
         }}><Icon name="plus"/>Add test</button>
-        <button className="btn" onClick={() => setScreen("evidence")}><Icon name="database"/>Import from evidence</button>
+        <button className="btn" onClick={onOpenEvidence}><Icon name="database"/>Import from evidence</button>
         <div className="spacer"/>
         <span className="u-meta">{(window.OptiDxActions.getWorkspaceTests?.() || window.SEED_TESTS || []).length} tests in library</span>
       </div>
@@ -509,7 +699,11 @@ function WizardStep3({ sampleTypes, setSampleTypes, project, setProject }) {
           <label className="field__label">Allowed sample types</label>
           <div className="row row--wrap" style={{gap:6}}>
             {["None","Blood","Urine","Stool","Sputum","Nasal swab","Imaging"].map((s) =>
-              <button key={s} type="button" onClick={() => setSampleTypes(current => current.includes(s) ? current.filter(item => item !== s) : [...current, s])}
+              <button key={s} type="button" onClick={() => setSampleTypes(current => {
+                const next = current.includes(s) ? current.filter(item => item !== s) : [...current, s];
+                setProject(projectCurrent => ({ ...projectCurrent, sampleTypes: next }));
+                return next;
+              })}
                 className={"btn btn--sm" + (sampleTypes.includes(s) ? " btn--ink" : "")}>
                 {sampleTypes.includes(s) && <Icon name="check" size={11}/>}
                 {s}

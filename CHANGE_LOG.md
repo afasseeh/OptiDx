@@ -1,5 +1,14 @@
 # Change Log
 
+## 2026-04-26 - Persist new-project wizard drafts
+
+- Summary: Added project-backed draft persistence for the new-project wizard, including browser-side active-project tracking, debounced autosave, hydration from `projects` records on return/refresh, and a focused project API regression test for metadata and prevalence persistence.
+- Files or modules affected: `web/resources/js/optidx/actions.js`, `web/resources/js/optidx/components/ScreenWizard.jsx`, `web/tests/Feature/ProjectApiTest.php`, `ARCHITECTURE.md`, `README.md`, `FUTURE_TASKS.md`, `CHANGE_LOG.md`.
+- Reason for the change: Wizard prevalence and constraint edits were reverting to preset defaults because the flow was only keeping local React state and never persisted the draft project record.
+- Architecture impact: The new-project flow now treats `projects` as the persisted draft record, stores wizard-only state in `projects.metadata`, and restores that draft when the wizard is reopened or the page refreshes.
+- Migration or deployment impact: Rebuild the Vite frontend bundle and redeploy/restart the OptiDx stack so the autosave-backed wizard flow is live.
+- Follow-up notes: Shared diagnostic tests remain workspace-wide for now; project-specific test libraries are deferred to a future task.
+
 ## 2026-04-26 - Wire wizard specs into optimizer input
 
 - Summary: Converted the wizard's project/spec fields into real state, passed the selected constraints and prevalence into the optimize request, and updated the backend ranking to honor the chosen objective instead of using a single fixed score for every optimization run.
