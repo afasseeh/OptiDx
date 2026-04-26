@@ -1,5 +1,14 @@
 # Change Log
 
+## 2026-04-26 - Fix wizard prevalence percent entry
+
+- Summary: Adjusted the wizard prevalence field so it accepts decimal percent input without being reinterpreted as a backend fraction during autosave, and loosened the number input step to let browsers handle decimal entry naturally.
+- Files or modules affected: `web/resources/js/optidx/actions.js`, `web/resources/js/optidx/components/ScreenWizard.jsx`, `CHANGE_LOG.md`.
+- Reason for the change: Typing values like `8.5` was being converted as if the wizard had already supplied a fraction, which caused autosave to send invalid prevalence values and made the field appear capped or unstable.
+- Architecture impact: The wizard still stores prevalence as a percent in UI state, while the API payload continues to receive the canonical 0-1 fraction.
+- Migration or deployment impact: Rebuild and redeploy the frontend bundle so the corrected prevalence save path and input behavior are live.
+- Follow-up notes: If you want stricter input validation later, add a dedicated percent parsing helper and a small frontend test for the wizard payload conversion.
+
 ## 2026-04-26 - Persist new-project wizard drafts
 
 - Summary: Added project-backed draft persistence for the new-project wizard, including browser-side active-project tracking, debounced autosave, hydration from `projects` records on return/refresh, and a focused project API regression test for metadata and prevalence persistence.

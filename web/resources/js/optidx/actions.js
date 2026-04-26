@@ -239,14 +239,14 @@ function buildProjectWizardState(source = {}) {
 }
 
 function buildProjectPayloadFromWizard(wizardState = {}, currentRecord = null) {
-  const normalized = buildProjectWizardState({
-    ...currentRecord,
+  const normalized = {
+    ...buildProjectWizardState(currentRecord || {}),
     ...wizardState,
     metadata: {
-      ...(currentRecord?.metadata || {}),
-      ...(wizardState?.metadata || {}),
+      ...(normalizeProjectMetadata(currentRecord?.metadata) || {}),
+      ...(normalizeProjectMetadata(wizardState?.metadata) || {}),
     },
-  });
+  };
   const sampleTypes = normalized.sampleTypes.filter(Boolean);
   const parsedMinimumSensitivity = Number.parseFloat(normalized.minimumSensitivity);
   const parsedMinimumSpecificity = Number.parseFloat(normalized.minimumSpecificity);

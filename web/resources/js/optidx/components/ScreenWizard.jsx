@@ -514,7 +514,8 @@ function WizardStep1({ objective, setObjective, project, setProject }) {
             type="number"
             min="0"
             max="100"
-            step="0.1"
+            step="any"
+            inputMode="decimal"
           />
           <span className="field__suffix" style={{top:"70%"}}>%</span>
           <div className="field__hint">Enables PPV / NPV calculation in results.</div>
