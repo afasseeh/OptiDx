@@ -19,6 +19,7 @@ class OptimizationService
     {
         $startedAt = hrtime(true);
         $constraints = $this->normalizeConstraints($constraints);
+        $objective = $this->normalizeObjective($constraints['objective'] ?? null);
         $tests = $this->normalizeTests($tests);
         $tests = $this->filterTestsByAllowedSampleTypes($tests, $constraints);
         $templates = [];
@@ -59,9 +60,9 @@ class OptimizationService
             $candidates[] = $row;
         }
 
-        usort($candidates, function (array $left, array $right): int {
-            $leftScore = $this->candidateScore($left['metrics']);
-            $rightScore = $this->candidateScore($right['metrics']);
+        usort($candidates, function (array $left, array $right) use ($objective): int {
+            $leftScore = $this->candidateScore($left['metrics'], $objective);
+            $rightScore = $this->candidateScore($right['metrics'], $objective);
 
             if ($leftScore === $rightScore) {
                 return ($left['metrics']['expected_cost_population'] ?? PHP_FLOAT_MAX) <=> ($right['metrics']['expected_cost_population'] ?? PHP_FLOAT_MAX);
@@ -75,7 +76,7 @@ class OptimizationService
             $candidates[$index]['candidate_index'] = $index;
         }
 
-        $paretoFrontier = $this->paretoFrontier($candidates);
+        $paretoFrontier = $this->paretoFrontier($candidates, $objective);
 
         return [
             'candidate_count' => count($candidates),
@@ -83,6 +84,7 @@ class OptimizationService
             'ranked_results' => $candidates,
             'pareto_frontier' => $paretoFrontier,
             'named_rankings' => $this->buildNamedRankings($candidates),
+            'objective' => $objective,
             'run_ms' => (int) round((hrtime(true) - $startedAt) / 1_000_000),
         ];
     }
@@ -560,17 +562,24 @@ class OptimizationService
         ];
     }
 
-    private function candidateScore(array $metrics): float
+    private function candidateScore(array $metrics, string $objective = 'balanced mcda'): float
     {
         $cost = $this->metricCost($metrics);
         $tat = $this->metricTat($metrics);
         $sensitivity = (float) ($metrics['sensitivity'] ?? 0);
         $specificity = (float) ($metrics['specificity'] ?? 0);
 
-        return ($cost * 1.0) + ($tat * 0.45) - ($sensitivity * 35.0) - ($specificity * 25.0);
+        return match ($objective) {
+            'minimize cost' => ($cost * 1.75) + ($tat * 0.25) - ($sensitivity * 15.0) - ($specificity * 12.0),
+            'maximize sensitivity' => ($cost * 0.7) + ($tat * 0.2) - ($sensitivity * 70.0) - ($specificity * 8.0),
+            'maximize specificity' => ($cost * 0.7) + ($tat * 0.2) - ($sensitivity * 8.0) - ($specificity * 70.0),
+            'minimize tat' => ($cost * 0.75) + ($tat * 1.8) - ($sensitivity * 12.0) - ($specificity * 12.0),
+            'custom' => ($cost * 1.0) + ($tat * 0.45) - ($sensitivity * 35.0) - ($specificity * 25.0),
+            default => ($cost * 1.0) + ($tat * 0.45) - ($sensitivity * 35.0) - ($specificity * 25.0),
+        };
     }
 
-    private function paretoFrontier(array $candidates): array
+    private function paretoFrontier(array $candidates, string $objective = 'balanced mcda'): array
     {
         $frontier = [];
 
@@ -592,9 +601,9 @@ class OptimizationService
             }
         }
 
-        usort($frontier, function (array $left, array $right): int {
-            $leftScore = $this->candidateScore($left['metrics'] ?? []);
-            $rightScore = $this->candidateScore($right['metrics'] ?? []);
+        usort($frontier, function (array $left, array $right) use ($objective): int {
+            $leftScore = $this->candidateScore($left['metrics'] ?? [], $objective);
+            $rightScore = $this->candidateScore($right['metrics'] ?? [], $objective);
 
             if ($leftScore === $rightScore) {
                 return ($left['metrics']['expected_cost_population'] ?? PHP_FLOAT_MAX) <=> ($right['metrics']['expected_cost_population'] ?? PHP_FLOAT_MAX);
@@ -661,6 +670,16 @@ class OptimizationService
         }
 
         return $rankings;
+    }
+
+    private function normalizeObjective(mixed $objective): string
+    {
+        $value = strtolower(trim((string) $objective));
+
+        return match ($value) {
+            'minimize cost', 'maximize sensitivity', 'maximize specificity', 'minimize tat', 'custom' => $value,
+            default => 'balanced mcda',
+        };
     }
 
     private function bestCandidateForMetric(array $candidates, string $metricName, string $direction): ?array

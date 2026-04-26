@@ -56,7 +56,8 @@ function ScreenResults({ variant = "A", setVariant, setScreen, onShare }) {
         </div>
           <button className="btn" onClick={async () => {
             try {
-              await window.OptiDxActions.evaluatePathway?.(window.OptiDxCurrentPathway || window.OptiDxCanvasDraft || window.SEED_PATHWAY || null);
+              const current = window.OptiDxCurrentPathway || window.OptiDxCanvasDraft || window.SEED_PATHWAY || null;
+              await window.OptiDxActions.evaluatePathway?.(current, current?.prevalence ?? current?.metadata?.prevalence ?? null);
             } catch (error) {
               window.OptiDxActions.showToast?.(error?.message || "Unable to rerun pathway", "error");
             }

@@ -1,5 +1,41 @@
 # Change Log
 
+## 2026-04-26 - Wire wizard specs into optimizer input
+
+- Summary: Converted the wizard's project/spec fields into real state, passed the selected constraints and prevalence into the optimize request, and updated the backend ranking to honor the chosen objective instead of using a single fixed score for every optimization run.
+- Files or modules affected: `web/resources/js/optidx/components/ScreenWizard.jsx`, `web/app/Services/OptimizationService.php`, `web/tests/Unit/OptimizationServiceTest.php`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: The wizard inputs were previously display-only defaults, so changing the project setup did not affect the optimizer payload and the results appeared identical across runs.
+- Architecture impact: Optimization is now driven by live wizard state, and the backend ranking strategy is objective-aware rather than hardwired to one blended metric.
+- Migration or deployment impact: Rebuild the Vite frontend bundle and redeploy/restart the OptiDx stack so the new wizard state flow and ranking logic are live.
+- Follow-up notes: If you want the objective buttons to do more than influence ranking, the next step is to map each objective to explicit constraint presets as well.
+
+## 2026-04-26 - Preserve optimization prevalence through canvas reruns
+
+- Summary: Carried the optimization prevalence through the saved scenario snapshot, the hydrated canvas draft, and the evaluator default so cost and turnaround metrics rerun under the same cohort assumptions that produced the optimized candidate.
+- Files or modules affected: `web/resources/js/optidx/actions.js`, `web/resources/js/optidx/components/App.jsx`, `web/resources/js/optidx/components/ScreenResults.jsx`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: The loaded scenario matched sensitivity and specificity but produced different cost and TAT values because the rerun path was dropping the prevalence used by the optimizer.
+- Architecture impact: The browser now treats prevalence as part of the optimization scenario context, not just a one-off request parameter.
+- Migration or deployment impact: Rebuild the Vite frontend bundle and redeploy/restart the OptiDx stack so the updated canvas/run behavior is live.
+- Follow-up notes: Existing scenarios should now rerun with the captured prevalence as long as the optimization result was generated after this fix.
+
+## 2026-04-26 - Preserve optimizer test snapshots during canvas rerun
+
+- Summary: Updated the browser hydration and canonicalization helpers so optimization candidates keep using the frozen test snapshot embedded in the optimization payload instead of re-resolving test metrics from the live workspace catalog when the pathway is loaded back into the Builder and rerun.
+- Files or modules affected: `web/resources/js/optidx/actions.js`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: Optimized scenarios could display one set of costs and turnaround times in the scenarios view but produce different results when loaded into the canvas and executed again after the test library changed.
+- Architecture impact: The browser now treats the optimization payload's test snapshot as the authoritative input for imported candidates and only falls back to the live workspace catalog when a snapshot is missing.
+- Migration or deployment impact: Rebuild the Vite frontend bundle and redeploy/restart the OptiDx stack so the corrected hydration path is live.
+- Follow-up notes: Fresh optimization runs will now preserve the candidate-local test values end to end. Legacy payloads without test snapshots may still reflect the current workspace catalog until regenerated.
+
+## 2026-04-26 - Add delete action to Home recent pathway cards
+
+- Summary: Added a kebab menu to each recent pathway card on the Home/Workspace screen with open and delete actions, and wired deletion through the existing Laravel pathway delete endpoint while refreshing the workspace snapshot after removal.
+- Files or modules affected: `web/resources/js/optidx/components/ScreenHome.jsx`, `web/resources/js/optidx/actions.js`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: The workspace needed an inline way to remove recent pathways directly from the card menu instead of forcing users to open the canvas first.
+- Architecture impact: The Home screen now owns pathway-card action affordances for open/delete, while the shared browser action layer continues to own the actual API call and workspace refresh.
+- Migration or deployment impact: Rebuild the Vite frontend bundle and redeploy/restart the OptiDx stack so the Home card menu and pathway delete handler are live.
+- Follow-up notes: If the deleted pathway was the currently open one, the browser now resets to a fresh starter canvas so the UI does not keep referencing a removed record.
+
 ## 2026-04-26 - Fix zero-valued pathway evaluation from id-mismatch serialization
 
 - Summary: Fixed the browser-side pathway hydration, serializer, and results catalog lookup so canvas test ids are matched against the live workspace catalog using string-safe ids before load, serialization, and result rendering, preventing saved graphs from compiling with zero-valued test metadata.

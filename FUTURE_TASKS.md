@@ -78,6 +78,22 @@
 - **Limitation:** A page refresh still falls back to the bundled seed example until the user runs a new evaluation in the current session.
 - **Improvement:** Persist the latest evaluation payload and normalized view alongside the current pathway so the UI can restore the last real run after refresh or screen reload.
 - **Benefit:** Makes the results experience feel stable and keeps the last evaluated pathway visible during iterative review.
+
+## 11. Persist optimization snapshots server-side
+
+- **Context:** The optimizer now preserves test snapshots in the browser payload so a loaded candidate reruns against the same test metadata that produced the candidate.
+- **Limitation:** That preservation is still session-bound unless the optimization result itself is stored with the snapshot payload; prevalence is now carried in-memory too, but both remain browser-session state.
+- **Improvement:** Persist the full optimization candidate snapshot, including normalized test records, when scenarios are saved or shared.
+- **Benefit:** Makes candidate reruns stable across browser sessions, workspace edits, and later library refreshes.
+- **Priority:** Medium
+
+## 12. Objective presets for optimizer constraints
+
+- **Context:** The wizard now sends live project inputs and objective selection into the optimizer, and the backend ranking honors the objective string.
+- **Limitation:** The objective buttons still only affect ranking weights; they do not yet auto-fill full constraint presets for cost-focused, sensitivity-focused, or speed-focused projects.
+- **Improvement:** Map each objective choice to a preset bundle of threshold defaults and let the user override them afterward.
+- **Benefit:** Reduces friction and makes the optimizer feel more responsive to the project setup choices.
+- **Priority:** Medium
 - **Priority:** Low
 
 ## 11. Persisted pathway summaries in workspace home

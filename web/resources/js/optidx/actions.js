@@ -93,6 +93,7 @@ function normalizePathwayRecord(pathway) {
     ...pathway,
     editor_definition: normalized || pathway.editor_definition || null,
     engine_definition: pathway.engine_definition || null,
+    prevalence: pathway.prevalence ?? normalized?.prevalence ?? pathway.metadata?.prevalence ?? null,
     _canonical: normalized,
   };
 }
@@ -745,7 +746,13 @@ function snapshotCanvasTestRecord(test, fallbackLabel = null) {
   };
 }
 
-function resolveCanvasTestRecord(testRef, fallbackLabel = null) {
+function resolveCanvasTestRecord(testRef, fallbackLabel = null, preferSnapshot = false) {
+  // When a pathway already carries its own test snapshot, keep those values.
+  // Falling back to the live workspace catalog is only for stale or partial payloads.
+  if (preferSnapshot && testRef && typeof testRef === 'object') {
+    return snapshotCanvasTestRecord(testRef, fallbackLabel);
+  }
+
   const stringId = testRef == null ? null : String(testRef?.testId ?? testRef?.id ?? testRef);
   const liveRecord = stringId
     ? getWorkspaceTests().find(item => String(item.id) === stringId)
@@ -782,10 +789,12 @@ function resolveCanvasTestRecord(testRef, fallbackLabel = null) {
 
 function collectCanvasTests(pathway) {
   const nodes = Array.isArray(pathway?.nodes) ? pathway.nodes : [];
+  const testCatalog = pathway?.tests && typeof pathway.tests === 'object' ? pathway.tests : {};
   const tests = new Map();
 
-  const findTestRecord = (testId) => {
-    return resolveCanvasTestRecord(testId, testId);
+  const findTestRecord = (testId, fallbackLabel = null) => {
+    const snapshot = testId != null ? testCatalog[String(testId)] ?? testCatalog[testId] ?? null : null;
+    return resolveCanvasTestRecord(snapshot || testId, fallbackLabel || testId, Boolean(snapshot));
   };
 
   const addTest = (testRecord, aliases = []) => {
@@ -817,13 +826,15 @@ function collectCanvasTests(pathway) {
 
   for (const node of nodes) {
     if (node?.type === 'test' && node.testId) {
-      const testRecord = findTestRecord(node.testId) || snapshotCanvasTestRecord(node, node.label || node.testId);
+      const testRecord = findTestRecord(node.testId, node.label || node.testId)
+        || snapshotCanvasTestRecord(node, node.label || node.testId);
       addTest(testRecord, [node.testId]);
     }
 
     if (node?.type === 'parallel') {
       for (const member of node.members || []) {
-        const testRecord = findTestRecord(member?.testId) || snapshotCanvasTestRecord(member, member?.label || member?.testId || member?.id);
+        const testRecord = findTestRecord(member?.testId, member?.label || member?.testId || member?.id)
+          || snapshotCanvasTestRecord(member, member?.label || member?.testId || member?.id);
         addTest(testRecord, [member?.id, member?.testId]);
       }
     }
@@ -1043,11 +1054,17 @@ function normalizePathwayGraph(pathway) {
   const nodes = normalizeGraphEntries(graph.nodes);
   const edges = normalizeGraphEntries(graph.edges);
   const tests = normalizeGraphEntries(graph.tests);
+  const prevalence = graph.prevalence ?? graph.metadata?.prevalence ?? null;
+  const metadata = {
+    ...(graph.metadata || {}),
+    ...(prevalence !== null && prevalence !== undefined ? { prevalence } : {}),
+  };
 
   return {
     schema_version: graph.schema_version || 'canvas-v1',
     start_node: graph.start_node || graph.startNode || detectStartNode(nodes, edges),
-    metadata: graph.metadata || {},
+    metadata,
+    prevalence,
     tests: Object.fromEntries(tests.filter(test => test.id).map(test => [test.id, { ...test }])),
     nodes: Object.fromEntries(nodes.filter(node => node.id).map(node => [node.id, {
       ...node,
@@ -1060,14 +1077,23 @@ function normalizePathwayGraph(pathway) {
   };
 }
 
-function normalizeCanvasNode(node, fallbackId) {
+function normalizeCanvasNode(node, fallbackId, testCatalog = {}) {
   const members = Array.isArray(node.members)
     ? node.members.map(member => ({
-        ...resolveCanvasTestRecord(member, member?.label || member?.testId || member?.id),
+        ...resolveCanvasTestRecord(
+          testCatalog[String(member?.testId ?? member?.id)] || testCatalog[member?.testId] || member,
+          member?.label || member?.testId || member?.id,
+          Boolean(testCatalog[String(member?.testId ?? member?.id)] || testCatalog[member?.testId]),
+        ),
         ...member,
       }))
     : null;
-  const resolvedTest = node.testId != null ? resolveCanvasTestRecord(node.testId, node.label || node.testId) : null;
+  const snapshot = node.testId != null
+    ? testCatalog[String(node.testId)] || testCatalog[node.testId] || null
+    : null;
+  const resolvedTest = node.testId != null
+    ? resolveCanvasTestRecord(snapshot || node.testId, node.label || node.testId, Boolean(snapshot))
+    : null;
 
   return {
     id: node.id || fallbackId,
@@ -1246,6 +1272,7 @@ function layoutCanvasGraph(nodes, edges, startNode) {
 
 function buildCanvasDraftFromPathway(pathway) {
   const normalized = normalizePathwayGraph(pathway);
+  const testCatalog = normalized.tests || {};
   const rawNodes = Object.entries(normalized.nodes || {});
   const isCanvasGraph = rawNodes.some(([, node]) => {
     if (!node || typeof node !== 'object') {
@@ -1256,13 +1283,14 @@ function buildCanvasDraftFromPathway(pathway) {
   });
 
   if (isCanvasGraph) {
-    const nodes = ensureRequiredTerminalNodes(rawNodes.map(([nodeId, node]) => normalizeCanvasNode(node, nodeId)));
+    const nodes = ensureRequiredTerminalNodes(rawNodes.map(([nodeId, node]) => normalizeCanvasNode(node, nodeId, testCatalog)));
     const edges = (normalized.edges || []).map(edge => ({ ...edge }));
 
     return {
       schema_version: normalized.schema_version || 'canvas-v1',
       start_node: normalized.start_node || nodes.find(node => node.type !== 'annotation')?.id || 'n1',
       metadata: normalized.metadata || {},
+      prevalence: normalized.prevalence ?? null,
       tests: normalized.tests || {},
       nodes,
       edges,
@@ -1280,7 +1308,7 @@ function buildCanvasDraftFromPathway(pathway) {
         type: 'parallel',
         label: node.label ?? node.description ?? 'Parallel block',
         members: testNames.map(testId => ({ testId })),
-      }, nodeId);
+      }, nodeId, testCatalog);
     }
 
     if (type === 'terminal') {
@@ -1292,7 +1320,7 @@ function buildCanvasDraftFromPathway(pathway) {
           node.label
           || node.description
           || (subtype === 'pos' ? 'Positive' : subtype === 'neg' ? 'Negative' : subtype === 'inc' ? 'Inconclusive' : 'Refer'),
-      }, nodeId);
+      }, nodeId, testCatalog);
     }
 
     return normalizeCanvasNode({
@@ -1301,7 +1329,7 @@ function buildCanvasDraftFromPathway(pathway) {
       testId: testNames[0] ?? null,
       label: node.label ?? node.description ?? null,
       kind: node.kind ?? null,
-    }, nodeId);
+    }, nodeId, testCatalog);
   });
 
   const convertedEdges = [];
@@ -1339,6 +1367,7 @@ function buildCanvasDraftFromPathway(pathway) {
     schema_version: normalized.schema_version || 'canvas-v1',
     start_node: normalized.start_node || laidOutNodes.find(node => node.type !== 'annotation')?.id || 'n1',
     metadata: normalized.metadata || {},
+    prevalence: normalized.prevalence ?? null,
     tests: normalized.tests || {},
     nodes: laidOutNodes,
     edges: normalizedImportedGraph.edges,
@@ -1389,11 +1418,26 @@ function buildCanonicalPathway(source = null) {
         : [];
   const metadata = source?.metadata || window.OptiDxCanvasMeta || {};
   const normalizedNodes = ensureRequiredTerminalNodes(nodes);
+  const testCatalog = source?.tests
+    || window.OptiDxCanvasDraft?.tests
+    || window.OptiDxCurrentPathway?.tests
+    || window.SEED_PATHWAY?.tests
+    || {};
+  const prevalence = source?.prevalence
+    ?? source?.metadata?.prevalence
+    ?? window.OptiDxCanvasDraft?.prevalence
+    ?? window.OptiDxCanvasDraft?.metadata?.prevalence
+    ?? window.OptiDxCurrentPathway?.prevalence
+    ?? window.OptiDxCurrentPathway?.metadata?.prevalence
+    ?? window.OptiDxOptimizationResults?.prevalence
+    ?? window.OptiDxOptimizationResults?.metadata?.prevalence
+    ?? null;
 
   return {
     schema_version: source?.schema_version || 'canvas-v1',
     start_node: source?.start_node || source?.startNode || detectStartNode(normalizedNodes, edges),
-    tests: collectCanvasTests({ nodes: normalizedNodes }),
+    prevalence,
+    tests: collectCanvasTests({ nodes: normalizedNodes, tests: testCatalog }),
     nodes: Object.fromEntries(normalizedNodes.map(node => [node.id, {
       id: node.id,
       type: node.type,
@@ -1413,6 +1457,7 @@ function buildCanonicalPathway(source = null) {
       label: metadata.label || 'TB Community Screening',
       source: metadata.source || 'Builder canvas',
       disease: metadata.disease || null,
+      ...(prevalence !== null ? { prevalence } : {}),
     },
   };
 }
@@ -1479,6 +1524,8 @@ function formatScenarioMetric(metricName, value) {
 function buildOptimizationScenarios(result) {
   const namedRankings = Array.isArray(result?.named_rankings) ? result.named_rankings : [];
   const rankedResults = Array.isArray(result?.ranked_results) ? result.ranked_results : [];
+  const prevalence = Number(result?.prevalence ?? NaN);
+  const resolvedPrevalence = Number.isFinite(prevalence) ? prevalence : null;
 
   if (namedRankings.length && rankedResults.length) {
     return namedRankings.map((ranking, index) => {
@@ -1491,6 +1538,16 @@ function buildOptimizationScenarios(result) {
       const testNames = Object.keys(pathway.tests || {});
       const metricName = ranking?.metric_name || 'expected_cost_population';
       const metricValue = metrics[metricName] ?? ranking?.metric_value ?? null;
+      const scenarioPathway = pathway && Object.keys(pathway).length
+        ? buildCanvasDraftFromPathway({
+            ...pathway,
+            prevalence: resolvedPrevalence ?? pathway.prevalence ?? null,
+            metadata: {
+              ...(pathway.metadata || {}),
+              prevalence: resolvedPrevalence ?? pathway.metadata?.prevalence ?? pathway.prevalence ?? null,
+            },
+          })
+        : null;
 
       return {
         id: String(index + 1).padStart(2, '0'),
@@ -1511,9 +1568,10 @@ function buildOptimizationScenarios(result) {
         tat: normalizeTAT(metrics.expected_turnaround_time_population ?? metrics.expected_turnaround_time_given_disease ?? null, 'hr'),
         notes: candidate?.warnings?.[0] || `${ranking?.label || 'Scenario'} selected from feasible candidates that satisfy the active project constraints.`,
         tests: testNames.map(id => window.SEED_TESTS?.find(test => test.id === id)?.name || id),
+        prevalence: resolvedPrevalence,
         trade: `${ranking?.label || 'Scenario'} ranked by ${metricName.replaceAll('_', ' ')}`,
         tag: ranking?.label || 'Optimizer output',
-        pathway: pathway && Object.keys(pathway).length ? buildCanvasDraftFromPathway(pathway) : null,
+        pathway: scenarioPathway,
       };
     });
   }
@@ -1533,6 +1591,16 @@ function buildOptimizationScenarios(result) {
       || entry?.pathway
       || {};
     const testNames = Object.keys(pathway.tests || {});
+    const scenarioPathway = pathway && Object.keys(pathway).length
+      ? buildCanvasDraftFromPathway({
+          ...pathway,
+          prevalence: resolvedPrevalence ?? pathway.prevalence ?? null,
+          metadata: {
+            ...(pathway.metadata || {}),
+            prevalence: resolvedPrevalence ?? pathway.metadata?.prevalence ?? pathway.prevalence ?? null,
+          },
+        })
+      : null;
 
     return {
       id: String.fromCharCode(65 + index),
@@ -1544,6 +1612,7 @@ function buildOptimizationScenarios(result) {
       tat: normalizeTAT(tat, 'hr'),
       notes: entry?.warnings?.[0] || `Backend-ranked candidate ${index + 1}.`,
       tests: testNames.map(id => window.SEED_TESTS?.find(test => test.id === id)?.name || id),
+      prevalence: resolvedPrevalence,
       trade: index === 0
         ? 'Top ranked by expected population cost'
         : index === 1
@@ -1554,7 +1623,7 @@ function buildOptimizationScenarios(result) {
         : index === 1
           ? 'Closest balanced option'
           : 'Optimizer output',
-      pathway: pathway && Object.keys(pathway).length ? buildCanvasDraftFromPathway(pathway) : null,
+      pathway: scenarioPathway,
     };
   });
 }
@@ -1627,7 +1696,10 @@ async function deleteDiagnosticTest(testId) {
 
 async function optimizePathways(payload) {
   const response = await request('post', '/api/pathways/optimize', payload);
-  window.OptiDxOptimizationResults = response;
+  window.OptiDxOptimizationResults = {
+    ...response,
+    prevalence: payload?.prevalence ?? null,
+  };
   window.OptiDxOptimizationScenarios = buildOptimizationScenarios(response);
   showToast(`Optimization finished with ${response?.candidate_count ?? 0} candidates`, 'success');
   return response;
@@ -1635,13 +1707,24 @@ async function optimizePathways(payload) {
 
 async function evaluatePathway(pathway = null, prevalence = null) {
   const canonicalPathway = normalizePathwayGraph(pathway || buildCanonicalPathway());
+  const resolvedPrevalence = prevalence !== null && prevalence !== undefined
+    ? prevalence
+    : canonicalPathway?.prevalence
+      ?? canonicalPathway?.metadata?.prevalence
+      ?? window.OptiDxCurrentPathway?.prevalence
+      ?? window.OptiDxCurrentPathway?.metadata?.prevalence
+      ?? window.OptiDxCanvasDraft?.prevalence
+      ?? window.OptiDxCanvasDraft?.metadata?.prevalence
+      ?? window.OptiDxOptimizationResults?.prevalence
+      ?? window.OptiDxOptimizationResults?.metadata?.prevalence
+      ?? null;
   const payload = {
     pathway: canonicalPathway,
     pathway_id: getActivePathwayRecord()?.id || null,
   };
 
-  if (prevalence !== null && prevalence !== undefined) {
-    payload.prevalence = prevalence;
+  if (resolvedPrevalence !== null && resolvedPrevalence !== undefined) {
+    payload.prevalence = resolvedPrevalence;
   }
 
   const response = await request('post', '/api/pathways/evaluate', payload);
@@ -1758,6 +1841,30 @@ async function duplicatePathwayRecord(pathway) {
   return normalized;
 }
 
+async function deletePathwayRecord(pathway) {
+  const record = normalizePathwayRecord(pathway || getActivePathwayRecord());
+  if (!record?.id) {
+    return null;
+  }
+
+  await request('delete', `/api/pathways/${record.id}`);
+
+  const remaining = getWorkspacePathways().filter(item => String(item.id) !== String(record.id));
+  window.SEED_PATHWAYS = remaining;
+  setWorkspaceSnapshot({
+    pathways: remaining,
+    pathwaysById: toWorkspaceIndex(remaining),
+  });
+
+  if (String(getActivePathwayRecord()?.id ?? '') === String(record.id)) {
+    window.OptiDxCurrentPathwayRecord = null;
+    setActivePathwayDraft(createStarterCanvasGraph());
+  }
+
+  showToast(`Deleted "${record.name || record.metadata?.label || 'pathway'}"`, 'success');
+  return true;
+}
+
 async function importEvidenceTest(test) {
   if (!test || typeof test !== 'object') {
     return null;
@@ -1872,6 +1979,7 @@ window.OptiDxActions = {
   deleteDiagnosticTest,
   saveDiagnosticTest,
   duplicatePathwayRecord,
+  deletePathwayRecord,
   importEvidenceTest,
   downloadReport,
   downloadJson(filename, data) {

@@ -144,7 +144,8 @@ function CanvasWrapper({ variant, setVariant, openPanel, setOpenPanel, setScreen
           <button className="btn" onClick={() => window.OptiDxActions.downloadJson("optidx-pathway.json", window.OptiDxCurrentPathway || window.OptiDxCanvasDraft || window.SEED_PATHWAY || {})}><Icon name="download"/>Export</button>
           <button className="btn btn--primary" onClick={async () => {
             try {
-              await window.OptiDxActions.evaluatePathway?.(window.OptiDxCurrentPathway || window.OptiDxCanvasDraft || window.SEED_PATHWAY || null);
+              const current = window.OptiDxCurrentPathway || window.OptiDxCanvasDraft || window.SEED_PATHWAY || null;
+              await window.OptiDxActions.evaluatePathway?.(current, current?.prevalence ?? current?.metadata?.prevalence ?? null);
               setScreen("results");
             } catch (error) {
               window.OptiDxActions.showToast?.(error?.message || "Unable to evaluate pathway", "error");

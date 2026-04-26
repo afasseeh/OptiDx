@@ -185,6 +185,78 @@ class OptimizationServiceTest extends TestCase
         $this->assertSame(0, $result['named_rankings'][0]['candidate_index']);
     }
 
+    public function test_optimize_respects_objective_when_ranking_candidates(): void
+    {
+        $definitions = $this->createMock(PathwayDefinitionService::class);
+        $definitions->method('validate')->willReturn([
+            'valid' => true,
+            'errors' => [],
+            'warnings' => [],
+        ]);
+
+        $bridge = $this->createMock(PythonEngineBridge::class);
+        $bridge->expects($this->exactly(2))
+            ->method('optimize')
+            ->willReturn([
+                'ranked_results' => [
+                    [
+                        'pathway' => ['metadata' => ['label' => 'Sensitivity-first']],
+                        'metrics' => [
+                            'expected_cost_population' => 5.0,
+                            'expected_turnaround_time_population' => 2.0,
+                            'sensitivity' => 0.97,
+                            'specificity' => 0.78,
+                        ],
+                        'warnings' => [],
+                    ],
+                    [
+                        'pathway' => ['metadata' => ['label' => 'Specificity-first']],
+                        'metrics' => [
+                            'expected_cost_population' => 5.0,
+                            'expected_turnaround_time_population' => 2.0,
+                            'sensitivity' => 0.81,
+                            'specificity' => 0.97,
+                        ],
+                        'warnings' => [],
+                    ],
+                ],
+            ]);
+
+        $service = new OptimizationService($definitions, $bridge);
+        $tests = [
+            't_a' => [
+                'id' => 't_a',
+                'name' => 'Test A',
+                'sensitivity' => 0.97,
+                'specificity' => 0.78,
+                'turnaround_time' => 2,
+                'sample_types' => ['blood'],
+                'skill_level' => 2,
+                'cost' => 5.0,
+            ],
+            't_b' => [
+                'id' => 't_b',
+                'name' => 'Test B',
+                'sensitivity' => 0.81,
+                'specificity' => 0.97,
+                'turnaround_time' => 2,
+                'sample_types' => ['blood'],
+                'skill_level' => 2,
+                'cost' => 5.0,
+            ],
+        ];
+
+        $sensitivityResult = $service->optimize($tests, [
+            'objective' => 'maximize sensitivity',
+        ], 0.08);
+        $specificityResult = $service->optimize($tests, [
+            'objective' => 'maximize specificity',
+        ], 0.08);
+
+        $this->assertSame('t_a', array_key_first($sensitivityResult['ranked_results'][0]['pathway']['tests']));
+        $this->assertSame('t_b', array_key_first($specificityResult['ranked_results'][0]['pathway']['tests']));
+    }
+
     public function test_optimize_builds_deterministic_named_rankings_and_allows_duplicate_winners(): void
     {
         $definitions = $this->createMock(PathwayDefinitionService::class);

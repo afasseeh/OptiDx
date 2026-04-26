@@ -2,6 +2,19 @@
 function ScreenHome({ setScreen }) {
   const pathways = window.OptiDxActions.getWorkspacePathways?.() || window.SEED_PATHWAYS || [];
   const templates = window.SEED_TEMPLATES || [];
+  const [menuFor, setMenuFor] = useState(null);
+
+  useEffect(() => {
+    const onPointerDown = event => {
+      if (!event.target.closest?.('[data-home-pathway-menu]')) {
+        setMenuFor(null);
+      }
+    };
+
+    window.addEventListener('pointerdown', onPointerDown);
+    return () => window.removeEventListener('pointerdown', onPointerDown);
+  }, []);
+
   return (
     <>
       <TopBar
@@ -55,7 +68,71 @@ function ScreenHome({ setScreen }) {
                   <div className="row" style={{marginBottom:8}}>
                     <span className={"chip " + (p.status === "Active" ? "chip--pos" : p.status === "Draft" ? "chip--orange" : "chip--outline")}>{p.status || "Draft"}</span>
                     <div className="spacer"/>
-                    <Icon name="more" size={14} style={{color:"var(--fg-3)"}}/>
+                    <div style={{position:"relative"}} data-home-pathway-menu>
+                      <button
+                        type="button"
+                        className="btn btn--sm btn--icon"
+                        onClick={e => {
+                          e.stopPropagation();
+                          setMenuFor(current => current === p.id ? null : p.id);
+                        }}
+                        aria-label={`Pathway actions for ${p.name || "Untitled pathway"}`}
+                      >
+                        <Icon name="more" size={14} style={{color:"var(--fg-3)"}}/>
+                      </button>
+                      {menuFor === p.id && (
+                        <div style={{
+                          position:"absolute",
+                          right:0,
+                          top:"calc(100% + 4px)",
+                          background:"var(--surface)",
+                          border:"1px solid var(--edge)",
+                          borderRadius:6,
+                          boxShadow:"var(--shadow-4)",
+                          minWidth:140,
+                          zIndex:20,
+                          overflow:"hidden",
+                        }}>
+                          <button
+                            type="button"
+                            className="btn"
+                            style={{width:"100%", justifyContent:"flex-start", borderRadius:0, border:0}}
+                            onClick={async e => {
+                              e.stopPropagation();
+                              setMenuFor(null);
+                              try {
+                                await window.OptiDxActions.openPathwayRecord?.(p);
+                                setScreen("canvas");
+                              } catch (error) {
+                                window.OptiDxActions.showToast?.(error?.message || "Unable to open pathway", "error");
+                              }
+                            }}
+                          >
+                            Open
+                          </button>
+                          <button
+                            type="button"
+                            className="btn"
+                            style={{width:"100%", justifyContent:"flex-start", borderRadius:0, border:0}}
+                            onClick={async e => {
+                              e.stopPropagation();
+                              setMenuFor(null);
+                              if (!window.confirm(`Delete "${p.name || "Untitled pathway"}" from the workspace?`)) {
+                                return;
+                              }
+
+                              try {
+                                await window.OptiDxActions.deletePathwayRecord?.(p);
+                              } catch (error) {
+                                window.OptiDxActions.showToast?.(error?.message || "Unable to delete pathway", "error");
+                              }
+                            }}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <h3 style={{fontSize:15, marginBottom:2}}>{p.name || "Untitled pathway"}</h3>
                   <div className="u-meta">{p.disease || "No summary metrics yet"}</div>
