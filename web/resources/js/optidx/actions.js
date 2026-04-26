@@ -443,6 +443,17 @@ async function saveWorkspaceSetting(key, value, scope = 'workspace') {
 }
 
 async function loadWorkspaceData() {
+  setWorkspaceSnapshot({
+    projects: [],
+    pathways: [],
+    tests: [],
+    settings: [],
+    projectsById: {},
+    pathwaysById: {},
+    testsById: {},
+    settingsByKey: {},
+  });
+
   const [projectsResponse, pathwaysResponse, testsResponse, settingsResponse] = await Promise.allSettled([
     request('get', '/api/projects'),
     request('get', '/api/pathways'),

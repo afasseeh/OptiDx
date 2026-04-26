@@ -22,9 +22,10 @@ class SettingsController extends Controller
         ]);
 
         $scope = $data['scope'] ?? 'workspace';
+        $userId = $request->user()?->id;
         $setting = Setting::updateOrCreate(
-            ['scope' => $scope, 'key' => $data['key']],
-            ['scope' => $scope, 'key' => $data['key'], 'value' => $data['value'] ?? null]
+            ['created_by' => $userId, 'scope' => $scope, 'key' => $data['key']],
+            ['created_by' => $userId, 'scope' => $scope, 'key' => $data['key'], 'value' => $data['value'] ?? null]
         );
 
         return response()->json($setting);

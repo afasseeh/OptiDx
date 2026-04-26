@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use App\Models\Project;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 class ProjectApiTest extends TestCase
@@ -12,6 +14,8 @@ class ProjectApiTest extends TestCase
 
     public function test_store_persists_project_metadata_and_prevalence(): void
     {
+        $this->actingAs($this->workspaceUser('project-owner@example.com'));
+
         $response = $this->postJson('/api/projects', [
             'title' => 'Pulmonary tuberculosis',
             'disease_area' => 'Tuberculosis',
@@ -47,6 +51,8 @@ class ProjectApiTest extends TestCase
 
     public function test_update_keeps_project_metadata_in_sync(): void
     {
+        $this->actingAs($this->workspaceUser('project-editor@example.com'));
+
         $project = Project::create([
             'title' => 'Pulmonary tuberculosis',
             'disease_area' => 'Tuberculosis',
@@ -97,5 +103,15 @@ class ProjectApiTest extends TestCase
         $this->assertSame('Minimize cost', $updated->metadata['objective']);
         $this->assertSame(['Blood'], $updated->metadata['allowed_sample_types']);
         $this->assertEqualsWithDelta(0.12, (float) $updated->prevalence, 0.00001);
+    }
+
+    private function workspaceUser(string $email): User
+    {
+        return User::create([
+            'name' => 'Workspace User',
+            'email' => $email,
+            'password' => Hash::make('password123'),
+            'email_verified_at' => now(),
+        ]);
     }
 }

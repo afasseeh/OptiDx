@@ -2,14 +2,16 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToAuthenticatedUser;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Pathway extends Model
 {
-    use HasFactory;
+    use BelongsToAuthenticatedUser, HasFactory;
 
     protected $fillable = [
+        'created_by',
         'project_id',
         'name',
         'version',

@@ -182,3 +182,11 @@
 - **Improvement:** Add a real project management surface with explicit draft selection, project-specific evidence libraries, and clear archive/delete actions for old drafts.
 - **Benefit:** Makes the project model match the persistence model and reduces ambiguity once multiple concurrent projects are supported.
 - **Priority:** Medium
+
+## 22. Historical unowned workspace rows
+
+- **Context:** The new account-scoped ownership layer now keeps future project, pathway, test, and settings records isolated per authenticated user.
+- **Limitation:** Legacy workspace rows that were created before ownership columns existed are only backfilled to a default account when a confident project owner cannot be inferred, so some historical attribution may still be approximate.
+- **Improvement:** Add an admin audit flow that reviews and reassigns or archives those ambiguous legacy rows explicitly.
+- **Benefit:** Preserves useful historical data while removing the last ambiguous shared-state leftovers and making ownership provenance explicit.
+- **Priority:** Low

@@ -4,7 +4,9 @@ namespace Tests\Feature;
 
 use App\Models\Pathway;
 use App\Models\Setting;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 class PathwayApiTest extends TestCase
@@ -20,6 +22,8 @@ class PathwayApiTest extends TestCase
 
     public function test_validate_and_evaluate_simple_pathway(): void
     {
+        $this->actingAs($this->workspaceUser('evaluator@example.com'));
+
         $payload = [
             'start_node' => 'start',
             'tests' => [
@@ -95,6 +99,8 @@ class PathwayApiTest extends TestCase
 
     public function test_evaluate_updates_an_existing_pathway_record(): void
     {
+        $this->actingAs($this->workspaceUser('pathway-owner@example.com'));
+
         $payload = $this->canonicalPathwayPayload();
 
         $created = $this->postJson('/api/pathways', [
@@ -118,6 +124,8 @@ class PathwayApiTest extends TestCase
 
     public function test_settings_are_scoped_by_scope_and_key(): void
     {
+        $this->actingAs($this->workspaceUser('settings-owner@example.com'));
+
         $this->putJson('/api/settings', [
             'scope' => 'workspace',
             'key' => 'workspace_profile',
@@ -143,8 +151,103 @@ class PathwayApiTest extends TestCase
         $this->assertSame(2, Setting::query()->count());
     }
 
+    public function test_workspace_records_stay_isolated_between_accounts(): void
+    {
+        $owner = $this->workspaceUser('owner@example.com');
+        $otherUser = $this->workspaceUser('other@example.com');
+
+        $this->actingAs($owner);
+
+        $ownedProject = $this->postJson('/api/projects', [
+            'title' => 'Owner project',
+        ])->assertCreated()->json();
+
+        $ownedPathway = $this->postJson('/api/pathways', [
+            'name' => 'Owner pathway',
+            'editor_definition' => $this->canonicalPathwayPayload(),
+        ])->assertCreated()->json();
+
+        $ownedTest = $this->postJson('/api/evidence/tests', [
+            'name' => 'Owner test',
+            'sensitivity' => 0.91,
+            'specificity' => 0.88,
+        ])->assertCreated()->json();
+
+        $this->putJson('/api/settings', [
+            'scope' => 'workspace',
+            'key' => 'workspace_profile',
+            'value' => ['name' => 'Owner workspace'],
+        ])->assertOk();
+
+        $this->actingAs($otherUser);
+
+        $otherProject = $this->postJson('/api/projects', [
+            'title' => 'Other project',
+        ])->assertCreated()->json();
+
+        $otherPathway = $this->postJson('/api/pathways', [
+            'name' => 'Other pathway',
+            'editor_definition' => $this->canonicalPathwayPayload(),
+        ])->assertCreated()->json();
+
+        $otherTest = $this->postJson('/api/evidence/tests', [
+            'name' => 'Other test',
+            'sensitivity' => 0.89,
+            'specificity' => 0.86,
+        ])->assertCreated()->json();
+
+        $this->putJson('/api/settings', [
+            'scope' => 'workspace',
+            'key' => 'workspace_profile',
+            'value' => ['name' => 'Other workspace'],
+        ])->assertOk();
+
+        $this->getJson('/api/pathways')
+            ->assertOk()
+            ->assertJsonCount(1)
+            ->assertJsonPath('0.name', 'Other pathway');
+
+        $this->getJson('/api/projects')
+            ->assertOk()
+            ->assertJsonCount(1)
+            ->assertJsonPath('0.title', 'Other project');
+
+        $this->getJson('/api/evidence/tests')
+            ->assertOk()
+            ->assertJsonCount(1)
+            ->assertJsonPath('0.name', 'Other test');
+
+        $this->getJson('/api/settings')
+            ->assertOk()
+            ->assertJsonCount(1)
+            ->assertJsonPath('0.value.name', 'Other workspace');
+
+        $this->getJson("/api/pathways/{$ownedPathway['id']}")
+            ->assertNotFound();
+
+        $this->getJson("/api/projects/{$ownedProject['id']}")
+            ->assertNotFound();
+
+        $this->getJson("/api/evidence/tests/{$ownedTest['id']}")
+            ->assertNotFound();
+
+        $this->getJson("/api/projects/{$otherProject['id']}")
+            ->assertOk()
+            ->assertJsonPath('id', $otherProject['id']);
+
+        $this->getJson("/api/pathways/{$otherPathway['id']}")
+            ->assertOk()
+            ->assertJsonPath('id', $otherPathway['id']);
+
+        $this->getJson("/api/evidence/tests/{$otherTest['id']}")
+            ->assertOk()
+            ->assertJsonPath('id', $otherTest['id']);
+    }
+
     public function test_report_export_returns_downloadable_files(): void
     {
+        $this->actingAs($this->workspaceUser('report-owner@example.com'));
+
         $payload = $this->canonicalPathwayPayload();
 
         $created = $this->postJson('/api/pathways', [
@@ -171,6 +274,8 @@ class PathwayApiTest extends TestCase
 
     public function test_store_import_and_export_use_canonical_graph_shape(): void
     {
+        $this->actingAs($this->workspaceUser('import-owner@example.com'));
+
         $payload = [
             'schema_version' => 'canvas-v1',
             'start_node' => 'start',
@@ -247,6 +352,8 @@ class PathwayApiTest extends TestCase
 
     public function test_optimize_accepts_ui_seed_test_shape(): void
     {
+        $this->actingAs($this->workspaceUser('optimizer@example.com'));
+
         $response = $this->postJson('/api/pathways/optimize', [
             'tests' => [
                 [
@@ -355,5 +462,15 @@ class PathwayApiTest extends TestCase
                 ['id' => 'e2', 'from' => 'start', 'fromPort' => 'neg', 'to' => 'final_negative', 'kind' => 'neg', 'label' => 'Negative'],
             ],
         ];
+    }
+
+    private function workspaceUser(string $email): User
+    {
+        return User::create([
+            'name' => 'Workspace User',
+            'email' => $email,
+            'password' => Hash::make('password123'),
+            'email_verified_at' => now(),
+        ]);
     }
 }

@@ -12,6 +12,7 @@ use App\Services\PythonEngineBridge;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\File;
+use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class PathwayController extends Controller
@@ -31,8 +32,13 @@ class PathwayController extends Controller
 
     public function store(Request $request)
     {
+        $userId = $request->user()?->id;
         $data = $request->validate([
-            'project_id' => ['nullable', 'integer', 'exists:projects,id'],
+            'project_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('projects', 'id')->where(fn ($query) => $query->where('created_by', $userId)),
+            ],
             'name' => ['required', 'string', 'max:255'],
             'version' => ['nullable', 'integer', 'min:1'],
             'schema_version' => ['nullable', 'string', 'max:255'],
@@ -60,8 +66,13 @@ class PathwayController extends Controller
 
     public function update(Request $request, Pathway $pathway)
     {
+        $userId = $request->user()?->id;
         $data = $request->validate([
-            'project_id' => ['nullable', 'integer', 'exists:projects,id'],
+            'project_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('projects', 'id')->where(fn ($query) => $query->where('created_by', $userId)),
+            ],
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'version' => ['nullable', 'integer', 'min:1'],
             'schema_version' => ['nullable', 'string', 'max:255'],
@@ -106,9 +117,14 @@ class PathwayController extends Controller
 
     public function evaluate(Request $request)
     {
+        $userId = $request->user()?->id;
         $payload = $request->validate([
             'pathway' => ['required', 'array'],
-            'pathway_id' => ['nullable', 'integer', 'exists:pathways,id'],
+            'pathway_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('pathways', 'id')->where(fn ($query) => $query->where('created_by', $userId)),
+            ],
             'prevalence' => ['nullable', 'numeric', 'between:0,1'],
         ]);
 

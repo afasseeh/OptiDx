@@ -1,5 +1,14 @@
 # Change Log
 
+## 2026-04-26 - Scope workspace data by authenticated account
+
+- Summary: Added account-owned workspace scoping across projects, pathways, diagnostic tests, and settings; introduced a shared ownership trait that stamps `created_by` on create and filters model queries to the signed-in user; wrapped the workspace API routes in `web` + `auth`; cleared the browser workspace snapshot before reloading account data; and added regression coverage for cross-account isolation.
+- Files or modules affected: `web/app/Models/Concerns/BelongsToAuthenticatedUser.php`, `web/app/Models/Project.php`, `web/app/Models/Pathway.php`, `web/app/Models/DiagnosticTest.php`, `web/app/Models/Setting.php`, `web/app/Http/Controllers/Api/PathwayController.php`, `web/app/Http/Controllers/Api/DiagnosticTestController.php`, `web/app/Http/Controllers/Api/SettingsController.php`, `web/routes/api.php`, `web/database/migrations/2026_04_26_000190_scope_workspace_rows_by_account.php`, `web/resources/js/optidx/actions.js`, `web/tests/Feature/ProjectApiTest.php`, `web/tests/Feature/PathwayApiTest.php`, `ARCHITECTURE.md`, `FUTURE_TASKS.md`, `CHANGE_LOG.md`.
+- Reason for the change: Workspace records were visible across accounts because the API returned global rows and the browser snapshot could keep stale data between user sessions.
+- Architecture impact: The workspace boundary is now account-scoped at the model and route layers, so each authenticated user sees only their own persisted project, pathway, test, and settings records.
+- Migration or deployment impact: Run the new database migration to add ownership columns and settings uniqueness by account, then rebuild/redeploy the Laravel app and frontend bundle so the auth-gated routes and snapshot reset are live.
+- Follow-up notes: Legacy rows are backfilled to the first available owner where possible, but any ambiguous historical attribution still deserves a later audit pass.
+
 ## 2026-04-26 - Fix wizard prevalence percent entry
 
 - Summary: Adjusted the wizard prevalence field so it accepts decimal percent input without being reinterpreted as a backend fraction during autosave, and loosened the number input step to let browsers handle decimal entry naturally.

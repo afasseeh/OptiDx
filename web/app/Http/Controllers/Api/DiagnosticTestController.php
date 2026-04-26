@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\DiagnosticTest;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class DiagnosticTestController extends Controller
 {
@@ -15,8 +16,13 @@ class DiagnosticTestController extends Controller
 
     public function store(Request $request)
     {
+        $userId = $request->user()?->id;
         $data = $request->validate([
-            'project_id' => ['nullable', 'integer', 'exists:projects,id'],
+            'project_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('projects', 'id')->where(fn ($query) => $query->where('created_by', $userId)),
+            ],
             'name' => ['required', 'string', 'max:255'],
             'category' => ['nullable', 'string', 'max:255'],
             'sensitivity' => ['required', 'numeric', 'between:0,1'],
@@ -46,8 +52,13 @@ class DiagnosticTestController extends Controller
 
     public function update(Request $request, DiagnosticTest $test)
     {
+        $userId = $request->user()?->id;
         $data = $request->validate([
-            'project_id' => ['nullable', 'integer', 'exists:projects,id'],
+            'project_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('projects', 'id')->where(fn ($query) => $query->where('created_by', $userId)),
+            ],
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'category' => ['nullable', 'string', 'max:255'],
             'sensitivity' => ['nullable', 'numeric', 'between:0,1'],
@@ -79,4 +90,3 @@ class DiagnosticTestController extends Controller
         return response()->noContent();
     }
 }
-
