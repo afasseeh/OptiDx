@@ -483,3 +483,12 @@
 - Architecture impact: Established the signed-in user as shared browser state, added a structured profile contract on the Laravel user row, introduced logout/delete session cleanup helpers, and documented the 30-second optimization pacing plus preserved-record deletion semantics.
 - Migration or deployment impact: Requires the new `users` profile-field migration and a fresh frontend build. The auth feature tests and production Vite build both passed after the change.
 - Follow-up notes: Account deletion preserves workspace records by nulling ownership, so the admin reassignment workflow remains a future task.
+
+## 2026-04-26 - Remove remaining Sara preview placeholders
+
+- Summary: Replaced the last hard-coded Sara team-member references in the workspace preview card with the authenticated user so the live bundle no longer ships stale placeholder identity data.
+- Files or modules affected: `web/resources/js/optidx/components/ScreenExtras.jsx`, `CHANGE_LOG.md`.
+- Reason for the change: The deployed build still contained a visible Sara placeholder in the team preview section, which made the live site appear unchanged even after the broader auth/profile deployment.
+- Architecture impact: None beyond keeping the settings/profile shell aligned with the shared `currentUser` state already introduced in the earlier auth/profile slice.
+- Migration or deployment impact: Requires another frontend rebuild and redeploy of the Laravel app image.
+- Follow-up notes: No schema or API changes were needed.

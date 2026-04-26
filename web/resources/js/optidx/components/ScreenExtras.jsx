@@ -1467,7 +1467,7 @@ function ScreenTeams() {
             </div>
 
             <div style={{position:"relative", zIndex:1}}>
-              <TeamsPreviewCard/>
+              <TeamsPreviewCard currentUser={currentUser}/>
             </div>
           </div>
         </div>
@@ -1501,7 +1501,7 @@ function ScreenTeams() {
             </tr></thead>
             <tbody>
               {[
-                ["Sara El-Sayed","sara.el-sayed@syreon.me","Owner","All projects","Just now","active","SE","var(--sme-orange)"],
+                [[currentUser?.first_name, currentUser?.last_name].filter(Boolean).join(" ") || currentUser?.name || "Current user", currentUser?.email || "your.email@example.com", currentUser?.title || "Owner", "All projects","Just now","active", getInitials([currentUser?.first_name, currentUser?.last_name].filter(Boolean).join(" ") || currentUser?.name || "Current user"), "var(--sme-orange)"],
                 ["Ahmed Khalil","ahmed.khalil@syreon.me","Editor","TB MENA · NCD Egypt","2h ago","active","AK","var(--refer)"],
                 ["Dr. Layla Haddad","l.haddad@cu.edu.eg","Clinical reviewer","TB MENA","Yesterday","invited","LH","var(--pos)"],
                 ["Omar Fouad","omar.f@minhealth.gov.eg","Viewer","NCD Egypt","3 days","active","OF","var(--inconcl)"],
@@ -1553,7 +1553,9 @@ function FeatureCard({ icon, title, desc }) {
   );
 }
 
-function TeamsPreviewCard() {
+function TeamsPreviewCard({ currentUser }) {
+  const currentName = [currentUser?.first_name, currentUser?.last_name].filter(Boolean).join(" ") || currentUser?.name || "Current user";
+  const currentInitials = getInitials(currentName);
   return (
     <div style={{
       background:"#fff", color:"var(--fg-1)",
@@ -1565,7 +1567,7 @@ function TeamsPreviewCard() {
         <b style={{fontSize:12}}>TB Community Screening · v3</b>
         <div className="spacer"/>
         <div style={{display:"flex"}}>
-          {[["SE","var(--sme-orange)"],["AK","var(--refer)"],["LH","var(--pos)"]].map(([i,c],k) => (
+          {[[currentInitials,"var(--sme-orange)"],["AK","var(--refer)"],["LH","var(--pos)"]].map(([i,c],k) => (
             <div key={i} style={{
               width:22, height:22, borderRadius:"50%", background:c, color:"#fff",
               display:"grid", placeItems:"center", fontWeight:700, fontSize:9,
@@ -1580,7 +1582,7 @@ function TeamsPreviewCard() {
           text="The Xpert-negative branch may miss early disease, should we add LF-LAM in parallel for HIV+ cohorts?"/>
         <CommentRow initials="AK" color="var(--refer)" name="Ahmed Khalil" time="1h" role="Editor"
           text="Good catch. Adding parallel LF-LAM bumps sens 0.03 at +$0.40/pt." reply/>
-        <CommentRow initials="SE" color="var(--sme-orange)" name="Sara El-Sayed" time="just now" role="Owner"
+        <CommentRow initials={currentInitials} color="var(--sme-orange)" name={currentName} time="just now" role="Owner"
           text="Approving v3 with the parallel addition. Ready for export." status="approved"/>
       </div>
     </div>
