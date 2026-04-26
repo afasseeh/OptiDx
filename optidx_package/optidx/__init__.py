@@ -9,6 +9,8 @@ from .engine import (
     BenchmarkCase,
     load_benchmark_cases,
 )
+from .models import DiagnosticTool, OptimizationConstraints, OptimizerConfig, CandidatePathway, OptimizationResult
+from .optimizer import optimize_pathways
 
 __all__ = [
     'DiagnosticTest',
@@ -20,4 +22,10 @@ __all__ = [
     'ValidationHarness',
     'BenchmarkCase',
     'load_benchmark_cases',
+    'DiagnosticTool',
+    'OptimizationConstraints',
+    'OptimizerConfig',
+    'CandidatePathway',
+    'OptimizationResult',
+    'optimize_pathways',
 ]

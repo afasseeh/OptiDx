@@ -112,13 +112,20 @@ def test_cycle_is_rejected():
         'start': Node(
             node_id='start',
             action=Action(test_names=['A'], parallel_time=False),
-            branches=[Branch(conditions={'A': 'pos'}, next_node='loop')],
+            branches=[
+                Branch(conditions={'A': 'pos'}, next_node='loop'),
+                Branch(conditions={'A': 'neg'}, next_node='final_negative'),
+            ],
         ),
         'loop': Node(
             node_id='loop',
             action=Action(test_names=['A'], parallel_time=False),
-            branches=[Branch(conditions={'A': 'pos'}, next_node='start')],
+            branches=[
+                Branch(conditions={'A': 'pos'}, next_node='start'),
+                Branch(conditions={'A': 'neg'}, next_node='final_negative'),
+            ],
         ),
+        'final_negative': Node(node_id='final_negative', final_classification='negative'),
     }
 
     with pytest.raises(ValueError, match='cycle'):

@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\EvaluationResult;
+use App\Models\OptimizationRun;
 use App\Models\Pathway;
+use App\Jobs\ExecuteOptimizationRun;
 use App\Services\OptimizationService;
 use App\Services\PathwayGraphService;
 use App\Services\PathwayDefinitionService;
@@ -191,22 +193,42 @@ class PathwayController extends Controller
 
     public function optimize(Request $request)
     {
+        $userId = $request->user()?->id;
         $payload = $request->validate([
+            'project_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('projects', 'id')->where(fn ($query) => $query->where('created_by', $userId)),
+            ],
             'tests' => ['required', 'array'],
             'constraints' => ['nullable', 'array'],
+            'search_config' => ['nullable', 'array'],
             'prevalence' => ['nullable', 'numeric', 'between:0,1'],
         ]);
 
-        // Optimization still runs synchronously in this release, so lift the
-        // default execution ceiling for this one endpoint instead of letting a
-        // long candidate search die at the 30-second PHP limit.
-        if (function_exists('set_time_limit')) {
-            @set_time_limit(0);
-        }
-
-        return response()->json(
-            $this->optimizer->optimize($payload['tests'], $payload['constraints'] ?? [], $payload['prevalence'] ?? null)
+        $constraints = array_replace(
+            $payload['constraints'] ?? [],
+            array_key_exists('prevalence', $payload) ? ['prevalence' => $payload['prevalence']] : []
         );
+
+        $normalizedPayload = $this->optimizer->prepareRunPayload(
+            $payload['tests'],
+            $constraints,
+            $payload['search_config'] ?? []
+        );
+
+        $run = OptimizationRun::create([
+            'project_id' => $payload['project_id'] ?? null,
+            'status' => 'queued',
+            'input_payload' => $normalizedPayload,
+            'constraints' => $normalizedPayload['constraints'],
+            'heuristic_mode' => false,
+            'search_exhaustive' => false,
+        ]);
+
+        ExecuteOptimizationRun::dispatch($run->id);
+
+        return response()->json($run->fresh(), 202);
     }
 
     public function import(Request $request)

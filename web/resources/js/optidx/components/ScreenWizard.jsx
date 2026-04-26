@@ -12,21 +12,30 @@ const DEFAULT_WIZARD_PROJECT = {
   clinicalContext: "comm",
   targetPopulation: "Adults >=15 yrs presenting with cough >2 weeks",
   prevalence: "8.0",
-  objective: "Balanced MCDA",
-  minimumSensitivity: "0.85",
-  minimumSpecificity: "0.90",
-  maximumCost: "10.00",
-  maximumTat: "72",
-  maxSkillLevel: "Lab technician",
-  sampleTypes: ["None", "Blood", "Urine", "Stool", "Sputum"],
+  objective: null,
+  minSensitivity: "0.85",
+  minSpecificity: "0.90",
+  maxCostPerPatientUsd: "10.00",
+  maxTurnaroundTimeHours: "72",
+  allowLabTechnician: true,
+  allowRadiologist: false,
+  allowSpecialistPhysician: false,
+  allowSampleNone: true,
+  allowSampleBlood: true,
+  allowSampleUrine: true,
+  allowSampleStool: true,
+  allowSampleSputum: true,
+  allowSampleNasalSwab: true,
+  allowSampleImaging: false,
+  settingPrimaryCare: true,
+  settingHospital: false,
+  settingCommunity: true,
+  settingMobileUnit: false,
 };
 
 function getWizardProjectState(source = null) {
   return window.OptiDxActions?.buildProjectWizardState?.(source || window.OptiDxCurrentProjectRecord || window.OptiDxCurrentProject || DEFAULT_WIZARD_PROJECT)
-    || {
-      ...DEFAULT_WIZARD_PROJECT,
-      sampleTypes: [...DEFAULT_WIZARD_PROJECT.sampleTypes],
-    };
+    || { ...DEFAULT_WIZARD_PROJECT };
 }
 
 function formatOptimizationProgress(value) {
@@ -46,12 +55,24 @@ function serializeWizardProjectState(project) {
     targetPopulation: safeProject.targetPopulation,
     prevalence: safeProject.prevalence,
     objective: safeProject.objective,
-    minimumSensitivity: safeProject.minimumSensitivity,
-    minimumSpecificity: safeProject.minimumSpecificity,
-    maximumCost: safeProject.maximumCost,
-    maximumTat: safeProject.maximumTat,
-    maxSkillLevel: safeProject.maxSkillLevel,
-    sampleTypes: Array.isArray(safeProject.sampleTypes) ? [...safeProject.sampleTypes] : [],
+    minSensitivity: safeProject.minSensitivity,
+    minSpecificity: safeProject.minSpecificity,
+    maxCostPerPatientUsd: safeProject.maxCostPerPatientUsd,
+    maxTurnaroundTimeHours: safeProject.maxTurnaroundTimeHours,
+    allowLabTechnician: !!safeProject.allowLabTechnician,
+    allowRadiologist: !!safeProject.allowRadiologist,
+    allowSpecialistPhysician: !!safeProject.allowSpecialistPhysician,
+    allowSampleNone: !!safeProject.allowSampleNone,
+    allowSampleBlood: !!safeProject.allowSampleBlood,
+    allowSampleUrine: !!safeProject.allowSampleUrine,
+    allowSampleStool: !!safeProject.allowSampleStool,
+    allowSampleSputum: !!safeProject.allowSampleSputum,
+    allowSampleNasalSwab: !!safeProject.allowSampleNasalSwab,
+    allowSampleImaging: !!safeProject.allowSampleImaging,
+    settingPrimaryCare: !!safeProject.settingPrimaryCare,
+    settingHospital: !!safeProject.settingHospital,
+    settingCommunity: !!safeProject.settingCommunity,
+    settingMobileUnit: !!safeProject.settingMobileUnit,
   });
 }
 
@@ -59,20 +80,30 @@ function ScreenWizard({ setScreen }) {
   const initialProject = getWizardProjectState();
   const [step, setStep] = useState(() => Number(window.OptiDxWizardStep ?? 0) || 0);
   const [mode, setMode] = useState(null); // null | "test" | "optimize"
-  const [objective, setObjective] = useState(initialProject.objective);
-  const [sampleTypes, setSampleTypes] = useState(initialProject.sampleTypes);
   const [project, setProject] = useState(() => ({
     conditionName: initialProject.conditionName,
     clinicalContext: initialProject.clinicalContext,
     targetPopulation: "Adults ≥15 yrs presenting with cough >2 weeks",
     prevalence: initialProject.prevalence,
     objective: initialProject.objective,
-    minimumSensitivity: initialProject.minimumSensitivity,
-    minimumSpecificity: initialProject.minimumSpecificity,
-    maximumCost: initialProject.maximumCost,
-    maximumTat: initialProject.maximumTat,
-    maxSkillLevel: initialProject.maxSkillLevel,
-    sampleTypes: initialProject.sampleTypes,
+    minSensitivity: initialProject.minSensitivity,
+    minSpecificity: initialProject.minSpecificity,
+    maxCostPerPatientUsd: initialProject.maxCostPerPatientUsd,
+    maxTurnaroundTimeHours: initialProject.maxTurnaroundTimeHours,
+    allowLabTechnician: initialProject.allowLabTechnician,
+    allowRadiologist: initialProject.allowRadiologist,
+    allowSpecialistPhysician: initialProject.allowSpecialistPhysician,
+    allowSampleNone: initialProject.allowSampleNone,
+    allowSampleBlood: initialProject.allowSampleBlood,
+    allowSampleUrine: initialProject.allowSampleUrine,
+    allowSampleStool: initialProject.allowSampleStool,
+    allowSampleSputum: initialProject.allowSampleSputum,
+    allowSampleNasalSwab: initialProject.allowSampleNasalSwab,
+    allowSampleImaging: initialProject.allowSampleImaging,
+    settingPrimaryCare: initialProject.settingPrimaryCare,
+    settingHospital: initialProject.settingHospital,
+    settingCommunity: initialProject.settingCommunity,
+    settingMobileUnit: initialProject.settingMobileUnit,
   }));
   const [optimization, setOptimization] = useState({ status: "idle", progress: 0, stage: "", error: null });
   const steps = ["Disease", "Test library", "Constraints", "Review", "Run"];
@@ -95,8 +126,6 @@ function ScreenWizard({ setScreen }) {
     const hydratedProject = getWizardProjectState(window.OptiDxActions?.getActiveProjectRecord?.() || window.OptiDxActions?.getWorkspaceProjects?.()?.[0] || projectRef.current);
 
     if (active) {
-      setObjective(hydratedProject.objective);
-      setSampleTypes(hydratedProject.sampleTypes);
       setProject(hydratedProject);
       projectRef.current = hydratedProject;
       lastSavedSnapshotRef.current = serializeWizardProjectState(hydratedProject);
@@ -128,8 +157,6 @@ function ScreenWizard({ setScreen }) {
         return;
       }
 
-      setObjective(hydratedProject.objective);
-      setSampleTypes(hydratedProject.sampleTypes);
       setProject(hydratedProject);
       projectRef.current = hydratedProject;
       lastSavedSnapshotRef.current = snapshot;
@@ -162,8 +189,6 @@ function ScreenWizard({ setScreen }) {
           if (saved) {
             const normalized = getWizardProjectState(saved);
             projectRef.current = normalized;
-            setObjective(normalized.objective);
-            setSampleTypes(normalized.sampleTypes);
             setProject(normalized);
             lastSavedSnapshotRef.current = serializeWizardProjectState(normalized);
           }
@@ -196,8 +221,6 @@ function ScreenWizard({ setScreen }) {
     if (saved) {
       const normalized = getWizardProjectState(saved);
       projectRef.current = normalized;
-      setObjective(normalized.objective);
-      setSampleTypes(normalized.sampleTypes);
       setProject(normalized);
       lastSavedSnapshotRef.current = serializeWizardProjectState(normalized);
     }
@@ -236,14 +259,10 @@ function ScreenWizard({ setScreen }) {
       await flushProjectDraft();
       const currentProject = projectRef.current;
       const prevalence = Number.parseFloat(currentProject.prevalence);
-      const minimumSensitivity = Number.parseFloat(currentProject.minimumSensitivity);
-      const minimumSpecificity = Number.parseFloat(currentProject.minimumSpecificity);
-      const maximumCost = Number.parseFloat(currentProject.maximumCost);
-      const maximumTat = Number.parseFloat(currentProject.maximumTat);
-      const maxSkillLevel = currentProject.maxSkillLevel === "Radiologist" || currentProject.maxSkillLevel === "Specialist physician" ? 4 : 3;
-      const allowedSampleTypes = currentProject.sampleTypes
-        .filter(sample => sample && sample !== "None")
-        .map(sample => sample.toLowerCase());
+      const minSensitivity = Number.parseFloat(currentProject.minSensitivity);
+      const minSpecificity = Number.parseFloat(currentProject.minSpecificity);
+      const maxCostPerPatientUsd = Number.parseFloat(currentProject.maxCostPerPatientUsd);
+      const maxTurnaroundTimeHours = Number.parseFloat(currentProject.maxTurnaroundTimeHours);
       const tests = (window.OptiDxActions.getWorkspaceTests?.() || window.SEED_TESTS || []).map(test => ({
         id: test.id,
         name: test.name,
@@ -252,21 +271,51 @@ function ScreenWizard({ setScreen }) {
         turnaround_time: test.tat,
         turnaround_time_unit: test.tatUnit,
         sample_types: [test.sample],
-        skill_level: test.skill,
+        skill_level: test.skill_level ?? test.skill,
         cost: test.cost,
+        requires_lab_technician: test.requires_lab_technician ?? false,
+        requires_radiologist: test.requires_radiologist ?? false,
+        requires_specialist_physician: test.requires_specialist_physician ?? false,
+        sample_none: test.sample === "none",
+        sample_blood: test.sample === "blood",
+        sample_urine: test.sample === "urine",
+        sample_stool: test.sample === "stool",
+        sample_sputum: test.sample === "sputum",
+        sample_nasal_swab: test.sample === "nasal swab",
+        sample_imaging: test.sample === "imaging",
       }));
       const payload = {
         tests,
         constraints: {
-          objective: currentProject.objective,
-          minimum_sensitivity: Number.isFinite(minimumSensitivity) ? minimumSensitivity : null,
-          minimum_specificity: Number.isFinite(minimumSpecificity) ? minimumSpecificity : null,
-          maximum_total_cost: Number.isFinite(maximumCost) ? maximumCost : null,
-          maximum_turnaround_time: Number.isFinite(maximumTat) ? maximumTat : null,
-          maximum_skill_level: maxSkillLevel,
-          allowed_sample_types: allowedSampleTypes,
+          prevalence: Number.isFinite(prevalence) ? prevalence / 100 : null,
+          min_sensitivity: Number.isFinite(minSensitivity) ? minSensitivity : null,
+          min_specificity: Number.isFinite(minSpecificity) ? minSpecificity : null,
+          max_cost_per_patient_usd: Number.isFinite(maxCostPerPatientUsd) ? maxCostPerPatientUsd : null,
+          max_turnaround_time_hours: Number.isFinite(maxTurnaroundTimeHours) ? maxTurnaroundTimeHours : null,
+          lab_technician_allowed: !!currentProject.allowLabTechnician,
+          radiologist_allowed: !!currentProject.allowRadiologist,
+          specialist_physician_allowed: !!currentProject.allowSpecialistPhysician,
+          none_allowed: !!currentProject.allowSampleNone,
+          blood_allowed: !!currentProject.allowSampleBlood,
+          urine_allowed: !!currentProject.allowSampleUrine,
+          stool_allowed: !!currentProject.allowSampleStool,
+          sputum_allowed: !!currentProject.allowSampleSputum,
+          nasal_swab_allowed: !!currentProject.allowSampleNasalSwab,
+          imaging_allowed: !!currentProject.allowSampleImaging,
+          primary_care: !!currentProject.settingPrimaryCare,
+          hospital: !!currentProject.settingHospital,
+          community: !!currentProject.settingCommunity,
+          mobile_unit: !!currentProject.settingMobileUnit,
         },
-        prevalence: Number.isFinite(prevalence) ? prevalence / 100 : null,
+        search_config: {
+          max_candidates: 5000,
+          max_parallel_block_size: 3,
+          max_tests_per_realized_path: 6,
+          max_stages: 4,
+          time_limit_seconds: 900,
+          allow_repeated_test: true,
+          allow_same_test_in_different_branches: true,
+        },
       };
 
       const result = await window.OptiDxActions.optimizePathways(payload);
@@ -278,7 +327,7 @@ function ScreenWizard({ setScreen }) {
       setOptimization({
         status: "done",
         progress: 100,
-        stage: `Prepared ${result?.pareto_frontier?.length ?? result?.candidate_count ?? 0} candidates.`,
+        stage: `Prepared ${result?.pareto_frontier_ids?.length ?? result?.feasible_candidate_count ?? 0} candidates.`,
         error: null,
       });
       window.setTimeout(() => {
@@ -351,7 +400,7 @@ function ScreenWizard({ setScreen }) {
           ))}
         </div>
 
-        {step === 0 && <WizardStep1 objective={objective} setObjective={setObjective} project={project} setProject={setProject}/>}
+        {step === 0 && <WizardStep1 project={project} setProject={setProject}/>}
         {step === 1 && <WizardStep2 onOpenEvidence={async () => {
           try {
             await flushProjectDraft();
@@ -360,8 +409,8 @@ function ScreenWizard({ setScreen }) {
             window.OptiDxActions.showToast?.(error?.message || "Unable to save project draft", "error");
           }
         }}/>}
-        {step === 2 && <WizardStep3 sampleTypes={sampleTypes} setSampleTypes={setSampleTypes} project={project} setProject={setProject}/>}
-        {step === 3 && <WizardStep4 objective={objective} sampleTypes={sampleTypes} project={project}/>}
+        {step === 2 && <WizardStep3 project={project} setProject={setProject}/>}
+        {step === 3 && <WizardStep4 project={project}/>}
         {step === 4 && <WizardStep5 mode={mode} setMode={setMode}/>}
         {optimization.status !== "idle" && (
           <OptimizationOverlay optimization={optimization} />
@@ -485,13 +534,13 @@ function WizardStep5({ mode, setMode }) {
   );
 }
 
-function WizardStep1({ objective, setObjective, project, setProject }) {
+function WizardStep1({ project, setProject }) {
   return (
     <div className="card card--pad">
       <div className="sme-eyebrow" style={{marginBottom:6}}>Step 01</div>
       <h2 style={{fontSize:22, marginBottom:4}}>Project and clinical context</h2>
       <p style={{color:"var(--fg-3)", marginBottom:24, fontSize:13}}>
-        Define what this project diagnoses, who it is for, and what it optimizes for.
+        Define the project context and prevalence before configuring the optimizer.
       </p>
       <div className="grid" style={{gridTemplateColumns:"1fr 1fr", gap:16}}>
         <div className="field">
@@ -535,18 +584,7 @@ function WizardStep1({ objective, setObjective, project, setProject }) {
             inputMode="decimal"
           />
           <span className="field__suffix" style={{top:"70%"}}>%</span>
-          <div className="field__hint">Enables PPV / NPV calculation in results.</div>
-        </div>
-        <div className="field" style={{gridColumn:"span 2"}}>
-          <label className="field__label">Pathway objective</label>
-          <div className="row row--wrap" style={{gap:6}}>
-            {["Minimize cost","Maximize sensitivity","Maximize specificity","Minimize TAT","Balanced MCDA","Custom"].map((o) =>
-              <button key={o} type="button" onClick={() => {
-                setObjective(o);
-                setProject(current => ({ ...current, objective: o }));
-              }} className={"btn btn--sm" + (objective === o ? " btn--ink" : "")}>{o}</button>
-            )}
-          </div>
+          <div className="field__hint">Prevalence is mandatory for optimization and report metrics.</div>
         </div>
       </div>
     </div>
@@ -661,72 +699,94 @@ function WizardStep2({ onOpenEvidence }) {
   );
 }
 
-function WizardStep3({ sampleTypes, setSampleTypes, project, setProject }) {
+function WizardStep3({ project, setProject }) {
   return (
     <div className="card card--pad">
       <div className="sme-eyebrow" style={{marginBottom:6}}>Step 03</div>
       <h2 style={{fontSize:22, marginBottom:4}}>Constraints and feasibility</h2>
       <p style={{color:"var(--fg-3)", marginBottom:20, fontSize:13}}>
-        These bound the search space and trigger warnings if violated.
+        These bound the search space and define the allowed operational settings.
       </p>
       <div className="grid" style={{gridTemplateColumns:"1fr 1fr", gap:16}}>
         {[
-          ["Minimum acceptable sensitivity","0.85",""],
-          ["Minimum acceptable specificity","0.90",""],
-          ["Maximum cost per patient","10.00","USD"],
-          ["Maximum turnaround time","72","hours"],
+          ["Minimum acceptable sensitivity","minSensitivity",""],
+          ["Minimum acceptable specificity","minSpecificity",""],
+          ["Maximum cost per patient","maxCostPerPatientUsd","USD"],
+          ["Maximum turnaround time","maxTurnaroundTimeHours","hours"],
         ].map(([l,v,s]) => (
           <div key={l} className="field field--with-suffix">
             <label className="field__label">{l}</label>
             <input
               className="input"
-              value={
-                l === "Minimum acceptable sensitivity" ? project.minimumSensitivity
-                  : l === "Minimum acceptable specificity" ? project.minimumSpecificity
-                  : l === "Maximum cost per patient" ? project.maximumCost
-                  : project.maximumTat
-              }
-              onChange={e => setProject(current => ({
-                ...current,
-                minimumSensitivity: l === "Minimum acceptable sensitivity" ? e.target.value : current.minimumSensitivity,
-                minimumSpecificity: l === "Minimum acceptable specificity" ? e.target.value : current.minimumSpecificity,
-                maximumCost: l === "Maximum cost per patient" ? e.target.value : current.maximumCost,
-                maximumTat: l === "Maximum turnaround time" ? e.target.value : current.maximumTat,
-              }))}
+              value={project[v]}
+              onChange={e => setProject(current => ({ ...current, [v]: e.target.value }))}
             />
             {s && <span className="field__suffix" style={{top:"70%"}}>{s}</span>}
           </div>
         ))}
-        <div className="field">
-          <label className="field__label">Max required skill level</label>
-          <select
-            className="select"
-            value={project.maxSkillLevel}
-            onChange={e => setProject(current => ({ ...current, maxSkillLevel: e.target.value }))}
-          >
-            <option>Lab technician</option>
-            <option>Radiologist</option>
-            <option>Specialist physician</option>
-          </select>
-        </div>
-        <div className="field">
-          <label className="field__label">Setting</label>
-          <select className="select"><option>Community</option><option>Primary care</option><option>Hospital</option><option>Mobile unit</option></select>
+        <div className="field" style={{gridColumn:"span 2"}}>
+          <label className="field__label">Allowed roles</label>
+          <div className="row row--wrap" style={{gap:6}}>
+            {[
+              ["Lab technician","allowLabTechnician"],
+              ["Radiologist","allowRadiologist"],
+              ["Specialist physician","allowSpecialistPhysician"],
+            ].map(([label, key]) => (
+              <button
+                key={label}
+                type="button"
+                className={"btn btn--sm" + (project[key] ? " btn--ink" : "")}
+                onClick={() => setProject(current => ({ ...current, [key]: !current[key] }))}
+              >
+                {project[key] && <Icon name="check" size={11}/>}
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="field" style={{gridColumn:"span 2"}}>
           <label className="field__label">Allowed sample types</label>
           <div className="row row--wrap" style={{gap:6}}>
-            {["None","Blood","Urine","Stool","Sputum","Nasal swab","Imaging"].map((s) =>
-              <button key={s} type="button" onClick={() => setSampleTypes(current => {
-                const next = current.includes(s) ? current.filter(item => item !== s) : [...current, s];
-                setProject(projectCurrent => ({ ...projectCurrent, sampleTypes: next }));
-                return next;
-              })}
-                className={"btn btn--sm" + (sampleTypes.includes(s) ? " btn--ink" : "")}>
-                {sampleTypes.includes(s) && <Icon name="check" size={11}/>}
-                {s}
+            {[
+              ["None","allowSampleNone"],
+              ["Blood","allowSampleBlood"],
+              ["Urine","allowSampleUrine"],
+              ["Stool","allowSampleStool"],
+              ["Sputum","allowSampleSputum"],
+              ["Nasal swab","allowSampleNasalSwab"],
+              ["Imaging","allowSampleImaging"],
+            ].map(([label, key]) => (
+              <button
+                key={label}
+                type="button"
+                className={"btn btn--sm" + (project[key] ? " btn--ink" : "")}
+                onClick={() => setProject(current => ({ ...current, [key]: !current[key] }))}
+              >
+                {project[key] && <Icon name="check" size={11}/>}
+                {label}
               </button>
-            )}
+            ))}
+          </div>
+        </div>
+        <div className="field" style={{gridColumn:"span 2"}}>
+          <label className="field__label">Report-only settings</label>
+          <div className="row row--wrap" style={{gap:6}}>
+            {[
+              ["Primary care","settingPrimaryCare"],
+              ["Hospital","settingHospital"],
+              ["Community","settingCommunity"],
+              ["Mobile unit","settingMobileUnit"],
+            ].map(([label, key]) => (
+              <button
+                key={label}
+                type="button"
+                className={"btn btn--sm" + (project[key] ? " btn--ink" : "")}
+                onClick={() => setProject(current => ({ ...current, [key]: !current[key] }))}
+              >
+                {project[key] && <Icon name="check" size={11}/>}
+                {label}
+              </button>
+            ))}
           </div>
         </div>
       </div>
@@ -734,7 +794,7 @@ function WizardStep3({ sampleTypes, setSampleTypes, project, setProject }) {
   );
 }
 
-function WizardStep4({ objective, sampleTypes, project }) {
+function WizardStep4({ project }) {
   return (
     <div className="card card--pad">
       <div className="sme-eyebrow" style={{marginBottom:6}}>Step 04</div>
@@ -749,19 +809,42 @@ function WizardStep4({ objective, sampleTypes, project }) {
           <div className="u-meta" style={{marginTop:4}}>{project.clinicalContext} | Live wizard state | Prevalence {project.prevalence || "n/a"}%</div>
         </div>
         <div className="card card--pad">
-          <div className="sme-eyebrow" style={{marginBottom:6}}>Objective</div>
-          <div style={{fontSize:15, fontWeight:700}}>{objective}</div>
-          <div className="u-meta" style={{marginTop:4}}>Weights and constraints reflect the live wizard state.</div>
+          <div className="sme-eyebrow" style={{marginBottom:6}}>Operational scope</div>
+          <div style={{fontSize:15, fontWeight:700}}>
+            {[
+              project.allowLabTechnician ? "Lab technician" : null,
+              project.allowRadiologist ? "Radiologist" : null,
+              project.allowSpecialistPhysician ? "Specialist physician" : null,
+            ].filter(Boolean).join(" · ") || "No roles selected"}
+          </div>
+          <div className="u-meta" style={{marginTop:4}}>
+            {[
+              project.settingPrimaryCare ? "Primary care" : null,
+              project.settingHospital ? "Hospital" : null,
+              project.settingCommunity ? "Community" : null,
+              project.settingMobileUnit ? "Mobile unit" : null,
+            ].filter(Boolean).join(" · ") || "No settings selected"}
+          </div>
         </div>
         <div className="card card--pad">
           <div className="sme-eyebrow" style={{marginBottom:6}}>Test library</div>
           <div style={{fontSize:15, fontWeight:700}}>{(window.OptiDxActions.getWorkspaceTests?.() || window.SEED_TESTS || []).length} tests</div>
-          <div className="u-meta" style={{marginTop:4}}>{sampleTypes.join(" | ")}</div>
+          <div className="u-meta" style={{marginTop:4}}>
+            {[
+              project.allowSampleNone ? "None" : null,
+              project.allowSampleBlood ? "Blood" : null,
+              project.allowSampleUrine ? "Urine" : null,
+              project.allowSampleStool ? "Stool" : null,
+              project.allowSampleSputum ? "Sputum" : null,
+              project.allowSampleNasalSwab ? "Nasal swab" : null,
+              project.allowSampleImaging ? "Imaging" : null,
+            ].filter(Boolean).join(" | ") || "No sample types selected"}
+          </div>
         </div>
         <div className="card card--pad">
           <div className="sme-eyebrow" style={{marginBottom:6}}>Constraints</div>
-          <div style={{fontSize:15, fontWeight:700}}>Sens &gt;= {project.minimumSensitivity} | Spec &gt;= {project.minimumSpecificity}</div>
-          <div className="u-meta" style={{marginTop:4}}>Cost &lt;= ${project.maximumCost} | TAT &lt;= {project.maximumTat}h | Max skill: {project.maxSkillLevel}</div>
+          <div style={{fontSize:15, fontWeight:700}}>Sens &gt;= {project.minSensitivity} | Spec &gt;= {project.minSpecificity}</div>
+          <div className="u-meta" style={{marginTop:4}}>Cost &lt;= ${project.maxCostPerPatientUsd} | TAT &lt;= {project.maxTurnaroundTimeHours}h</div>
         </div>
       </div>
       <div className="banner banner--info" style={{marginTop:20}}>

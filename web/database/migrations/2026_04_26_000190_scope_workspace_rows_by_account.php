@@ -9,17 +9,23 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('pathways', function (Blueprint $table) {
-            $table->foreignId('created_by')->nullable()->after('id')->constrained('users')->nullOnDelete();
-        });
+        if (! Schema::hasColumn('pathways', 'created_by')) {
+            Schema::table('pathways', function (Blueprint $table) {
+                $table->foreignId('created_by')->nullable()->after('id')->constrained('users')->nullOnDelete();
+            });
+        }
 
-        Schema::table('diagnostic_tests', function (Blueprint $table) {
-            $table->foreignId('created_by')->nullable()->after('id')->constrained('users')->nullOnDelete();
-        });
+        if (! Schema::hasColumn('diagnostic_tests', 'created_by')) {
+            Schema::table('diagnostic_tests', function (Blueprint $table) {
+                $table->foreignId('created_by')->nullable()->after('id')->constrained('users')->nullOnDelete();
+            });
+        }
 
-        Schema::table('settings', function (Blueprint $table) {
-            $table->foreignId('created_by')->nullable()->after('id')->constrained('users')->nullOnDelete();
-        });
+        if (! Schema::hasColumn('settings', 'created_by')) {
+            Schema::table('settings', function (Blueprint $table) {
+                $table->foreignId('created_by')->nullable()->after('id')->constrained('users')->nullOnDelete();
+            });
+        }
 
         $defaultOwnerId = DB::table('users')->orderBy('id')->value('id');
 
@@ -74,16 +80,22 @@ return new class extends Migration
             $table->unique(['scope', 'key'], 'settings_scope_key_unique');
         });
 
-        Schema::table('settings', function (Blueprint $table) {
-            $table->dropConstrainedForeignId('created_by');
-        });
+        if (Schema::hasColumn('settings', 'created_by')) {
+            Schema::table('settings', function (Blueprint $table) {
+                $table->dropConstrainedForeignId('created_by');
+            });
+        }
 
-        Schema::table('diagnostic_tests', function (Blueprint $table) {
-            $table->dropConstrainedForeignId('created_by');
-        });
+        if (Schema::hasColumn('diagnostic_tests', 'created_by')) {
+            Schema::table('diagnostic_tests', function (Blueprint $table) {
+                $table->dropConstrainedForeignId('created_by');
+            });
+        }
 
-        Schema::table('pathways', function (Blueprint $table) {
-            $table->dropConstrainedForeignId('created_by');
-        });
+        if (Schema::hasColumn('pathways', 'created_by')) {
+            Schema::table('pathways', function (Blueprint $table) {
+                $table->dropConstrainedForeignId('created_by');
+            });
+        }
     }
 };

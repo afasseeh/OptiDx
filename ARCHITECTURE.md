@@ -13,7 +13,7 @@ The implementation direction is now:
 
 - Laravel 12 + PHP 8.3 for the web backend, persistence, validation, and report orchestration.
 - React on Vite for the frontend.
-- The existing Python engine remains the computational reference for pathway evaluation during the first phase.
+- The existing Python engine remains the computational reference for pathway evaluation, while `optidx_package/optidx/optimizer.py` owns the CPBB-PF v3 search and ranking core.
 - Laragon is the local runtime target for development and demo use.
 
 ## Architectural Boundaries
@@ -63,10 +63,9 @@ The backend owns:
 - schema validation
 - API responses
 - user authentication, session state, email verification, and password reset flows
-- optimization orchestration
-- bounded grammar expansion for single-test, serial, parallel, and discordant-referee optimization candidates, followed by dominance ranking of the feasible set and Pareto frontier
-- optimization candidate filtering, synchronous batching, and ranking within the optimize request
-- derived optimization metrics and fixed named scenario buckets, including cost per detected case, Balanced Accuracy, Youden's J, and DOR-based ranking over the feasible candidate set
+- optimization orchestration and queued run-state persistence
+- CPBB-PF v3 run creation, polling, and result hydration for the eight fixed optimizer outputs
+- derived optimization metrics and fixed named scenario buckets, including cost per positive test, Balanced Accuracy, Youden's J, worst-case turnaround time, and Pareto frontier identity tracking
 - report generation jobs and export-file assembly for PDF/DOCX downloads
 - bridge calls to the Python evaluator
 - canonical compilation of parallel-block member occurrences into unique aliases so duplicate tests in the same block survive engine compilation without collapsing onto a single result key
@@ -85,6 +84,15 @@ The Python engine remains the canonical evaluator for:
 
 The initial web integration should preserve the engine contract and extend it incrementally rather than replacing it.
 
+The optimizer now sits beside that evaluator as a separate Python responsibility:
+
+- `optidx_package/optidx/optimizer.py` owns the CPBB-PF v3 search loop
+- the search uses a grammar-constrained best-first branch-and-bound queue, not naïve full-template brute force
+- partial states carry optimistic sensitivity/specificity, cost, and turnaround bounds so infeasible branches can be pruned before full evaluation
+- only complete builder-compatible pathways are compiled into canonical pathway JSON and handed to `DiagnosticPathwayEngine`
+- repeated diagnostic tools are emitted with invocation aliases such as `A__2` so the evaluator can score repeated use without outcome-key collisions
+- the optimizer maintains a feasible Pareto frontier during search and selects the eight required fixed outputs from that frontier only
+
 ## Data Flow
 
 1. The browser edits a pathway using the canvas and properties panel.
@@ -96,8 +104,8 @@ The initial web integration should preserve the engine contract and extend it in
 7. The shared browser action layer stores the latest evaluation payload and a normalized evaluation view on `window.OptiDxLatestEvaluationResult` / `window.OptiDxLatestEvaluationView`, and the Results and Trace screens render from that live state instead of the bundled seed example once a run has completed.
 - The results view layer now deduplicates disease-present and disease-absent path cohorts into unique pathway signatures, rewrites alias keys into human test names, and computes weighted cost/TAT summaries from the resulting unique path set.
 8. The Builder serializes the live canvas into a canonical pathway graph, and the backend stores and rehydrates that same graph shape so save/export/import stay aligned with the engine contract.
-9. The optimization wizard posts the test library and constraints to `/api/pathways/optimize`, and Laravel prunes ineligible test samples, expands a bounded diagnostic grammar, batches candidate evaluation through the Python bridge in a single process, then renders the ranked candidates and Pareto frontier returned by the optimizer service.
-10. The optimizer service normalizes the wizard's UI-shaped test records into the Python engine schema before building single-test, serial, parallel, and discordant-referee templates, then sends the validated template set through one Python batch call so the browser can keep using the compact seed-library field names while the backend preserves the canonical engine contract.
+9. The optimization wizard creates an `optimization_runs` record through `/api/pathways/optimize`, Laravel dispatches a queued `ExecuteOptimizationRun` job, and the browser polls `/api/optimization-runs/{id}` until the result payload is ready.
+10. The Python optimizer normalizes the wizard's UI-shaped test records into the canonical schema, prefilters disallowed tools, expands only legal CPBB-PF v3 grammar actions through a best-first branch-and-bound queue, prunes infeasible or dominated partial states early, evaluates only complete builder-valid pathways through `DiagnosticPathwayEngine`, and returns the feasible Pareto frontier plus the eight fixed selected outputs with explicit infeasible and time-limit states.
 11. On authenticated load, the browser action layer fetches the signed-in account's `/api/pathways`, `/api/evidence/tests`, and `/api/settings` once, then keeps the normalized workspace snapshot on `window.OptiDxWorkspace` so the Home, Wizard, Library, Evidence, Scenario, and Settings screens operate from persisted records instead of static seed arrays.
 12. On authenticated load, the same browser action layer also fetches the signed-in account's `/api/projects`, restores the active project draft from local storage when available, and hydrates the new-project wizard from that draft so prevalence, constraints, and sample-type selections survive screen changes and refreshes without leaking between users.
 13. The Builder and Results actions treat the active pathway record as first-class state; when a saved pathway is opened or re-evaluated, the backend preserves the existing pathway row and attaches the new evaluation to that record instead of creating a disconnected duplicate.
@@ -108,12 +116,13 @@ The initial web integration should preserve the engine contract and extend it in
 Current bridge shape:
 
 - `web/app/Services/PythonEngineBridge.php` executes `python -m optidx_package.optidx.cli`
-- `optidx_package/optidx/cli.py` loads canonical engine payloads, evaluates them, and returns JSON
+- `optidx_package/optidx/cli.py` loads canonical engine payloads, dispatches either evaluation or optimization, and returns JSON
 - `web/app/Services/PathwayDefinitionService.php` performs Laravel-side graph validation before evaluation
 - `web/app/Services/PathwayGraphService.php` canonicalizes canvas graphs, hydrates saved graphs back into canvas-ready data, and compiles the engine-facing definition
 - `web/app/Services/PathwayGraphService.php` also normalizes discordant branch labels emitted by the canvas (`disc` and `discord`) so legacy and current builder payloads compile into the same engine branch shape
-- `web/app/Services/OptimizationService.php` canonicalizes wizard test-library records into the engine contract, expands the bounded diagnostic grammar across serial, parallel, and discordant-referee motifs, and then generates/evaluates candidate pathways within the synchronous optimize request before returning both the ranked set and Pareto frontier
-- `web/app/Services/OptimizationService.php` also enriches each feasible candidate with derived ranking metrics and emits a `named_rankings` payload so the scenarios screen can render deterministic fixed buckets instead of relying on placeholder titles or array position
+- `web/app/Services/OptimizationService.php` canonicalizes wizard test-library records and the canonical CPBB-PF v3 constraint contract before handing them to the Python optimizer bridge, and it records queued optimization run lifecycle state on `optimization_runs`
+- `web/app/Jobs/ExecuteOptimizationRun.php` owns the queue worker handoff for CPBB-PF v3 runs, marking the run as started, invoking the Python optimizer, and persisting the final payload or failure reason back onto the same record
+- `web/app/Http/Controllers/Api/OptimizationRunController.php` exposes polling for a queued optimization run so the browser can wait for completion without holding the original HTTP request open
 - `web/app/Http/Controllers/AuthController.php` owns the session-backed auth endpoints used by the React shell
 - `web/app/Http/Controllers/AuthController.php` resolves the authenticated user from the guard after a successful login attempt so verified accounts are not misclassified as guests inside the same request
 - `web/app/Http/Controllers/Api/PathwayController.php` eager-loads the latest evaluation result on pathway index/show/update responses so the workspace home can render summary metrics without a separate round-trip
@@ -126,8 +135,8 @@ Current bridge shape:
 - `web/resources/js/optidx/actions.js` also converts imported records and optimization templates into canvas-ready drafts with node types, edge ports, and layout coordinates before the builder mounts them
 - `web/resources/js/optidx/actions.js` also prefers the frozen test snapshot embedded in an optimization candidate or imported pathway when hydrating the canvas and rebuilding a canonical pathway, so rerunning a loaded scenario uses the same test costs, turnaround times, and sample metadata that were present when the candidate was produced
 - `web/resources/js/optidx/actions.js` also carries optimization prevalence through the candidate snapshot, canvas draft, and pathway evaluator so cost and turnaround metrics stay aligned with the optimization cohort assumptions when a scenario is loaded back into the Builder
-- `web/resources/js/optidx/components/ScreenWizard.jsx` now captures the live project/spec inputs as state, sends them to the optimizer payload, and no longer relies on fixed hardcoded sensitivity/specificity/cost thresholds for every run
-- `web/app/Services/OptimizationService.php` now accepts a project objective string and adjusts candidate ranking weights so the optimizer can emphasize cost, sensitivity, specificity, or turnaround time instead of always using the same blended score
+- `web/resources/js/optidx/components/ScreenWizard.jsx` now captures the live project/spec inputs as state, sends the canonical `*_allowed` constraint payload to the optimizer, and no longer drives the run from an objective-led ranking selector
+- `web/resources/js/optidx/actions.js` now polls queued optimization runs and builds the scenarios view from `selected_outputs`, while keeping compatibility aliases for the older dashboard surfaces during the cutover
 - `web/resources/js/optidx/actions.js` also preserves node ids when hydrating engine-style pathway objects into canvas-ready drafts, which prevents optimized imports from collapsing into empty canvases when the source payload uses keyed object maps
 - `web/resources/js/optidx/actions.js` also injects and preserves the required builder terminal nodes (`required_positive`, `required_negative`) so every canvas draft, saved graph, and imported graph keeps the mandatory final endpoints
 - `web/resources/js/optidx/actions.js` now rewrites imported optimizer-style positive/negative terminal nodes onto those required terminal endpoints before layout, which prevents generated pathways from keeping dummy final nodes alongside the hard-coded considered-positive/considered-negative endpoints
@@ -212,6 +221,8 @@ Ownership columns:
 
 These ownership columns are enforced by the model layer and authenticated API routes so the browser only sees records that belong to the current account.
 
+Legacy SQLite files may still predate the ownership rollout. The defensive repair migration `2026_04_26_000220_repair_workspace_ownership_columns.php` exists specifically to add any missing `created_by` columns and backfill ownership safely on drifted local databases before normal account-scoped model behavior runs.
+
 The `users` table now stores the signed-in account profile fields that the shell edits directly: first/last name, organization, title, and timezone. The `name` column remains the canonical display name, while the dedicated fields provide structured profile data for the settings UI and auth payloads.
 
 The `projects` table now serves as the persisted draft record for the new-project wizard, with wizard-only settings stored in `projects.metadata` so the browser can restore the same draft after leaving and returning to the setup flow.
@@ -228,5 +239,5 @@ The `projects` table now serves as the persisted draft record for the new-projec
 - The browser shell currently uses local file downloads for some export controls; those should be replaced with server-side DOCX/PDF generation when the reporting pipeline is finalized.
 - The reporting pipeline now returns real DOCX/PDF files from Laravel, but the layout remains intentionally minimal and should be upgraded when the product team is ready for production-grade publishing.
 - The signed email-verification flow assumes the app URL matches the live dev host. In local development the host is `http://127.0.0.1:8000`, which keeps signed verification links and redirects consistent during browser testing.
-- The optimization wizard currently runs synchronously in the browser request/response cycle. The optimizer now batches candidate evaluation inside a single Python bridge call and filters sample-unsafe tests up front, but a queue-backed or workflow-backed runner will still be needed if the product needs the earlier sub-3-second UX target at larger test-library sizes.
+- The optimization wizard now runs as a queued backend job. Laravel persists the run record, returns `202`, and the browser polls the run-status endpoint until the Python optimizer finishes or times out.
 - The optimization wizard now enforces a 30-second minimum visible progress experience for fast runs, so the browser can present a deliberate-looking calculation phase even when the backend finishes early.

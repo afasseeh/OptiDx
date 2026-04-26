@@ -3,10 +3,12 @@
 namespace Tests\Feature;
 
 use App\Models\Pathway;
+use App\Models\OptimizationRun;
 use App\Models\Setting;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
 class PathwayApiTest extends TestCase
@@ -414,11 +416,13 @@ class PathwayApiTest extends TestCase
             ->assertJsonPath('engine_definition.nodes.start.branches.0.next_node', 'final_positive');
     }
 
-    public function test_optimize_accepts_ui_seed_test_shape(): void
+    public function test_optimize_creates_a_queued_run_and_returns_run_metadata(): void
     {
         $this->actingAs($this->workspaceUser('optimizer@example.com'));
+        Queue::fake();
 
         $response = $this->postJson('/api/pathways/optimize', [
+            'project_id' => null,
             'tests' => [
                 [
                     'id' => 't_symp',
@@ -444,34 +448,83 @@ class PathwayApiTest extends TestCase
                 ],
             ],
             'constraints' => [
-                'minimum_sensitivity' => 0.85,
-                'minimum_specificity' => 0.90,
-                'maximum_total_cost' => 10,
+                'prevalence' => 0.08,
+                'min_sensitivity' => 0.85,
+                'min_specificity' => 0.90,
+                'max_cost_per_patient_usd' => 10,
+                'max_turnaround_time_hours' => 72,
+                'lab_technician_allowed' => true,
+                'radiologist_allowed' => false,
+                'specialist_physician_allowed' => false,
+                'none_allowed' => true,
+                'blood_allowed' => true,
+                'urine_allowed' => true,
+                'stool_allowed' => true,
+                'sputum_allowed' => true,
+                'nasal_swab_allowed' => true,
+                'imaging_allowed' => false,
             ],
-            'prevalence' => 0.08,
+            'search_config' => [
+                'max_candidates' => 100,
+            ],
         ]);
 
         $response
-            ->assertOk()
-            ->assertJsonPath('candidate_count', 1)
-            ->assertJsonPath('ranked_results.0.label', 'Single test')
+            ->assertAccepted()
+            ->assertJsonPath('status', 'queued')
+            ->assertJsonPath('input_payload.constraints.prevalence', 0.08)
             ->assertJsonStructure([
-                'ranked_results' => [[
-                    'metrics' => [
-                        'balanced_accuracy',
-                        'youden_index',
-                        'diagnostic_odds_ratio',
-                        'cost_per_detected_case',
-                    ],
-                ]],
-                'named_rankings' => [[
-                    'key',
-                    'label',
-                    'candidate_index',
-                    'metric_name',
-                    'metric_value',
-                ]],
+                'input_payload' => [
+                    'tests',
+                    'constraints',
+                    'search_config',
+                ],
             ]);
+
+        Queue::assertPushed(\App\Jobs\ExecuteOptimizationRun::class);
+        $run = OptimizationRun::query()->first();
+        $this->assertNotNull($run);
+        $this->assertSame('queued', $run?->status);
+
+        $this->getJson("/api/optimization-runs/{$run->id}")
+            ->assertOk()
+            ->assertJsonPath('id', $run->id);
+    }
+
+    public function test_evidence_test_import_persists_created_by_after_migrations(): void
+    {
+        $user = $this->workspaceUser('evidence-import@example.com');
+        $this->actingAs($user);
+
+        $response = $this->postJson('/api/evidence/tests', [
+            'project_id' => null,
+            'name' => 'Xpert MTB/RIF Ultra',
+            'category' => 'molecular',
+            'sensitivity' => 0.88,
+            'specificity' => 0.98,
+            'cost' => 9.98,
+            'currency' => 'USD',
+            'turnaround_time' => 90,
+            'turnaround_time_unit' => 'min',
+            'sample_types' => ['Sputum'],
+            'skill_level' => 3,
+            'availability' => true,
+            'notes' => 'Imported from evidence library.',
+            'provenance' => [
+                'source' => 'Zifodya et al., Cochrane 2021',
+                'country' => 'Global',
+                'year' => 2021,
+            ],
+        ]);
+
+        $response
+            ->assertCreated()
+            ->assertJsonPath('created_by', $user->id);
+
+        $this->assertDatabaseHas('diagnostic_tests', [
+            'name' => 'Xpert MTB/RIF Ultra',
+            'created_by' => $user->id,
+        ]);
     }
 
     private function canonicalPathwayPayload(): array

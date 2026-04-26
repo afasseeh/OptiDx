@@ -66,10 +66,10 @@
 
 ## 9. Asynchronous optimization runner
 
-- **Context:** The optimize request now batches candidate evaluation inside one Python bridge call and no longer relies on a per-candidate process loop for the current seed library.
-- **Limitation:** The browser still waits on a long synchronous HTTP request while the backend evaluates candidate pathways during the same request.
-- **Improvement:** Move candidate generation/evaluation into a queued job or workflow endpoint and stream progress updates back to the UI.
-- **Benefit:** Restores the intended snappy optimization experience and removes pressure from the request timeout ceiling as the library grows.
+- **Context:** The optimizer now runs as a queued Laravel job and the browser polls the run-status endpoint until completion.
+- **Limitation:** Progress is still coarse-grained, and the UI only learns about completion, infeasibility, or timeout after polling the run record.
+- **Improvement:** Add incremental progress snapshots, cancellation support, and structured stage messages to the queued run lifecycle.
+- **Benefit:** Makes large optimization runs feel more responsive without reintroducing a long synchronous request.
 - **Priority:** High
 
 ## 10. Persisted latest evaluation state
@@ -87,14 +87,13 @@
 - **Benefit:** Makes candidate reruns stable across browser sessions, workspace edits, and later library refreshes.
 - **Priority:** Medium
 
-## 12. Objective presets for optimizer constraints
+## 12. Constraint presets for optimizer runs
 
-- **Context:** The wizard now sends live project inputs and objective selection into the optimizer, and the backend ranking honors the objective string.
-- **Limitation:** The objective buttons still only affect ranking weights; they do not yet auto-fill full constraint presets for cost-focused, sensitivity-focused, or speed-focused projects.
-- **Improvement:** Map each objective choice to a preset bundle of threshold defaults and let the user override them afterward.
-- **Benefit:** Reduces friction and makes the optimizer feel more responsive to the project setup choices.
+- **Context:** The wizard now captures canonical optimizer constraints directly, including prevalence, minimum sensitivity/specificity, cost, turnaround, roles, settings, and sample flags.
+- **Limitation:** The current setup is precise but still entirely manual, so recurring project types require the same thresholds to be entered repeatedly.
+- **Improvement:** Add optional named presets for common program profiles, then let the user override any field before queuing a run.
+- **Benefit:** Reduces setup friction without reintroducing the old objective-led ranking model.
 - **Priority:** Medium
-- **Priority:** Low
 
 ## 11. Persisted pathway summaries in workspace home
 
@@ -197,4 +196,20 @@
 - **Limitation:** Those preserved rows are currently invisible to normal account-scoped users until an admin or future workspace owner manually reassigns them.
 - **Improvement:** Add an admin-only reassignment surface that can search null-owned rows, restore ownership in bulk, and show what was preserved during deletion.
 - **Benefit:** Prevents useful pathway and test history from becoming stranded after a user leaves the system.
+- **Priority:** Medium
+
+## 24. Tighter optimizer upper bounds and continuation equivalence
+
+- **Context:** The new CPBB-PF v3 optimizer now uses safe optimistic probability-mass bounds and canonical partial-state signatures to prune the search tree early.
+- **Limitation:** The v1 bounds are intentionally conservative, so some structurally different states with effectively equivalent future continuation opportunities will still survive longer than necessary.
+- **Improvement:** Add tighter test-aware upper bounds, richer unresolved-continuation equivalence classes, and more aggressive frontier-against-state pruning once the current behavior is benchmarked on real 15-tool catalogs.
+- **Benefit:** Improves runtime headroom under the 900-second cap without weakening correctness or changing the completed-pathway scoring authority.
+- **Priority:** High
+
+## 25. Frontend chunk splitting for optimizer-era bundle growth
+
+- **Context:** The queued optimizer cutover and workspace features now build successfully, but the current Vite production bundle emits a chunk-size warning above 500 kB.
+- **Limitation:** The app still ships one large main JavaScript chunk, which increases first-load cost and makes future UI additions more likely to regress bundle size further.
+- **Improvement:** Introduce route-level or screen-level dynamic imports and, if needed, explicit Rollup manual chunking for the optimizer/scenario surfaces.
+- **Benefit:** Reduces initial download size and keeps the browser shell responsive as the product grows.
 - **Priority:** Medium

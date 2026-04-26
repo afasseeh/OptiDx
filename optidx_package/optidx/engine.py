@@ -21,6 +21,19 @@ class DiagnosticTest:
     skill_level: Optional[int] = None
     cost: Optional[float] = None
     joint_probabilities: Dict[DiseaseState, Dict[Tuple[Tuple[str, str], ...], float]] = field(default_factory=dict)
+    requires_lab_technician: bool = False
+    requires_radiologist: bool = False
+    requires_specialist_physician: bool = False
+    sample_none: bool = False
+    sample_blood: bool = False
+    sample_urine: bool = False
+    sample_stool: bool = False
+    sample_sputum: bool = False
+    sample_nasal_swab: bool = False
+    sample_imaging: bool = False
+    base_test_id: Optional[str] = None
+    invocation_id: Optional[str] = None
+    is_repeat_invocation: bool = False
 
     def turnaround_time_hours(self) -> float:
         if self.turnaround_time is None:
@@ -46,6 +59,67 @@ class DiagnosticTest:
         if disease_state == 'ND':
             return 1.0 - self.specificity if outcome == 'pos' else self.specificity
         raise ValueError(f'Unknown disease_state: {disease_state}')
+
+    def normalized_role_flags(self) -> Dict[str, bool]:
+        if any([self.requires_lab_technician, self.requires_radiologist, self.requires_specialist_physician]):
+            return {
+                'lab_technician': self.requires_lab_technician,
+                'radiologist': self.requires_radiologist,
+                'specialist_physician': self.requires_specialist_physician,
+            }
+
+        skill = self.skill_level or 0
+        if skill <= 0:
+            return {
+                'lab_technician': False,
+                'radiologist': False,
+                'specialist_physician': False,
+            }
+        if skill == 1:
+            return {
+                'lab_technician': True,
+                'radiologist': False,
+                'specialist_physician': False,
+            }
+        if skill == 2:
+            return {
+                'lab_technician': False,
+                'radiologist': True,
+                'specialist_physician': False,
+            }
+
+        return {
+            'lab_technician': False,
+            'radiologist': False,
+            'specialist_physician': True,
+        }
+
+    def normalized_sample_flags(self) -> Dict[str, bool]:
+        sample_types = {str(sample).strip().lower() for sample in self.sample_types if str(sample).strip()}
+        if self.sample_none:
+            sample_types.add('none')
+        if self.sample_blood:
+            sample_types.add('blood')
+        if self.sample_urine:
+            sample_types.add('urine')
+        if self.sample_stool:
+            sample_types.add('stool')
+        if self.sample_sputum:
+            sample_types.add('sputum')
+        if self.sample_nasal_swab:
+            sample_types.add('nasal swab')
+        if self.sample_imaging:
+            sample_types.add('imaging')
+
+        return {
+            'none': 'none' in sample_types or sample_types == set(),
+            'blood': any(sample in sample_types for sample in {'blood', 'serum', 'plasma', 'fingerstick'}),
+            'urine': 'urine' in sample_types,
+            'stool': any(sample in sample_types for sample in {'stool', 'feces', 'faeces'}),
+            'sputum': 'sputum' in sample_types,
+            'nasal_swab': any(sample in sample_types for sample in {'nasal swab', 'nasopharyngeal swab', 'swab'}),
+            'imaging': any(sample in sample_types for sample in {'imaging', 'x-ray', 'xray', 'ct', 'mri', 'ultrasound', 'radiograph'}),
+        }
 
 
 @dataclass
@@ -109,6 +183,7 @@ class DiagnosticPathwayEngine:
                 for test_name in node.action.test_names:
                     if test_name not in self.tests:
                         raise ValueError(f"Node '{node.node_id}' references missing test '{test_name}'")
+                self._validate_branch_exclusivity(node)
             for branch in node.branches:
                 if branch.next_node not in self.nodes:
                     raise ValueError(f"Branch target '{branch.next_node}' missing from graph")
@@ -138,6 +213,43 @@ class DiagnosticPathwayEngine:
             raise ValueError('Pathway must include at least one positive terminal')
         if not any(path.final_classification == 'negative' for path in reachable):
             raise ValueError('Pathway must include at least one negative terminal')
+
+    def _validate_branch_exclusivity(self, node: Node) -> None:
+        if node.action is None:
+            return
+
+        test_names = list(node.action.test_names)
+        if not test_names:
+            raise ValueError(f"Node '{node.node_id}' must include at least one test when it has an action")
+
+        for outcome in self._all_outcome_dicts(test_names):
+            matches = [
+                branch for branch in node.branches
+                if all(outcome.get(test_name) == result for test_name, result in branch.conditions.items())
+            ]
+            if len(matches) != 1:
+                raise ValueError(
+                    f"Node '{node.node_id}' must have exactly one matching branch for outcome {outcome}; got {len(matches)}"
+                )
+
+    @staticmethod
+    def _all_outcome_dicts(test_names: List[str]) -> List[Dict[str, ResultLabel]]:
+        results: List[Dict[str, ResultLabel]] = []
+
+        def expand(index: int, current: Dict[str, ResultLabel]) -> None:
+            if index >= len(test_names):
+                results.append(dict(current))
+                return
+
+            test_name = test_names[index]
+            current[test_name] = 'pos'
+            expand(index + 1, current)
+            current[test_name] = 'neg'
+            expand(index + 1, current)
+            current.pop(test_name, None)
+
+        expand(0, {})
+        return results
 
     @staticmethod
     def _sorted_key(outcomes: Dict[str, ResultLabel]) -> Tuple[Tuple[str, str], ...]:
@@ -204,6 +316,52 @@ class DiagnosticPathwayEngine:
         if node.action is None:
             return 0
         return max((self.tests[t].skill_level or 0) for t in node.action.test_names)
+
+    def _node_roles(self, node: Node) -> Dict[str, bool]:
+        if node.action is None:
+            return {
+                'lab_technician': False,
+                'radiologist': False,
+                'specialist_physician': False,
+            }
+
+        roles = {
+            'lab_technician': False,
+            'radiologist': False,
+            'specialist_physician': False,
+        }
+        for test_name in node.action.test_names:
+            test_roles = self.tests[test_name].normalized_role_flags()
+            for key, value in test_roles.items():
+                roles[key] = roles[key] or value
+        return roles
+
+    def _node_sample_flags(self, node: Node) -> Dict[str, bool]:
+        if node.action is None:
+            return {
+                'none': False,
+                'blood': False,
+                'urine': False,
+                'stool': False,
+                'sputum': False,
+                'nasal_swab': False,
+                'imaging': False,
+            }
+
+        flags = {
+            'none': False,
+            'blood': False,
+            'urine': False,
+            'stool': False,
+            'sputum': False,
+            'nasal_swab': False,
+            'imaging': False,
+        }
+        for test_name in node.action.test_names:
+            test_flags = self.tests[test_name].normalized_sample_flags()
+            for key, value in test_flags.items():
+                flags[key] = flags[key] or value
+        return flags
 
     def enumerate_paths(self, disease_state: DiseaseState) -> List[PathEvaluation]:
         results: List[PathEvaluation] = []
@@ -272,11 +430,14 @@ class DiagnosticPathwayEngine:
     def aggregate_metrics(self, prevalence: Optional[float] = None) -> Dict[str, Any]:
         paths_d = self.enumerate_paths('D')
         paths_nd = self.enumerate_paths('ND')
+        all_paths = paths_d + paths_nd
 
         sensitivity = sum(p.probability for p in paths_d if p.final_classification == 'positive')
         specificity = sum(p.probability for p in paths_nd if p.final_classification == 'negative')
         expected_tests_given_disease = sum(p.probability * len(p.outcomes) for p in paths_d)
         expected_tests_given_no_disease = sum(p.probability * len(p.outcomes) for p in paths_nd)
+        max_path_cost = max([p.cost for p in all_paths] + [0.0])
+        max_path_turnaround_time = max([p.turnaround_time for p in all_paths] + [0.0])
 
         metrics: Dict[str, Any] = {
             'sensitivity': sensitivity,
@@ -285,6 +446,8 @@ class DiagnosticPathwayEngine:
             'false_positive_rate': 1.0 - specificity,
             'ppv': None,
             'npv': None,
+            'balanced_accuracy': (sensitivity + specificity) / 2.0,
+            'youden_j': sensitivity + specificity - 1.0,
             'expected_turnaround_time_given_disease': sum(p.probability * p.turnaround_time for p in paths_d),
             'expected_turnaround_time_given_no_disease': sum(p.probability * p.turnaround_time for p in paths_nd),
             'expected_cost_given_disease': sum(p.probability * p.cost for p in paths_d),
@@ -295,6 +458,8 @@ class DiagnosticPathwayEngine:
             'all_sample_types_required': sorted({s for p in (paths_d + paths_nd) for s in p.sample_types}),
             'paths_disease_present': [self._path_to_dict(p) for p in paths_d],
             'paths_disease_absent': [self._path_to_dict(p) for p in paths_nd],
+            'max_path_cost': max_path_cost,
+            'max_path_turnaround_time': max_path_turnaround_time,
             'warnings': [],
             'assumptions': [],
         }
@@ -304,23 +469,39 @@ class DiagnosticPathwayEngine:
                 raise ValueError('Prevalence must be between 0 and 1')
             denom_positive = prevalence * sensitivity + (1.0 - prevalence) * (1.0 - specificity)
             denom_negative = (1.0 - prevalence) * specificity + prevalence * (1.0 - sensitivity)
-            metrics['ppv'] = (prevalence * sensitivity / denom_positive) if denom_positive > 0 else 0.0
-            metrics['npv'] = ((1.0 - prevalence) * specificity / denom_negative) if denom_negative > 0 else 0.0
-            metrics['expected_turnaround_time_population'] = (
-                prevalence * metrics['expected_turnaround_time_given_disease']
-                + (1.0 - prevalence) * metrics['expected_turnaround_time_given_no_disease']
-            )
-            metrics['expected_cost_population'] = (
+            probability_algorithm_positive = prevalence * sensitivity + (1.0 - prevalence) * (1.0 - specificity)
+            probability_algorithm_negative = prevalence * (1.0 - sensitivity) + (1.0 - prevalence) * specificity
+            true_positive_rate = prevalence * sensitivity
+            true_negative_rate = (1.0 - prevalence) * specificity
+            false_positive_rate_population = (1.0 - prevalence) * (1.0 - specificity)
+            false_negative_rate_population = prevalence * (1.0 - sensitivity)
+            expected_cost_population = (
                 prevalence * metrics['expected_cost_given_disease']
                 + (1.0 - prevalence) * metrics['expected_cost_given_no_disease']
             )
+            expected_turnaround_time_population = (
+                prevalence * metrics['expected_turnaround_time_given_disease']
+                + (1.0 - prevalence) * metrics['expected_turnaround_time_given_no_disease']
+            )
+            metrics['ppv'] = (prevalence * sensitivity / denom_positive) if denom_positive > 0 else 0.0
+            metrics['npv'] = ((1.0 - prevalence) * specificity / denom_negative) if denom_negative > 0 else 0.0
+            metrics['expected_turnaround_time_population'] = expected_turnaround_time_population
+            metrics['expected_cost_population'] = expected_cost_population
             metrics['expected_tests_population'] = (
                 prevalence * expected_tests_given_disease + (1.0 - prevalence) * expected_tests_given_no_disease
             )
-            metrics['expected_true_positives_per_1000'] = 1000.0 * prevalence * sensitivity
-            metrics['expected_true_negatives_per_1000'] = 1000.0 * (1.0 - prevalence) * specificity
-            metrics['expected_false_positives_per_1000'] = 1000.0 * (1.0 - prevalence) * (1.0 - specificity)
-            metrics['expected_false_negatives_per_1000'] = 1000.0 * prevalence * (1.0 - sensitivity)
+            metrics['expected_true_positives_per_1000'] = 1000.0 * true_positive_rate
+            metrics['expected_true_negatives_per_1000'] = 1000.0 * true_negative_rate
+            metrics['expected_false_positives_per_1000'] = 1000.0 * false_positive_rate_population
+            metrics['expected_false_negatives_per_1000'] = 1000.0 * false_negative_rate_population
+            metrics['probability_algorithm_positive'] = probability_algorithm_positive
+            metrics['probability_algorithm_negative'] = probability_algorithm_negative
+            metrics['cost_per_positive_test'] = self._safe_divide(expected_cost_population, probability_algorithm_positive)
+            metrics['cost_per_true_positive_detected'] = self._safe_divide(expected_cost_population, true_positive_rate)
+            metrics['cost_per_correct_classification'] = self._safe_divide(
+                expected_cost_population,
+                true_positive_rate + true_negative_rate,
+            )
         else:
             metrics['warnings'].append('Prevalence not provided; PPV, NPV, and population metrics omitted.')
 
@@ -343,6 +524,12 @@ class DiagnosticPathwayEngine:
             'skill_level': path.skill_level,
             'cost': path.cost,
         }
+
+    @staticmethod
+    def _safe_divide(numerator: float, denominator: float) -> float:
+        if denominator <= 0:
+            return 0.0
+        return numerator / denominator
 
     @classmethod
     def from_dict(cls, payload: Dict[str, Any]) -> 'DiagnosticPathwayEngine':
@@ -375,6 +562,19 @@ class DiagnosticPathwayEngine:
                 skill_level=raw.get('skill_level'),
                 cost=raw.get('cost'),
                 joint_probabilities=converted_joint,
+                requires_lab_technician=bool(raw.get('requires_lab_technician', False)),
+                requires_radiologist=bool(raw.get('requires_radiologist', False)),
+                requires_specialist_physician=bool(raw.get('requires_specialist_physician', False)),
+                sample_none=bool(raw.get('sample_none', False)),
+                sample_blood=bool(raw.get('sample_blood', False)),
+                sample_urine=bool(raw.get('sample_urine', False)),
+                sample_stool=bool(raw.get('sample_stool', False)),
+                sample_sputum=bool(raw.get('sample_sputum', False)),
+                sample_nasal_swab=bool(raw.get('sample_nasal_swab', False)),
+                sample_imaging=bool(raw.get('sample_imaging', False)),
+                base_test_id=raw.get('base_test_id'),
+                invocation_id=raw.get('invocation_id'),
+                is_repeat_invocation=bool(raw.get('is_repeat_invocation', False)),
             )
 
         nodes: Dict[str, Node] = {}

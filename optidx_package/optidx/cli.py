@@ -5,6 +5,7 @@ import json
 import sys
 
 from .engine import DiagnosticPathwayEngine, ValidationHarness
+from .optimizer import optimize_pathways
 
 
 def _load_payload() -> dict:
@@ -20,37 +21,13 @@ def main() -> int:
         payload = _load_payload()
 
         if args.action == 'optimize':
-            templates = payload.get('templates') or []
-            ranked_results = []
-
-            for template in templates:
-                if not isinstance(template, dict):
-                    continue
-
-                label = (template.get('metadata') or {}).get('label') or 'Candidate pathway'
-
-                try:
-                    candidate_engine = DiagnosticPathwayEngine.from_dict(template)
-                    candidate_metrics = candidate_engine.aggregate_metrics(payload.get('prevalence'))
-                    ranked_results.append({
-                        'pathway': template,
-                        'metrics': candidate_metrics,
-                        'warnings': candidate_metrics.get('warnings', []),
-                        'label': label,
-                    })
-                except Exception as exc:  # pragma: no cover - surfaced to Laravel bridge
-                    ranked_results.append({
-                        'pathway': template,
-                        'metrics': {},
-                        'warnings': [str(exc)],
-                        'label': label,
-                    })
-
-            print(json.dumps({
-                'validation': {'valid': True, 'errors': [], 'warnings': []},
-                'ranked_results': ranked_results,
-                'engine_version': 'python-canonical',
-            }))
+            result = optimize_pathways(
+                payload.get('tests') or {},
+                payload.get('constraints') or {},
+                payload.get('search_config') or None,
+            )
+            result['engine_version'] = 'python-canonical'
+            print(json.dumps(result))
             return 0
 
         try:

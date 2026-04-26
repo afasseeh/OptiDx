@@ -114,8 +114,8 @@ function LegacyScreenScenarios({ setScreen }) {
     { id:"A", label:"Cost-optimal", sens:0.812, spec:0.946, cost:4.20, cpdc:51.72, tat:"2.1 h",
       notes:"Cheapest pathway that still meets minimum sensitivity.",
       tests:["WHO-4","CAD4TB","Xpert Ultra"], trade:"-0.03 sens vs balanced", tag:"Recommended for budget-constrained programs"},
-    { id:"B", label:"Balanced MCDA", sens:0.842, spec:0.946, cost:5.62, cpdc:66.74, tat:"2.8 h",
-      notes:"Best weighted score across sensitivity, specificity, cost and TAT.",
+    { id:"B", label:"Balanced constraints", sens:0.842, spec:0.946, cost:5.62, cpdc:66.74, tat:"2.8 h",
+      notes:"Balanced trade-off across sensitivity, specificity, cost and TAT.",
       tests:["WHO-4","CAD4TB","Xpert Ultra"], trade:"Default configuration", tag:"Matches original pathway"},
     { id:"C", label:"Sensitivity-maximal", sens:0.891, spec:0.911, cost:8.05, cpdc:90.36, tat:"3.4 h",
       notes:"Adds parallel CRP to reduce false negatives.",
@@ -135,14 +135,14 @@ function LegacyScreenScenarios({ setScreen }) {
     ? window.OptiDxOptimizationScenarios
     : window.OptiDxActions.buildOptimizationScenarios?.(optimization) || [];
   const scenarios = generatedScenarios.length ? generatedScenarios : fallbackScenarios;
-  const runLabel = optimization?.candidate_count
-    ? `${optimization.candidate_count} candidates`
+  const runLabel = optimization?.feasible_candidate_count
+    ? `${optimization.feasible_candidate_count} candidates`
     : "6 candidates";
-  const searchSpaceLabel = optimization?.candidate_count
-    ? `${optimization.feasible_count ?? optimization.candidate_count} feasible`
+  const searchSpaceLabel = optimization?.feasible_candidate_count
+    ? `${optimization.feasible_candidate_count} feasible`
     : "142 pathways";
-  const testCountLabel = optimization?.ranked_results?.[0]?.pathway?.tests
-    ? `${Object.keys(optimization.ranked_results[0].pathway.tests).length} tests`
+  const testCountLabel = optimization?.selected_outputs?.least_cost_per_positive_test?.pathway_json?.tests
+    ? `${Object.keys(optimization.selected_outputs.least_cost_per_positive_test.pathway_json.tests).length} tests`
     : "7 tests";
   const timeLabel = optimization?.run_ms
     ? `${(optimization.run_ms / 1000).toFixed(1)}s`
@@ -238,7 +238,7 @@ function LegacyScreenScenarios({ setScreen }) {
               <h3 style={{fontSize:13}}>Candidate ranking</h3>
               <div className="spacer"/>
               <select className="select" style={{height:24, fontSize:11, width:"auto"}}>
-                <option>Rank by MCDA score</option>
+                <option>Rank by selected output</option>
                 <option>Rank by cost/case</option>
                 <option>Rank by sensitivity</option>
               </select>
@@ -349,14 +349,14 @@ function ScreenScenarios({ setScreen }) {
   const candidates = Array.isArray(optimization?.ranked_results) ? optimization.ranked_results : [];
   const current = scenarios[selected] || scenarios[0] || null;
   const selectedCandidateIndex = Number(current?.candidateIndex ?? current?.candidate_index ?? -1);
-  const runLabel = optimization?.candidate_count
-    ? `${optimization.candidate_count} candidates`
+  const runLabel = optimization?.feasible_candidate_count
+    ? `${optimization.feasible_candidate_count} candidates`
     : `${scenarios.length} named scenarios`;
-  const searchSpaceLabel = optimization?.candidate_count
-    ? `${optimization.feasible_count ?? optimization.candidate_count} feasible`
+  const searchSpaceLabel = optimization?.feasible_candidate_count
+    ? `${optimization.feasible_candidate_count} feasible`
     : `${scenarios.length} named options`;
-  const testCountLabel = optimization?.ranked_results?.[0]?.pathway?.tests
-    ? `${Object.keys(optimization.ranked_results[0].pathway.tests).length} tests`
+  const testCountLabel = optimization?.selected_outputs?.least_cost_per_positive_test?.pathway_json?.tests
+    ? `${Object.keys(optimization.selected_outputs.least_cost_per_positive_test.pathway_json.tests).length} tests`
     : "0 tests";
   const timeLabel = optimization?.run_ms
     ? `${(optimization.run_ms / 1000).toFixed(1)}s`

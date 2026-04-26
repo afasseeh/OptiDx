@@ -160,6 +160,20 @@ function normalizeProjectMetadata(metadata) {
     sample_types: Array.isArray(safeMetadata.sample_types)
       ? safeMetadata.sample_types.filter(Boolean).map(value => String(value))
       : allowedSampleTypes.filter(Boolean).map(value => String(value)),
+    lab_technician_allowed: safeMetadata.lab_technician_allowed ?? safeMetadata.allow_lab_technician ?? true,
+    radiologist_allowed: safeMetadata.radiologist_allowed ?? safeMetadata.allow_radiologist ?? true,
+    specialist_physician_allowed: safeMetadata.specialist_physician_allowed ?? safeMetadata.allow_specialist_physician ?? true,
+    none_allowed: safeMetadata.none_allowed ?? safeMetadata.allow_sample_none ?? true,
+    blood_allowed: safeMetadata.blood_allowed ?? safeMetadata.allow_sample_blood ?? true,
+    urine_allowed: safeMetadata.urine_allowed ?? safeMetadata.allow_sample_urine ?? true,
+    stool_allowed: safeMetadata.stool_allowed ?? safeMetadata.allow_sample_stool ?? true,
+    sputum_allowed: safeMetadata.sputum_allowed ?? safeMetadata.allow_sample_sputum ?? true,
+    nasal_swab_allowed: safeMetadata.nasal_swab_allowed ?? safeMetadata.allow_sample_nasal_swab ?? true,
+    imaging_allowed: safeMetadata.imaging_allowed ?? safeMetadata.allow_sample_imaging ?? true,
+    primary_care: safeMetadata.primary_care ?? safeMetadata.setting_primary_care ?? false,
+    hospital: safeMetadata.hospital ?? safeMetadata.setting_hospital ?? false,
+    community: safeMetadata.community ?? safeMetadata.setting_community ?? false,
+    mobile_unit: safeMetadata.mobile_unit ?? safeMetadata.setting_mobile_unit ?? false,
     objective: safeMetadata.objective ?? null,
     minimum_sensitivity: safeMetadata.minimum_sensitivity ?? null,
     minimum_specificity: safeMetadata.minimum_specificity ?? null,
@@ -311,27 +325,85 @@ function buildProjectWizardState(source = {}) {
     ?? wizard.prevalence
     ?? metadata.prevalence
     ?? '';
+  const minSensitivity = source.minSensitivity
+    ?? wizard.minSensitivity
+    ?? source.minimumSensitivity
+    ?? wizard.minimumSensitivity
+    ?? metadata.minimum_sensitivity
+    ?? '0.85';
+  const minSpecificity = source.minSpecificity
+    ?? wizard.minSpecificity
+    ?? source.minimumSpecificity
+    ?? wizard.minimumSpecificity
+    ?? metadata.minimum_specificity
+    ?? '0.90';
+  const maxCostPerPatientUsd = source.maxCostPerPatientUsd
+    ?? wizard.maxCostPerPatientUsd
+    ?? source.maximumCost
+    ?? wizard.maximumCost
+    ?? metadata.maximum_total_cost
+    ?? '10.00';
+  const maxTurnaroundTimeHours = source.maxTurnaroundTimeHours
+    ?? wizard.maxTurnaroundTimeHours
+    ?? source.maximumTat
+    ?? wizard.maximumTat
+    ?? metadata.maximum_turnaround_time
+    ?? '72';
+  const allowLabTechnician = source.allowLabTechnician
+    ?? wizard.allowLabTechnician
+    ?? metadata.lab_technician_allowed
+    ?? metadata.allow_lab_technician
+    ?? true;
+  const allowRadiologist = source.allowRadiologist
+    ?? wizard.allowRadiologist
+    ?? metadata.radiologist_allowed
+    ?? metadata.allow_radiologist
+    ?? true;
+  const allowSpecialistPhysician = source.allowSpecialistPhysician
+    ?? wizard.allowSpecialistPhysician
+    ?? metadata.specialist_physician_allowed
+    ?? metadata.allow_specialist_physician
+    ?? true;
+  const allowSampleNone = source.allowSampleNone
+    ?? wizard.allowSampleNone
+    ?? metadata.none_allowed
+    ?? metadata.allow_sample_none
+    ?? true;
+  const allowSampleBlood = source.allowSampleBlood
+    ?? wizard.allowSampleBlood
+    ?? metadata.blood_allowed
+    ?? metadata.allow_sample_blood
+    ?? true;
+  const allowSampleUrine = source.allowSampleUrine
+    ?? wizard.allowSampleUrine
+    ?? metadata.urine_allowed
+    ?? metadata.allow_sample_urine
+    ?? true;
+  const allowSampleStool = source.allowSampleStool
+    ?? wizard.allowSampleStool
+    ?? metadata.stool_allowed
+    ?? metadata.allow_sample_stool
+    ?? true;
+  const allowSampleSputum = source.allowSampleSputum
+    ?? wizard.allowSampleSputum
+    ?? metadata.sputum_allowed
+    ?? metadata.allow_sample_sputum
+    ?? true;
+  const allowSampleNasalSwab = source.allowSampleNasalSwab
+    ?? wizard.allowSampleNasalSwab
+    ?? metadata.nasal_swab_allowed
+    ?? metadata.allow_sample_nasal_swab
+    ?? true;
+  const allowSampleImaging = source.allowSampleImaging
+    ?? wizard.allowSampleImaging
+    ?? metadata.imaging_allowed
+    ?? metadata.allow_sample_imaging
+    ?? true;
   const objective = source.objective
     ?? wizard.objective
     ?? metadata.objective
     ?? source.intended_use
-    ?? 'Balanced MCDA';
-  const minimumSensitivity = source.minimumSensitivity
-    ?? wizard.minimumSensitivity
-    ?? metadata.minimum_sensitivity
-    ?? '0.85';
-  const minimumSpecificity = source.minimumSpecificity
-    ?? wizard.minimumSpecificity
-    ?? metadata.minimum_specificity
-    ?? '0.90';
-  const maximumCost = source.maximumCost
-    ?? wizard.maximumCost
-    ?? metadata.maximum_total_cost
-    ?? '10.00';
-  const maximumTat = source.maximumTat
-    ?? wizard.maximumTat
-    ?? metadata.maximum_turnaround_time
-    ?? '72';
+    ?? null;
   const maxSkillLevel = source.maxSkillLevel
     ?? wizard.maxSkillLevel
     ?? metadata.maximum_skill_level
@@ -354,12 +426,26 @@ function buildProjectWizardState(source = {}) {
     targetPopulation,
     prevalence: formatProjectPercent(prevalence, ''),
     objective,
-    minimumSensitivity: formatProjectDecimal(minimumSensitivity, '0.85'),
-    minimumSpecificity: formatProjectDecimal(minimumSpecificity, '0.90'),
-    maximumCost: formatProjectDecimal(maximumCost, '10.00'),
-    maximumTat: formatProjectDecimal(maximumTat, '72'),
+    minSensitivity: formatProjectDecimal(minSensitivity, '0.85'),
+    minSpecificity: formatProjectDecimal(minSpecificity, '0.90'),
+    maxCostPerPatientUsd: formatProjectDecimal(maxCostPerPatientUsd, '10.00'),
+    maxTurnaroundTimeHours: formatProjectDecimal(maxTurnaroundTimeHours, '72'),
     maxSkillLevel: normalizeProjectSkillLabel(maxSkillLevel),
     sampleTypes: sampleTypes.filter(Boolean).map(value => String(value)),
+    allowLabTechnician: !!allowLabTechnician,
+    allowRadiologist: !!allowRadiologist,
+    allowSpecialistPhysician: !!allowSpecialistPhysician,
+    allowSampleNone: !!allowSampleNone,
+    allowSampleBlood: !!allowSampleBlood,
+    allowSampleUrine: !!allowSampleUrine,
+    allowSampleStool: !!allowSampleStool,
+    allowSampleSputum: !!allowSampleSputum,
+    allowSampleNasalSwab: !!allowSampleNasalSwab,
+    allowSampleImaging: !!allowSampleImaging,
+    settingPrimaryCare: !!(metadata.primary_care ?? metadata.setting_primary_care),
+    settingHospital: !!(metadata.hospital ?? metadata.setting_hospital),
+    settingCommunity: !!(metadata.community ?? metadata.setting_community),
+    settingMobileUnit: !!(metadata.mobile_unit ?? metadata.setting_mobile_unit),
     metadata,
   };
 }
@@ -374,20 +460,32 @@ function buildProjectPayloadFromWizard(wizardState = {}, currentRecord = null) {
     },
   };
   const sampleTypes = normalized.sampleTypes.filter(Boolean);
-  const parsedMinimumSensitivity = Number.parseFloat(normalized.minimumSensitivity);
-  const parsedMinimumSpecificity = Number.parseFloat(normalized.minimumSpecificity);
-  const parsedMaximumCost = Number.parseFloat(normalized.maximumCost);
-  const parsedMaximumTat = Number.parseFloat(normalized.maximumTat);
+  const parsedMinimumSensitivity = Number.parseFloat(normalized.minSensitivity);
+  const parsedMinimumSpecificity = Number.parseFloat(normalized.minSpecificity);
+  const parsedMaximumCost = Number.parseFloat(normalized.maxCostPerPatientUsd);
+  const parsedMaximumTat = Number.parseFloat(normalized.maxTurnaroundTimeHours);
   const parsedPrevalence = Number.parseFloat(normalized.prevalence);
   const metadata = normalizeProjectMetadata({
     ...(currentRecord?.metadata || {}),
     ...(wizardState?.metadata || {}),
-    objective: normalized.objective,
     minimum_sensitivity: Number.isFinite(parsedMinimumSensitivity) ? parsedMinimumSensitivity : null,
     minimum_specificity: Number.isFinite(parsedMinimumSpecificity) ? parsedMinimumSpecificity : null,
     maximum_total_cost: Number.isFinite(parsedMaximumCost) ? parsedMaximumCost : null,
     maximum_turnaround_time: Number.isFinite(parsedMaximumTat) ? parsedMaximumTat : null,
-    maximum_skill_level: parseProjectSkillLevel(normalized.maxSkillLevel),
+    lab_technician_allowed: normalized.allowLabTechnician,
+    radiologist_allowed: normalized.allowRadiologist,
+    specialist_physician_allowed: normalized.allowSpecialistPhysician,
+    none_allowed: normalized.allowSampleNone,
+    blood_allowed: normalized.allowSampleBlood,
+    urine_allowed: normalized.allowSampleUrine,
+    stool_allowed: normalized.allowSampleStool,
+    sputum_allowed: normalized.allowSampleSputum,
+    nasal_swab_allowed: normalized.allowSampleNasalSwab,
+    imaging_allowed: normalized.allowSampleImaging,
+    primary_care: normalized.settingPrimaryCare,
+    hospital: normalized.settingHospital,
+    community: normalized.settingCommunity,
+    mobile_unit: normalized.settingMobileUnit,
     allowed_sample_types: sampleTypes,
     sample_types: sampleTypes,
     clinical_context: normalized.clinicalContext,
@@ -1988,10 +2086,20 @@ async function saveProjectDraft(draft = null) {
   return normalized;
 }
 
-function scenarioTitle(index, label) {
-  if (label) return label;
-  const titles = ['Cost-optimal', 'Balanced MCDA', 'Sensitivity-maximal', 'Specificity-maximal', 'Fastest TAT', 'Low-resource'];
-  return titles[index] || `Candidate ${index + 1}`;
+const OPTIMIZATION_RESULT_LABELS = {
+  least_cost_per_positive_test: 'Least cost per positive test',
+  highest_balanced_accuracy: 'Highest balanced accuracy',
+  highest_youden_index: 'Highest Youden\'s Index',
+  least_turnaround_time: 'Least turnaround time',
+  lowest_average_cost_per_patient: 'Lowest average cost per patient',
+  highest_sensitivity: 'Highest sensitivity',
+  highest_specificity: 'Highest specificity',
+  most_cost_effective: 'Most cost-effective',
+};
+
+function scenarioTitle(key, fallback = null) {
+  if (fallback) return fallback;
+  return OPTIMIZATION_RESULT_LABELS[key] || key.replaceAll('_', ' ');
 }
 
 function formatScenarioMetric(metricName, value) {
@@ -2000,90 +2108,109 @@ function formatScenarioMetric(metricName, value) {
     return 'n/a';
   }
 
-  if (metricName === 'sensitivity' || metricName === 'specificity' || metricName === 'balanced_accuracy' || metricName === 'youden_index') {
+  if (['sensitivity', 'specificity', 'balanced_accuracy', 'youden_j', 'ppv', 'npv'].includes(metricName)) {
     return `${(numeric * 100).toFixed(1)}%`;
   }
 
-  if (metricName === 'expected_cost_population' || metricName === 'cost_per_detected_case') {
+  if (metricName.includes('cost')) {
     return `$${numeric.toFixed(2)}`;
   }
 
-  if (metricName === 'expected_turnaround_time_population') {
+  if (metricName.includes('turnaround_time')) {
     return normalizeTAT(numeric, 'hr');
-  }
-
-  if (metricName === 'diagnostic_odds_ratio') {
-    return numeric >= 1_000_000_000 ? 'Very high' : numeric.toFixed(2);
   }
 
   return numeric.toFixed(2);
 }
 
-function buildOptimizationScenarios(result) {
-  const namedRankings = Array.isArray(result?.named_rankings) ? result.named_rankings : [];
-  const rankedResults = Array.isArray(result?.ranked_results) ? result.ranked_results : [];
-  const prevalence = Number(result?.prevalence ?? NaN);
-  const resolvedPrevalence = Number.isFinite(prevalence) ? prevalence : null;
-
-  if (namedRankings.length && rankedResults.length) {
-    return namedRankings.map((ranking, index) => {
-      const candidate = rankedResults[ranking?.candidate_index] || null;
-      const metrics = candidate?.metrics || {};
-      const pathway = candidate?.pathway?.editor_definition
-        || candidate?.pathway?.engine_definition
-        || candidate?.pathway
-        || {};
-      const testNames = Object.keys(pathway.tests || {});
-      const metricName = ranking?.metric_name || 'expected_cost_population';
-      const metricValue = metrics[metricName] ?? ranking?.metric_value ?? null;
-      const scenarioPathway = pathway && Object.keys(pathway).length
-        ? buildCanvasDraftFromPathway({
-            ...pathway,
-            prevalence: resolvedPrevalence ?? pathway.prevalence ?? null,
-            metadata: {
-              ...(pathway.metadata || {}),
-              prevalence: resolvedPrevalence ?? pathway.metadata?.prevalence ?? pathway.prevalence ?? null,
-            },
-          })
-        : null;
-
-      return {
-        id: String(index + 1).padStart(2, '0'),
-        key: ranking?.key || `ranking_${index + 1}`,
-        label: ranking?.label || scenarioTitle(index, candidate?.label),
-        metricName,
-        metricValue,
-        metricDisplay: formatScenarioMetric(metricName, metricValue),
-        candidateIndex: ranking?.candidate_index ?? index,
-        sens: Number(metrics.sensitivity ?? 0),
-        spec: Number(metrics.specificity ?? 0),
-        cost: Number(metrics.expected_cost_population ?? metrics.expected_cost_given_disease ?? 0),
-        cpdc: Number(metrics.cost_per_detected_case ?? 0),
-        balancedAccuracy: Number(metrics.balanced_accuracy ?? 0),
-        youdenIndex: Number(metrics.youden_index ?? 0),
-        diagnosticOddsRatio: Number(metrics.diagnostic_odds_ratio ?? 0),
-        tatHours: Number(metrics.expected_turnaround_time_population ?? metrics.expected_turnaround_time_given_disease ?? 0),
-        tat: normalizeTAT(metrics.expected_turnaround_time_population ?? metrics.expected_turnaround_time_given_disease ?? null, 'hr'),
-        notes: candidate?.warnings?.[0] || `${ranking?.label || 'Scenario'} selected from feasible candidates that satisfy the active project constraints.`,
-        tests: testNames.map(id => window.SEED_TESTS?.find(test => test.id === id)?.name || id),
-        prevalence: resolvedPrevalence,
-        trade: `${ranking?.label || 'Scenario'} ranked by ${metricName.replaceAll('_', ' ')}`,
-        tag: ranking?.label || 'Optimizer output',
-        pathway: scenarioPathway,
-      };
-    });
+function buildScenarioFromSelectedOutput(key, entry, result, index) {
+  if (!entry) {
+    return {
+      id: key,
+      key,
+      label: scenarioTitle(key),
+      status: result?.status || 'infeasible',
+      feasible: false,
+      notes: result?.message || 'No feasible pathway.',
+    };
   }
 
-  const ranked = Array.isArray(result?.pareto_frontier) && result.pareto_frontier.length
-    ? result.pareto_frontier
-    : Array.isArray(result?.ranked_results) ? result.ranked_results : [];
+  const metrics = entry.metrics || {};
+  const pathway = entry.pathway_json || entry.pathway || {};
+  const scenarioPathway = pathway && Object.keys(pathway).length
+    ? buildCanvasDraftFromPathway({
+        ...pathway,
+        prevalence: result?.constraints?.prevalence ?? pathway.prevalence ?? null,
+        metadata: {
+          ...(pathway.metadata || {}),
+          prevalence: result?.constraints?.prevalence ?? pathway.metadata?.prevalence ?? pathway.prevalence ?? null,
+        },
+      })
+    : null;
+  const testNames = Object.keys(pathway.tests || {});
+  const metricLookup = {
+    least_cost_per_positive_test: 'cost_per_positive_test',
+    highest_balanced_accuracy: 'balanced_accuracy',
+    highest_youden_index: 'youden_j',
+    least_turnaround_time: 'expected_turnaround_time_population',
+    lowest_average_cost_per_patient: 'expected_cost_population',
+    highest_sensitivity: 'sensitivity',
+    highest_specificity: 'specificity',
+    most_cost_effective: 'cost_per_true_positive_detected',
+  };
+  const metricName = metricLookup[key] || 'expected_cost_population';
+  const metricValue = metrics[metricName] ?? null;
+
+  return {
+    id: String(index + 1).padStart(2, '0'),
+    key,
+    label: scenarioTitle(key, entry.template_summary || entry.optimizer_metadata?.template_summary || entry.templateSummary),
+    metricName,
+    metricValue,
+    metricDisplay: formatScenarioMetric(metricName, metricValue),
+    sens: Number(metrics.sensitivity ?? 0),
+    spec: Number(metrics.specificity ?? 0),
+    cost: Number(metrics.expected_cost_population ?? 0),
+    cpdc: Number(metrics.cost_per_positive_test ?? 0),
+    balancedAccuracy: Number(metrics.balanced_accuracy ?? 0),
+    youdenIndex: Number(metrics.youden_j ?? 0),
+    ppv: Number(metrics.ppv ?? 0),
+    npv: Number(metrics.npv ?? 0),
+    tatHours: Number(metrics.expected_turnaround_time_population ?? 0),
+    tat: normalizeTAT(metrics.expected_turnaround_time_population ?? null, 'hr'),
+    notes: entry.warnings?.[0] || result?.message || `${scenarioTitle(key)} selected from feasible candidates.`,
+    tests: testNames.map(id => window.SEED_TESTS?.find(test => test.id === id)?.name || id),
+    prevalence: result?.constraints?.prevalence ?? null,
+    trade: `Selected by ${scenarioTitle(key)}`,
+    tag: scenarioTitle(key),
+    status: result?.status || 'success',
+    feasible: true,
+    pathway: scenarioPathway,
+    pathwayJson: pathway,
+    optimizerMetadata: entry.optimizer_metadata || {},
+  };
+}
+
+function buildOptimizationScenarios(result) {
+  const selectedOutputs = result?.selected_outputs && typeof result.selected_outputs === 'object'
+    ? result.selected_outputs
+    : null;
+  const prevalence = Number(result?.constraints?.prevalence ?? result?.prevalence ?? NaN);
+  const resolvedPrevalence = Number.isFinite(prevalence) ? prevalence : null;
+
+  if (selectedOutputs) {
+    return Object.entries(selectedOutputs).map(([key, entry], index) => buildScenarioFromSelectedOutput(key, entry, {
+      ...result,
+      constraints: {
+        ...(result?.constraints || {}),
+        prevalence: resolvedPrevalence,
+      },
+    }, index));
+  }
+
+  const ranked = Array.isArray(result?.pareto_frontier) ? result.pareto_frontier : [];
   return ranked.slice(0, 6).map((entry, index) => {
     const metrics = entry?.metrics || {};
-    const sens = Number(metrics.sensitivity ?? 0);
-    const spec = Number(metrics.specificity ?? 0);
-    const cost = Number(metrics.expected_cost_population ?? metrics.expected_cost_given_disease ?? 0);
-    const tat = metrics.expected_turnaround_time_population ?? metrics.expected_turnaround_time_given_disease ?? null;
-    const cpdc = sens > 0 ? cost / Math.max(sens * 0.08, 0.001) : cost;
     const pathway = entry?.pathway?.editor_definition
       || entry?.pathway?.engine_definition
       || entry?.pathway
@@ -2102,28 +2229,91 @@ function buildOptimizationScenarios(result) {
 
     return {
       id: String.fromCharCode(65 + index),
-      label: scenarioTitle(index, entry?.label),
-      sens,
-      spec,
-      cost,
-      cpdc,
-      tat: normalizeTAT(tat, 'hr'),
+      key: entry?.key || `candidate_${index + 1}`,
+      label: scenarioTitle(entry?.label || entry?.template_summary, `Candidate ${index + 1}`),
+      metricName: 'expected_cost_population',
+      metricValue: metrics.expected_cost_population ?? null,
+      metricDisplay: formatScenarioMetric('expected_cost_population', metrics.expected_cost_population),
+      sens: Number(metrics.sensitivity ?? 0),
+      spec: Number(metrics.specificity ?? 0),
+      cost: Number(metrics.expected_cost_population ?? 0),
+      cpdc: Number(metrics.cost_per_positive_test ?? 0),
+      balancedAccuracy: Number(metrics.balanced_accuracy ?? 0),
+      youdenIndex: Number(metrics.youden_j ?? 0),
+      ppv: Number(metrics.ppv ?? 0),
+      npv: Number(metrics.npv ?? 0),
+      tat: normalizeTAT(metrics.expected_turnaround_time_population ?? null, 'hr'),
       notes: entry?.warnings?.[0] || `Backend-ranked candidate ${index + 1}.`,
       tests: testNames.map(id => window.SEED_TESTS?.find(test => test.id === id)?.name || id),
       prevalence: resolvedPrevalence,
-      trade: index === 0
-        ? 'Top ranked by expected population cost'
-        : index === 1
-          ? 'Balanced trade-off candidate'
-          : 'Pareto frontier candidate',
-      tag: index === 0
-        ? 'Best feasible cost'
-        : index === 1
-          ? 'Closest balanced option'
-          : 'Optimizer output',
+      trade: index === 0 ? 'Top ranked by expected population cost' : 'Pareto frontier candidate',
+      tag: 'Optimizer output',
+      status: result?.status || 'success',
+      feasible: true,
       pathway: scenarioPathway,
+      pathwayJson: pathway,
+      optimizerMetadata: entry?.optimizer_metadata || {},
     };
   });
+}
+
+async function fetchOptimizationRun(runId) {
+  return request('get', `/api/optimization-runs/${runId}`);
+}
+
+async function waitForOptimizationRun(runId, { intervalMs = 1000, timeoutMs = 600000 } = {}) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const run = await fetchOptimizationRun(runId);
+    if (!['queued', 'running'].includes(run?.status)) {
+      return run;
+    }
+    await new Promise(resolve => window.setTimeout(resolve, intervalMs));
+  }
+
+  throw new Error('Timed out while waiting for the optimization run to finish.');
+}
+
+async function optimizePathways(payload) {
+  const response = await request('post', '/api/pathways/optimize', payload);
+  let run = response;
+
+  if (['queued', 'running'].includes(response?.status)) {
+    run = await waitForOptimizationRun(response.id);
+  }
+
+  const selectedOutputs = run?.result_payload?.selected_outputs || run?.selected_outputs || null;
+  const selectedOutputEntries = selectedOutputs && typeof selectedOutputs === 'object'
+    ? Object.entries(selectedOutputs)
+    : [];
+  const compatibilityCandidates = selectedOutputEntries
+    .filter(([, entry]) => entry && typeof entry === 'object')
+    .map(([key, entry], index) => ({
+      key,
+      candidate_index: index,
+      metrics: entry.metrics || {},
+      pathway: entry.pathway_json || entry.pathway || null,
+      optimizer_metadata: entry.optimizer_metadata || {},
+      warnings: entry.warnings || [],
+    }));
+
+  const compatibilityResult = {
+    ...run,
+    candidate_count: run?.feasible_candidate_count ?? compatibilityCandidates.length,
+    feasible_count: run?.feasible_candidate_count ?? compatibilityCandidates.length,
+    ranked_results: compatibilityCandidates,
+    pareto_frontier: compatibilityCandidates,
+  };
+
+  window.OptiDxOptimizationResults = {
+    ...compatibilityResult,
+    prevalence: payload?.constraints?.prevalence ?? payload?.prevalence ?? null,
+  };
+  window.OptiDxOptimizationScenarios = buildOptimizationScenarios(run.result_payload || run);
+
+  const completionLabel = run?.result_payload?.status || run?.status || 'success';
+  showToast(`Optimization finished with status "${completionLabel}"`, completionLabel === 'failed' ? 'error' : 'success');
+  return run.result_payload || run;
 }
 
 async function persistDiagnosticTest(test) {
@@ -2190,17 +2380,6 @@ async function deleteDiagnosticTest(testId) {
   window.dispatchEvent(new Event('optidx-tests-updated'));
   showToast('Test removed from the library', 'success');
   return true;
-}
-
-async function optimizePathways(payload) {
-  const response = await request('post', '/api/pathways/optimize', payload);
-  window.OptiDxOptimizationResults = {
-    ...response,
-    prevalence: payload?.prevalence ?? null,
-  };
-  window.OptiDxOptimizationScenarios = buildOptimizationScenarios(response);
-  showToast(`Optimization finished with ${response?.candidate_count ?? 0} candidates`, 'success');
-  return response;
 }
 
 async function evaluatePathway(pathway = null, prevalence = null) {

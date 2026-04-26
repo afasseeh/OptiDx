@@ -2,385 +2,81 @@
 
 namespace App\Services;
 
-use App\Models\DiagnosticTest;
-use Illuminate\Support\Arr;
+use App\Models\OptimizationRun;
 
 class OptimizationService
 {
-    private const LARGE_RATIO_SENTINEL = 1_000_000_000_000.0;
-
     public function __construct(
-        private readonly PathwayDefinitionService $definitions,
         private readonly PythonEngineBridge $bridge,
     ) {
     }
 
-    public function optimize(array $tests, array $constraints = [], ?float $prevalence = null): array
+    public function prepareRunPayload(array $tests, array $constraints = [], array $searchConfig = []): array
     {
-        $startedAt = hrtime(true);
-        $constraints = $this->normalizeConstraints($constraints);
-        $objective = $this->normalizeObjective($constraints['objective'] ?? null);
-        $tests = $this->normalizeTests($tests);
-        $tests = $this->filterTestsByAllowedSampleTypes($tests, $constraints);
-        $templates = [];
-
-        foreach ($this->buildTemplates($tests, $constraints) as $template) {
-            $validation = $this->definitions->validate($template);
-            if (! $validation['valid']) {
-                continue;
-            }
-
-            $templates[] = $template;
-        }
-
-        $evaluation = $this->bridge->optimize([
-            'templates' => $templates,
-            'prevalence' => $prevalence,
-        ]);
-
-        $candidates = [];
-        foreach ($evaluation['ranked_results'] ?? [] as $index => $candidate) {
-            $template = $templates[$index] ?? $candidate['pathway'] ?? null;
-            if (! is_array($template)) {
-                continue;
-            }
-
-            $metrics = $candidate['metrics'] ?? [];
-            $row = [
-                'pathway' => $template,
-                'metrics' => $this->enrichMetrics($metrics),
-                'warnings' => $candidate['warnings'] ?? [],
-                'label' => $template['metadata']['label'] ?? 'Candidate pathway',
-            ];
-
-            if (! $this->passesConstraints($row['metrics'], $constraints)) {
-                continue;
-            }
-
-            $candidates[] = $row;
-        }
-
-        usort($candidates, function (array $left, array $right) use ($objective): int {
-            $leftScore = $this->candidateScore($left['metrics'], $objective);
-            $rightScore = $this->candidateScore($right['metrics'], $objective);
-
-            if ($leftScore === $rightScore) {
-                return ($left['metrics']['expected_cost_population'] ?? PHP_FLOAT_MAX) <=> ($right['metrics']['expected_cost_population'] ?? PHP_FLOAT_MAX);
-            }
-
-            return $leftScore <=> $rightScore;
-        });
-
-        $candidates = array_values($candidates);
-        foreach ($candidates as $index => $candidate) {
-            $candidates[$index]['candidate_index'] = $index;
-        }
-
-        $paretoFrontier = $this->paretoFrontier($candidates, $objective);
-
         return [
-            'candidate_count' => count($candidates),
-            'feasible_count' => count($candidates),
-            'ranked_results' => $candidates,
-            'pareto_frontier' => $paretoFrontier,
-            'named_rankings' => $this->buildNamedRankings($candidates),
-            'objective' => $objective,
-            'run_ms' => (int) round((hrtime(true) - $startedAt) / 1_000_000),
+            'tests' => $this->normalizeTests($tests),
+            'constraints' => $this->normalizeConstraints($constraints),
+            'search_config' => $this->normalizeSearchConfig($searchConfig),
         ];
     }
 
-    private function filterTestsByAllowedSampleTypes(array $tests, array $constraints): array
+    public function optimize(array $tests, array $constraints = [], ?float $prevalence = null, array $searchConfig = []): array
     {
-        $allowedSampleTypes = array_values(array_filter(array_map(
-            static fn ($value) => strtolower(trim((string) $value)),
-            Arr::wrap($constraints['allowed_sample_types'] ?? [])
-        ), static fn (string $value) => $value !== ''));
+        $payload = $this->prepareRunPayload($tests, [
+            ...$constraints,
+            'prevalence' => $prevalence ?? $constraints['prevalence'] ?? null,
+        ], $searchConfig);
 
-        if ($allowedSampleTypes === []) {
-            return $tests;
-        }
-
-        $filtered = [];
-        foreach ($tests as $id => $test) {
-            if (! is_array($test)) {
-                continue;
-            }
-
-            $sampleTypes = array_values(array_filter(array_map(
-                static fn ($value) => strtolower(trim((string) $value)),
-                $test['sample_types'] ?? []
-            ), static fn (string $value) => $value !== ''));
-
-            if ($sampleTypes === [] || array_intersect($allowedSampleTypes, $sampleTypes) !== []) {
-                $filtered[$id] = $test;
-            }
-        }
-
-        return $filtered;
+        return $this->bridge->optimize($payload);
     }
 
-    private function buildTemplates(array $tests, array $constraints): array
+    public function normalizeConstraints(array $constraints): array
     {
-        $testIds = array_keys($tests);
-        $candidates = [];
-        $maxTestsPerPath = max(1, (int) ($constraints['max_tests_per_path'] ?? 4));
-
-        foreach ($testIds as $id) {
-            $candidates[] = $this->singleTestTemplate($id, $tests[$id]);
+        $prevalence = $constraints['prevalence'] ?? null;
+        if ($prevalence === null || $prevalence === '') {
+            throw new \InvalidArgumentException('Prevalence is required for optimization.');
         }
 
-        if ($maxTestsPerPath >= 2) {
-            $count = count($testIds);
-            for ($i = 0; $i < $count; $i++) {
-                for ($j = 0; $j < $count; $j++) {
-                    if ($i === $j) {
-                        continue;
-                    }
+        $sampleFlags = $this->normalizeSampleFlags($constraints);
+        $roleFlags = $this->normalizeRoleFlags($constraints);
 
-                    $first = $testIds[$i];
-                    $second = $testIds[$j];
-                    $candidates[] = $this->serialConfirmatoryTemplate($first, $second, $tests);
-                    $candidates[] = $this->serialRescueTemplate($first, $second, $tests);
-                }
-            }
-
-            if ($maxTestsPerPath >= 3 && count($testIds) >= 3 && ($constraints['max_parallel_block_size'] ?? 3) >= 3) {
-                $parallelIds = array_slice($this->rankParallelTestIds($testIds, $tests), 0, 3);
-                if (count($parallelIds) === 3) {
-                    $candidates[] = $this->parallelOrTemplate($parallelIds, $tests);
-                    $candidates[] = $this->parallelAndTemplate($parallelIds, $tests);
-                }
-            }
-
-            for ($i = 0; $i < $count; $i++) {
-                for ($j = $i + 1; $j < $count; $j++) {
-                    $first = $testIds[$i];
-                    $second = $testIds[$j];
-                    $candidates[] = $this->parallelOrTemplate([$first, $second], $tests);
-                    $candidates[] = $this->parallelAndTemplate([$first, $second], $tests);
-
-                    $referee = $this->selectRefereeTestId($testIds, $first, $second, $tests);
-                    if ($referee !== null) {
-                        $candidates[] = $this->discordantRefereeTemplate($first, $second, $referee, $tests);
-                    }
-                }
-            }
-        }
-
-        return $this->dedupeTemplates($candidates);
-    }
-
-    private function singleTestTemplate(string $testId, array $test): array
-    {
         return [
-            'start_node' => 'start',
-            'tests' => [$testId => $test],
-            'nodes' => [
-                'start' => [
-                    'action' => ['test_names' => [$testId], 'mode' => 'sequential', 'parallel_time' => false],
-                    'branches' => [
-                        ['conditions' => [$testId => 'pos'], 'next_node' => 'final_positive'],
-                        ['conditions' => [$testId => 'neg'], 'next_node' => 'final_negative'],
-                    ],
-                ],
-                'final_positive' => ['final_classification' => 'positive'],
-                'final_negative' => ['final_classification' => 'negative'],
-            ],
-            'metadata' => ['label' => 'Single test'],
+            'prevalence' => (float) $prevalence,
+            'min_sensitivity' => (float) ($constraints['min_sensitivity'] ?? $constraints['minimum_sensitivity'] ?? 0.0),
+            'min_specificity' => (float) ($constraints['min_specificity'] ?? $constraints['minimum_specificity'] ?? 0.0),
+            'max_cost_per_patient_usd' => $this->numberOrNull($constraints['max_cost_per_patient_usd'] ?? $constraints['maximum_total_cost'] ?? $constraints['max_expected_cost'] ?? null),
+            'max_turnaround_time_hours' => $this->numberOrNull($constraints['max_turnaround_time_hours'] ?? $constraints['maximum_turnaround_time'] ?? $constraints['max_expected_tat'] ?? null),
+            'lab_technician_allowed' => $roleFlags['lab_technician'],
+            'radiologist_allowed' => $roleFlags['radiologist'],
+            'specialist_physician_allowed' => $roleFlags['specialist_physician'],
+            'primary_care' => (bool) ($constraints['primary_care'] ?? $constraints['setting_primary_care'] ?? false),
+            'hospital' => (bool) ($constraints['hospital'] ?? $constraints['setting_hospital'] ?? false),
+            'community' => (bool) ($constraints['community'] ?? $constraints['setting_community'] ?? false),
+            'mobile_unit' => (bool) ($constraints['mobile_unit'] ?? $constraints['setting_mobile_unit'] ?? false),
+            'none_allowed' => $sampleFlags['none'],
+            'blood_allowed' => $sampleFlags['blood'],
+            'urine_allowed' => $sampleFlags['urine'],
+            'stool_allowed' => $sampleFlags['stool'],
+            'sputum_allowed' => $sampleFlags['sputum'],
+            'nasal_swab_allowed' => $sampleFlags['nasal_swab'],
+            'imaging_allowed' => $sampleFlags['imaging'],
         ];
     }
 
-    private function serialConfirmatoryTemplate(string $first, string $second, array $tests): array
+    public function normalizeSearchConfig(array $searchConfig): array
     {
         return [
-            'start_node' => 'start',
-            'tests' => Arr::only($tests, [$first, $second]),
-            'nodes' => [
-                'start' => [
-                    'action' => ['test_names' => [$first], 'mode' => 'sequential', 'parallel_time' => false],
-                    'branches' => [
-                        ['conditions' => [$first => 'pos'], 'next_node' => 'confirm'],
-                        ['conditions' => [$first => 'neg'], 'next_node' => 'final_negative'],
-                    ],
-                ],
-                'confirm' => [
-                    'action' => ['test_names' => [$second], 'mode' => 'sequential', 'parallel_time' => false],
-                    'branches' => [
-                        ['conditions' => [$second => 'pos'], 'next_node' => 'final_positive'],
-                        ['conditions' => [$second => 'neg'], 'next_node' => 'final_negative'],
-                    ],
-                ],
-                'final_positive' => ['final_classification' => 'positive'],
-                'final_negative' => ['final_classification' => 'negative'],
-            ],
-            'metadata' => ['label' => 'Serial confirmatory'],
+            'max_stages' => max(1, (int) ($searchConfig['max_stages'] ?? 4)),
+            'max_tests_per_realized_path' => max(1, (int) ($searchConfig['max_tests_per_realized_path'] ?? $searchConfig['max_invocations_per_path'] ?? 6)),
+            'max_parallel_block_size' => max(1, (int) ($searchConfig['max_parallel_block_size'] ?? 3)),
+            'max_candidates' => max(1, (int) ($searchConfig['max_candidates'] ?? 5000)),
+            'time_limit_seconds' => max(1, (int) ($searchConfig['time_limit_seconds'] ?? 900)),
+            'allow_repeated_test' => (bool) ($searchConfig['allow_repeated_test'] ?? true),
+            'allow_same_test_in_different_branches' => (bool) ($searchConfig['allow_same_test_in_different_branches'] ?? true),
         ];
     }
 
-    private function serialRescueTemplate(string $first, string $second, array $tests): array
-    {
-        return [
-            'start_node' => 'start',
-            'tests' => Arr::only($tests, [$first, $second]),
-            'nodes' => [
-                'start' => [
-                    'action' => ['test_names' => [$first], 'mode' => 'sequential', 'parallel_time' => false],
-                    'branches' => [
-                        ['conditions' => [$first => 'pos'], 'next_node' => 'final_positive'],
-                        ['conditions' => [$first => 'neg'], 'next_node' => 'rescue'],
-                    ],
-                ],
-                'rescue' => [
-                    'action' => ['test_names' => [$second], 'mode' => 'sequential', 'parallel_time' => false],
-                    'branches' => [
-                        ['conditions' => [$second => 'pos'], 'next_node' => 'final_positive'],
-                        ['conditions' => [$second => 'neg'], 'next_node' => 'final_negative'],
-                    ],
-                ],
-                'final_positive' => ['final_classification' => 'positive'],
-                'final_negative' => ['final_classification' => 'negative'],
-            ],
-            'metadata' => ['label' => 'Serial rescue'],
-        ];
-    }
-
-    private function parallelOrTemplate(array $testIds, array $tests): array
-    {
-        $branches = $this->exactOutcomeBranches($testIds, function (array $outcomes): string {
-            return in_array('pos', array_values($outcomes), true) ? 'final_positive' : 'final_negative';
-        });
-
-        return [
-            'start_node' => 'start',
-            'tests' => Arr::only($tests, $testIds),
-            'nodes' => [
-                'start' => [
-                    'action' => ['test_names' => $testIds, 'mode' => 'parallel', 'parallel_time' => true],
-                    'branches' => $branches,
-                ],
-                'final_positive' => ['final_classification' => 'positive'],
-                'final_negative' => ['final_classification' => 'negative'],
-            ],
-            'metadata' => ['label' => count($testIds) > 2 ? 'Parallel OR trio' : 'Parallel OR'],
-        ];
-    }
-
-    private function parallelAndTemplate(array $testIds, array $tests): array
-    {
-        $branches = $this->exactOutcomeBranches($testIds, function (array $outcomes): string {
-            return count(array_filter($outcomes, static fn (string $outcome): bool => $outcome === 'pos')) === count($outcomes)
-                ? 'final_positive'
-                : 'final_negative';
-        });
-
-        return [
-            'start_node' => 'start',
-            'tests' => Arr::only($tests, $testIds),
-            'nodes' => [
-                'start' => [
-                    'action' => ['test_names' => $testIds, 'mode' => 'parallel', 'parallel_time' => true],
-                    'branches' => $branches,
-                ],
-                'final_positive' => ['final_classification' => 'positive'],
-                'final_negative' => ['final_classification' => 'negative'],
-            ],
-            'metadata' => ['label' => count($testIds) > 2 ? 'Parallel AND trio' : 'Parallel AND'],
-        ];
-    }
-
-    private function discordantRefereeTemplate(string $first, string $second, string $referee, array $tests): array
-    {
-        return [
-            'start_node' => 'start',
-            'tests' => Arr::only($tests, [$first, $second, $referee]),
-            'nodes' => [
-                'start' => [
-                    'action' => ['test_names' => [$first, $second], 'mode' => 'parallel', 'parallel_time' => true],
-                    'branches' => [
-                        ['conditions' => [$first => 'pos', $second => 'pos'], 'next_node' => 'final_positive'],
-                        ['conditions' => [$first => 'neg', $second => 'neg'], 'next_node' => 'final_negative'],
-                        ['conditions' => [$first => 'pos', $second => 'neg'], 'next_node' => 'referee'],
-                        ['conditions' => [$first => 'neg', $second => 'pos'], 'next_node' => 'referee'],
-                    ],
-                ],
-                'referee' => [
-                    'action' => ['test_names' => [$referee], 'mode' => 'sequential', 'parallel_time' => false],
-                    'branches' => [
-                        ['conditions' => [$referee => 'pos'], 'next_node' => 'final_positive'],
-                        ['conditions' => [$referee => 'neg'], 'next_node' => 'final_negative'],
-                    ],
-                ],
-                'final_positive' => ['final_classification' => 'positive'],
-                'final_negative' => ['final_classification' => 'negative'],
-            ],
-            'metadata' => ['label' => 'Discordant referee'],
-        ];
-    }
-
-    private function passesConstraints(array $metrics, array $constraints): bool
-    {
-        $maximumCost = $constraints['maximum_total_cost']
-            ?? $constraints['max_expected_cost']
-            ?? $constraints['max_worst_case_cost']
-            ?? null;
-        $maximumTat = $constraints['maximum_turnaround_time']
-            ?? $constraints['max_expected_tat']
-            ?? $constraints['max_worst_case_tat']
-            ?? null;
-        $maximumSkill = $constraints['maximum_skill_level']
-            ?? $constraints['max_skill_level']
-            ?? null;
-        $minimumSensitivity = $constraints['minimum_sensitivity']
-            ?? $constraints['min_sensitivity']
-            ?? null;
-        $minimumSpecificity = $constraints['minimum_specificity']
-            ?? $constraints['min_specificity']
-            ?? null;
-        $forbiddenSamples = array_values(array_filter(array_map(
-            static fn ($value) => strtolower(trim((string) $value)),
-            Arr::wrap($constraints['forbidden_samples'] ?? [])
-        ), static fn (string $value) => $value !== ''));
-
-        if ($maximumCost !== null && ($metrics['expected_cost_population'] ?? $metrics['expected_cost_given_disease'] ?? PHP_FLOAT_MAX) > $maximumCost) {
-            return false;
-        }
-
-        if ($maximumTat !== null && ($metrics['expected_turnaround_time_population'] ?? $metrics['expected_turnaround_time_given_disease'] ?? PHP_FLOAT_MAX) > $maximumTat) {
-            return false;
-        }
-
-        if ($maximumSkill !== null && ($metrics['max_skill_required'] ?? 0) > $maximumSkill) {
-            return false;
-        }
-
-        if ($minimumSensitivity !== null && ($metrics['sensitivity'] ?? 0) < $minimumSensitivity) {
-            return false;
-        }
-
-        if ($minimumSpecificity !== null && ($metrics['specificity'] ?? 0) < $minimumSpecificity) {
-            return false;
-        }
-
-        if ($forbiddenSamples !== []) {
-            $sampleTypes = array_values(array_filter(array_map(
-                static fn ($value) => strtolower(trim((string) $value)),
-                Arr::wrap($metrics['all_sample_types_required'] ?? [])
-            ), static fn (string $value) => $value !== ''));
-
-            if (array_intersect($forbiddenSamples, $sampleTypes) !== []) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private function normalizeConstraints(array $constraints): array
-    {
-        return array_filter($constraints, static fn ($value) => $value !== null);
-    }
-
-    private function normalizeTests(array $tests): array
+    public function normalizeTests(array $tests): array
     {
         $normalized = [];
         foreach ($tests as $key => $test) {
@@ -388,18 +84,113 @@ class OptimizationService
                 continue;
             }
 
-            $resolvedKey = $test['id'] ?? (is_string($key) ? $key : $test['name'] ?? null);
+            $resolvedKey = $this->resolveTestId($key, $test);
             if (! $resolvedKey) {
                 continue;
             }
 
-            $normalized[(string) $resolvedKey] = $this->normalizeTestRecord($test);
+            $normalized[(string) $resolvedKey] = $this->normalizeTestRecord($resolvedKey, $test);
         }
 
         return $normalized;
     }
 
-    private function normalizeTestRecord(array $test): array
+    public function recordRunStart(OptimizationRun $run): OptimizationRun
+    {
+        $run->fill([
+            'status' => 'running',
+            'started_at' => now(),
+            'failure_reason' => null,
+        ]);
+        $run->save();
+
+        return $run->refresh();
+    }
+
+    public function recordRunResult(OptimizationRun $run, array $result): OptimizationRun
+    {
+        $status = $result['status'] ?? 'success';
+        $warnings = array_values(array_filter(array_map('strval', $result['warnings'] ?? [])));
+
+        $run->fill([
+            'status' => $status,
+            'search_exhaustive' => (bool) ($result['search_exhaustive'] ?? false),
+            'candidate_count' => (int) ($result['candidate_count'] ?? 0),
+            'feasible_count' => (int) ($result['feasible_candidate_count'] ?? 0),
+            'warnings' => $warnings,
+            'failure_reason' => $result['message'] ?? null,
+            'completed_at' => now(),
+            'result_payload' => $result,
+        ]);
+        $run->save();
+
+        return $run->refresh();
+    }
+
+    public function recordRunFailure(OptimizationRun $run, \Throwable $error): OptimizationRun
+    {
+        $run->fill([
+            'status' => 'failed',
+            'completed_at' => now(),
+            'failure_reason' => $error->getMessage(),
+            'warnings' => array_values(array_filter(array_merge(
+                $run->warnings ?? [],
+                ['Optimization failed: ' . $error->getMessage()]
+            ))),
+        ]);
+        $run->save();
+
+        return $run->refresh();
+    }
+
+    private function normalizeTestRecord(string|int $resolvedKey, array $test): array
+    {
+        $sampleTypes = $this->normalizeSampleTypes($test);
+        $roleFlags = $this->normalizeRoleFlags($test);
+        $sampleFlags = $this->sampleFlagsFromTypes($sampleTypes, $test);
+
+        return [
+            'id' => (string) $resolvedKey,
+            'name' => (string) ($test['name'] ?? $test['label'] ?? $resolvedKey),
+            'sensitivity' => (float) ($test['sensitivity'] ?? $test['sens'] ?? 0.0),
+            'specificity' => (float) ($test['specificity'] ?? $test['spec'] ?? 0.0),
+            'turnaround_time' => $this->numberOrNull($test['turnaround_time'] ?? $test['tat'] ?? null),
+            'turnaround_time_unit' => $test['turnaround_time_unit'] ?? $test['tatUnit'] ?? 'hr',
+            'sample_types' => $sampleTypes,
+            'skill_level' => $this->skillLevel($test['skill_level'] ?? null, $test['skill'] ?? $test['skill_label'] ?? null),
+            'cost' => $this->numberOrNull($test['cost'] ?? null),
+            'requires_lab_technician' => $roleFlags['lab_technician'],
+            'requires_radiologist' => $roleFlags['radiologist'],
+            'requires_specialist_physician' => $roleFlags['specialist_physician'],
+            'sample_none' => $sampleFlags['none'],
+            'sample_blood' => $sampleFlags['blood'],
+            'sample_urine' => $sampleFlags['urine'],
+            'sample_stool' => $sampleFlags['stool'],
+            'sample_sputum' => $sampleFlags['sputum'],
+            'sample_nasal_swab' => $sampleFlags['nasal_swab'],
+            'sample_imaging' => $sampleFlags['imaging'],
+            'base_test_id' => $test['base_test_id'] ?? (string) $resolvedKey,
+            'invocation_id' => $test['invocation_id'] ?? (string) $resolvedKey,
+            'is_repeat_invocation' => (bool) ($test['is_repeat_invocation'] ?? false),
+            'joint_probabilities' => $test['joint_probabilities'] ?? [],
+        ];
+    }
+
+    private function resolveTestId(mixed $key, array $test): ?string
+    {
+        $resolved = $test['id'] ?? $test['name'] ?? null;
+        if (is_string($resolved) && $resolved !== '') {
+            return $resolved;
+        }
+
+        if (is_string($key) && $key !== '') {
+            return $key;
+        }
+
+        return null;
+    }
+
+    private function normalizeSampleTypes(array $test): array
     {
         $sampleTypes = $test['sample_types'] ?? null;
         if (is_string($sampleTypes)) {
@@ -410,362 +201,118 @@ class OptimizationService
             $sampleTypes = isset($test['sample']) ? [$test['sample']] : [];
         }
 
-        return [
-            ...$test,
-            'sensitivity' => (float) ($test['sensitivity'] ?? $test['sens'] ?? 0),
-            'specificity' => (float) ($test['specificity'] ?? $test['spec'] ?? 0),
-            'turnaround_time' => $this->numberOrNull($test['turnaround_time'] ?? $test['tat'] ?? null),
-            'turnaround_time_unit' => $test['turnaround_time_unit'] ?? $test['tatUnit'] ?? null,
-            'sample_types' => array_values(array_filter(array_map(
-                static fn ($value) => is_string($value) ? trim($value) : (string) $value,
-                $sampleTypes
-            ), static fn (string $value) => $value !== '')),
-            'skill_level' => $this->skillLevel($test['skill_level'] ?? null, $test['skill_label'] ?? $test['skill'] ?? null),
-        ];
+        return array_values(array_filter(array_map(
+            static fn ($value) => trim((string) $value),
+            $sampleTypes
+        ), static fn (string $value) => $value !== ''));
     }
 
-    private function selectRefereeTestId(array $testIds, string $first, string $second, array $tests): ?string
+    private function normalizeSampleFlags(array $data): array
     {
-        $remaining = array_values(array_filter($testIds, static fn (string $testId): bool => ! in_array($testId, [$first, $second], true)));
-        if ($remaining === []) {
-            return null;
-        }
-
-        usort($remaining, function (string $left, string $right) use ($tests): int {
-            $leftTest = $tests[$left] ?? [];
-            $rightTest = $tests[$right] ?? [];
-
-            $leftScore = $this->refereeScore($leftTest);
-            $rightScore = $this->refereeScore($rightTest);
-
-            if ($leftScore === $rightScore) {
-                return strcmp($left, $right);
-            }
-
-            return $rightScore <=> $leftScore;
-        });
-
-        return $remaining[0] ?? null;
-    }
-
-    private function rankParallelTestIds(array $testIds, array $tests): array
-    {
-        usort($testIds, function (string $left, string $right) use ($tests): int {
-            $leftScore = $this->refereeScore($tests[$left] ?? []);
-            $rightScore = $this->refereeScore($tests[$right] ?? []);
-
-            if ($leftScore === $rightScore) {
-                return strcmp($left, $right);
-            }
-
-            return $rightScore <=> $leftScore;
-        });
-
-        return $testIds;
-    }
-
-    private function refereeScore(array $test): float
-    {
-        return (
-            ((float) ($test['specificity'] ?? $test['spec'] ?? 0)) * 2
-            + ((float) ($test['sensitivity'] ?? $test['sens'] ?? 0))
-            - ((float) ($test['cost'] ?? 0)) * 0.05
-        );
-    }
-
-    private function exactOutcomeBranches(array $testIds, callable $classify): array
-    {
-        $branches = [];
-        foreach ($this->outcomeCombinations($testIds) as $outcomes) {
-            $branches[] = [
-                'conditions' => $outcomes,
-                'next_node' => $classify($outcomes),
+        if (
+            array_key_exists('none_allowed', $data) || array_key_exists('blood_allowed', $data) || array_key_exists('urine_allowed', $data)
+            || array_key_exists('stool_allowed', $data) || array_key_exists('sputum_allowed', $data)
+            || array_key_exists('nasal_swab_allowed', $data) || array_key_exists('imaging_allowed', $data)
+            || array_key_exists('allow_sample_none', $data) || array_key_exists('allow_sample_blood', $data)
+            || array_key_exists('allow_sample_urine', $data) || array_key_exists('allow_sample_stool', $data)
+            || array_key_exists('allow_sample_sputum', $data) || array_key_exists('allow_sample_nasal_swab', $data)
+            || array_key_exists('allow_sample_imaging', $data)
+        ) {
+            return [
+                'none' => (bool) ($data['none_allowed'] ?? $data['allow_sample_none'] ?? true),
+                'blood' => (bool) ($data['blood_allowed'] ?? $data['allow_sample_blood'] ?? true),
+                'urine' => (bool) ($data['urine_allowed'] ?? $data['allow_sample_urine'] ?? true),
+                'stool' => (bool) ($data['stool_allowed'] ?? $data['allow_sample_stool'] ?? true),
+                'sputum' => (bool) ($data['sputum_allowed'] ?? $data['allow_sample_sputum'] ?? true),
+                'nasal_swab' => (bool) ($data['nasal_swab_allowed'] ?? $data['allow_sample_nasal_swab'] ?? true),
+                'imaging' => (bool) ($data['imaging_allowed'] ?? $data['allow_sample_imaging'] ?? true),
             ];
         }
 
-        return $branches;
-    }
+        $types = array_map(
+            static fn (string $value) => strtolower(trim($value)),
+            $this->normalizeSampleTypes($data)
+        );
 
-    private function outcomeCombinations(array $testIds): array
-    {
-        $results = [];
-        $this->expandOutcomeCombinations(array_values($testIds), 0, [], $results);
-
-        return $results;
-    }
-
-    private function expandOutcomeCombinations(array $testIds, int $index, array $current, array &$results): void
-    {
-        if ($index >= count($testIds)) {
-            $results[] = $current;
-            return;
-        }
-
-        $testId = $testIds[$index];
-        $current[$testId] = 'pos';
-        $this->expandOutcomeCombinations($testIds, $index + 1, $current, $results);
-
-        $current[$testId] = 'neg';
-        $this->expandOutcomeCombinations($testIds, $index + 1, $current, $results);
-    }
-
-    private function dedupeTemplates(array $templates): array
-    {
-        $deduped = [];
-        $seen = [];
-
-        foreach ($templates as $template) {
-            if (! is_array($template)) {
-                continue;
-            }
-
-            $signature = $this->templateSignature($template);
-            if (isset($seen[$signature])) {
-                continue;
-            }
-
-            $seen[$signature] = true;
-            $deduped[] = $template;
-        }
-
-        return $deduped;
-    }
-
-    private function templateSignature(array $template): string
-    {
-        return hash('sha256', json_encode([
-            $template['metadata']['label'] ?? null,
-            $template['start_node'] ?? null,
-            $template['tests'] ?? [],
-            $template['nodes'] ?? [],
-        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
-    }
-
-    private function enrichMetrics(array $metrics): array
-    {
-        $cost = $this->metricCost($metrics);
-        $tat = $this->metricTat($metrics);
-        $sensitivity = (float) ($metrics['sensitivity'] ?? 0);
-        $specificity = (float) ($metrics['specificity'] ?? 0);
-        $truePositivesPerThousand = (float) ($metrics['expected_true_positives_per_1000'] ?? 0);
-
-        return [
-            ...$metrics,
-            'expected_cost_population' => $cost,
-            'expected_turnaround_time_population' => $tat,
-            'balanced_accuracy' => ($sensitivity + $specificity) / 2,
-            'youden_index' => $sensitivity + $specificity - 1,
-            'diagnostic_odds_ratio' => $this->diagnosticOddsRatio($sensitivity, $specificity),
-            'cost_per_detected_case' => $truePositivesPerThousand > 0
-                ? $cost / ($truePositivesPerThousand / 1000)
-                : null,
-        ];
-    }
-
-    private function candidateScore(array $metrics, string $objective = 'balanced mcda'): float
-    {
-        $cost = $this->metricCost($metrics);
-        $tat = $this->metricTat($metrics);
-        $sensitivity = (float) ($metrics['sensitivity'] ?? 0);
-        $specificity = (float) ($metrics['specificity'] ?? 0);
-
-        return match ($objective) {
-            'minimize cost' => ($cost * 1.75) + ($tat * 0.25) - ($sensitivity * 15.0) - ($specificity * 12.0),
-            'maximize sensitivity' => ($cost * 0.7) + ($tat * 0.2) - ($sensitivity * 70.0) - ($specificity * 8.0),
-            'maximize specificity' => ($cost * 0.7) + ($tat * 0.2) - ($sensitivity * 8.0) - ($specificity * 70.0),
-            'minimize tat' => ($cost * 0.75) + ($tat * 1.8) - ($sensitivity * 12.0) - ($specificity * 12.0),
-            'custom' => ($cost * 1.0) + ($tat * 0.45) - ($sensitivity * 35.0) - ($specificity * 25.0),
-            default => ($cost * 1.0) + ($tat * 0.45) - ($sensitivity * 35.0) - ($specificity * 25.0),
-        };
-    }
-
-    private function paretoFrontier(array $candidates, string $objective = 'balanced mcda'): array
-    {
-        $frontier = [];
-
-        foreach ($candidates as $index => $candidate) {
-            $dominated = false;
-            foreach ($candidates as $otherIndex => $otherCandidate) {
-                if ($index === $otherIndex) {
-                    continue;
-                }
-
-                if ($this->dominates($otherCandidate['metrics'] ?? [], $candidate['metrics'] ?? [])) {
-                    $dominated = true;
-                    break;
-                }
-            }
-
-            if (! $dominated) {
-                $frontier[] = $candidate;
-            }
-        }
-
-        usort($frontier, function (array $left, array $right) use ($objective): int {
-            $leftScore = $this->candidateScore($left['metrics'] ?? [], $objective);
-            $rightScore = $this->candidateScore($right['metrics'] ?? [], $objective);
-
-            if ($leftScore === $rightScore) {
-                return ($left['metrics']['expected_cost_population'] ?? PHP_FLOAT_MAX) <=> ($right['metrics']['expected_cost_population'] ?? PHP_FLOAT_MAX);
-            }
-
-            return $leftScore <=> $rightScore;
-        });
-
-        return array_values($frontier);
-    }
-
-    private function dominates(array $left, array $right): bool
-    {
-        $leftCost = $this->metricCost($left);
-        $rightCost = $this->metricCost($right);
-        $leftTat = $this->metricTat($left);
-        $rightTat = $this->metricTat($right);
-        $leftSens = (float) ($left['sensitivity'] ?? 0);
-        $rightSens = (float) ($right['sensitivity'] ?? 0);
-        $leftSpec = (float) ($left['specificity'] ?? 0);
-        $rightSpec = (float) ($right['specificity'] ?? 0);
-
-        $noWorse = $leftCost <= $rightCost
-            && $leftTat <= $rightTat
-            && $leftSens >= $rightSens
-            && $leftSpec >= $rightSpec;
-
-        $strictlyBetter = $leftCost < $rightCost
-            || $leftTat < $rightTat
-            || $leftSens > $rightSens
-            || $leftSpec > $rightSpec;
-
-        return $noWorse && $strictlyBetter;
-    }
-
-    private function buildNamedRankings(array $candidates): array
-    {
-        $buckets = [
-            ['key' => 'cheapest', 'label' => 'Cheapest', 'metric_name' => 'expected_cost_population', 'direction' => 'min'],
-            ['key' => 'most_cost_effective', 'label' => 'Most cost-effective', 'metric_name' => 'cost_per_detected_case', 'direction' => 'min'],
-            ['key' => 'highest_sensitivity', 'label' => 'Highest sensitivity', 'metric_name' => 'sensitivity', 'direction' => 'max'],
-            ['key' => 'highest_dor', 'label' => 'Highest Diagnostic Odds Ratio (DOR)', 'metric_name' => 'diagnostic_odds_ratio', 'direction' => 'max'],
-            ['key' => 'least_cost_per_positive_test', 'label' => 'Least cost per positive test', 'metric_name' => 'cost_per_detected_case', 'direction' => 'min'],
-            ['key' => 'highest_balanced_accuracy', 'label' => 'Highest Balanced Accuracy', 'metric_name' => 'balanced_accuracy', 'direction' => 'max'],
-            ['key' => 'highest_youden_index', 'label' => 'Highest Youden\'s Index (J)', 'metric_name' => 'youden_index', 'direction' => 'max'],
-            ['key' => 'least_turnaround_time', 'label' => 'Least turnaround time', 'metric_name' => 'expected_turnaround_time_population', 'direction' => 'min'],
-            ['key' => 'lowest_average_cost_per_patient', 'label' => 'Lowest average cost per patient', 'metric_name' => 'expected_cost_population', 'direction' => 'min'],
-        ];
-
-        $rankings = [];
-        foreach ($buckets as $bucket) {
-            $best = $this->bestCandidateForMetric($candidates, $bucket['metric_name'], $bucket['direction']);
-            if ($best === null) {
-                continue;
-            }
-
-            $rankings[] = [
-                'key' => $bucket['key'],
-                'label' => $bucket['label'],
-                'candidate_index' => $best['candidate_index'] ?? null,
-                'metric_name' => $bucket['metric_name'],
-                'metric_value' => $best['metrics'][$bucket['metric_name']] ?? null,
+        if ($types === []) {
+            return [
+                'none' => true,
+                'blood' => true,
+                'urine' => true,
+                'stool' => true,
+                'sputum' => true,
+                'nasal_swab' => true,
+                'imaging' => true,
             ];
         }
 
-        return $rankings;
+        return $this->sampleFlagsFromTypes($types, $data);
     }
 
-    private function normalizeObjective(mixed $objective): string
+    private function sampleFlagsFromTypes(array $sampleTypes, array $data): array
     {
-        $value = strtolower(trim((string) $objective));
+        $sampleTypes = array_map(static fn ($value) => strtolower(trim((string) $value)), $sampleTypes);
 
-        return match ($value) {
-            'minimize cost', 'maximize sensitivity', 'maximize specificity', 'minimize tat', 'custom' => $value,
-            default => 'balanced mcda',
-        };
-    }
-
-    private function bestCandidateForMetric(array $candidates, string $metricName, string $direction): ?array
-    {
-        if ($candidates === []) {
-            return null;
-        }
-
-        $ranked = array_values($candidates);
-        usort($ranked, function (array $left, array $right) use ($metricName, $direction): int {
-            $leftValue = $this->rankingValue($left['metrics'] ?? [], $metricName, $direction);
-            $rightValue = $this->rankingValue($right['metrics'] ?? [], $metricName, $direction);
-
-            if ($leftValue !== $rightValue) {
-                return $direction === 'min'
-                    ? $leftValue <=> $rightValue
-                    : $rightValue <=> $leftValue;
-            }
-
-            return $this->compareTieBreakers($left, $right);
-        });
-
-        return $ranked[0] ?? null;
-    }
-
-    private function rankingValue(array $metrics, string $metricName, string $direction): float
-    {
-        $value = $metrics[$metricName] ?? null;
-        if ($value === null || ! is_numeric($value)) {
-            return $direction === 'min' ? PHP_FLOAT_MAX : -PHP_FLOAT_MAX;
-        }
-
-        return (float) $value;
-    }
-
-    private function compareTieBreakers(array $left, array $right): int
-    {
-        $leftMetrics = $left['metrics'] ?? [];
-        $rightMetrics = $right['metrics'] ?? [];
-
-        $comparisons = [
-            [$this->metricCost($leftMetrics), $this->metricCost($rightMetrics), 'min'],
-            [$this->metricTat($leftMetrics), $this->metricTat($rightMetrics), 'min'],
-            [(float) ($leftMetrics['sensitivity'] ?? 0), (float) ($rightMetrics['sensitivity'] ?? 0), 'max'],
-            [(float) ($leftMetrics['specificity'] ?? 0), (float) ($rightMetrics['specificity'] ?? 0), 'max'],
+        return [
+            'none' => (bool) ($data['sample_none'] ?? false) || $sampleTypes === [] || $this->containsAny($sampleTypes, ['none', 'no sample', 'not applicable']),
+            'blood' => (bool) ($data['sample_blood'] ?? false) || $this->containsAny($sampleTypes, ['blood', 'serum', 'plasma', 'fingerstick']),
+            'urine' => (bool) ($data['sample_urine'] ?? false) || $this->containsAny($sampleTypes, ['urine']),
+            'stool' => (bool) ($data['sample_stool'] ?? false) || $this->containsAny($sampleTypes, ['stool', 'feces', 'faeces']),
+            'sputum' => (bool) ($data['sample_sputum'] ?? false) || $this->containsAny($sampleTypes, ['sputum']),
+            'nasal_swab' => (bool) ($data['sample_nasal_swab'] ?? false) || $this->containsAny($sampleTypes, ['nasal swab', 'nasopharyngeal swab', 'swab']),
+            'imaging' => (bool) ($data['sample_imaging'] ?? false) || $this->containsAny($sampleTypes, ['imaging', 'x-ray', 'xray', 'ct', 'mri', 'ultrasound', 'radiograph']),
         ];
+    }
 
-        foreach ($comparisons as [$leftValue, $rightValue, $direction]) {
-            if ($leftValue === $rightValue) {
-                continue;
+    private function normalizeRoleFlags(array $data): array
+    {
+        if (
+            array_key_exists('lab_technician_allowed', $data) || array_key_exists('radiologist_allowed', $data) || array_key_exists('specialist_physician_allowed', $data)
+            || array_key_exists('allow_lab_technician', $data) || array_key_exists('allow_radiologist', $data) || array_key_exists('allow_specialist_physician', $data)
+        ) {
+            return [
+                'lab_technician' => (bool) ($data['lab_technician_allowed'] ?? $data['allow_lab_technician'] ?? true),
+                'radiologist' => (bool) ($data['radiologist_allowed'] ?? $data['allow_radiologist'] ?? true),
+                'specialist_physician' => (bool) ($data['specialist_physician_allowed'] ?? $data['allow_specialist_physician'] ?? true),
+            ];
+        }
+
+        if (array_key_exists('requires_lab_technician', $data) || array_key_exists('requires_radiologist', $data) || array_key_exists('requires_specialist_physician', $data)) {
+            return [
+                'lab_technician' => (bool) ($data['requires_lab_technician'] ?? false),
+                'radiologist' => (bool) ($data['requires_radiologist'] ?? false),
+                'specialist_physician' => (bool) ($data['requires_specialist_physician'] ?? false),
+            ];
+        }
+
+        $skillLevel = $this->skillLevel($data['skill_level'] ?? null, $data['skill'] ?? $data['skill_label'] ?? null);
+        if ($skillLevel <= 0) {
+            return ['lab_technician' => true, 'radiologist' => true, 'specialist_physician' => true];
+        }
+
+        if ($skillLevel === 1) {
+            return ['lab_technician' => true, 'radiologist' => false, 'specialist_physician' => false];
+        }
+
+        if ($skillLevel === 2) {
+            return ['lab_technician' => false, 'radiologist' => true, 'specialist_physician' => false];
+        }
+
+        return ['lab_technician' => false, 'radiologist' => false, 'specialist_physician' => true];
+    }
+
+    private function containsAny(array $haystack, array $needles): bool
+    {
+        foreach ($needles as $needle) {
+            if (in_array($needle, $haystack, true)) {
+                return true;
             }
-
-            return $direction === 'min'
-                ? $leftValue <=> $rightValue
-                : $rightValue <=> $leftValue;
         }
 
-        return strcmp(
-            (string) ($left['label'] ?? $left['candidate_index'] ?? ''),
-            (string) ($right['label'] ?? $right['candidate_index'] ?? '')
-        );
+        return false;
     }
 
-    private function metricCost(array $metrics): float
-    {
-        return (float) ($metrics['expected_cost_population'] ?? $metrics['expected_cost_given_disease'] ?? PHP_FLOAT_MAX);
-    }
-
-    private function metricTat(array $metrics): float
-    {
-        return (float) ($metrics['expected_turnaround_time_population'] ?? $metrics['expected_turnaround_time_given_disease'] ?? PHP_FLOAT_MAX);
-    }
-
-    private function diagnosticOddsRatio(float $sensitivity, float $specificity): float
-    {
-        $numerator = $sensitivity * $specificity;
-        $denominator = (1 - $sensitivity) * (1 - $specificity);
-
-        if ($denominator <= 0.0) {
-            return $numerator > 0.0 ? self::LARGE_RATIO_SENTINEL : 0.0;
-        }
-
-        return $numerator / $denominator;
-    }
-
-    private function skillLevel(mixed $value, mixed $label = null): ?int
+    private function skillLevel(mixed $value, mixed $label = null): int
     {
         if (is_int($value)) {
             return $value;
@@ -777,14 +324,14 @@ class OptimizationService
 
         $source = strtolower(trim((string) ($label ?? $value ?? '')));
         if ($source === '') {
-            return null;
+            return 0;
         }
 
         return match (true) {
             str_contains($source, 'chw'), str_contains($source, 'self') => 1,
             str_contains($source, 'nurse') => 2,
             str_contains($source, 'radiographer'), str_contains($source, 'lab tech'), str_contains($source, 'lab technician') => 3,
-            str_contains($source, 'radiologist'), str_contains($source, 'specialist'), str_contains($source, 'cardiology'), str_contains($source, 'gastroenterology'), str_contains($source, 'gi specialist'), str_contains($source, 'bsl-2') => 4,
+            str_contains($source, 'radiologist'), str_contains($source, 'specialist'), str_contains($source, 'bsl-2') => 4,
             str_contains($source, 'bsl-3') => 5,
             default => 3,
         };
