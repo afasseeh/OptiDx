@@ -1609,7 +1609,7 @@ function ShareModal({ onClose }) {
 Object.assign(window, { ScreenLibrary, ScreenScenarios, ScreenSettingsFull, ShareModal, ScreenTeams });
 
 // ---------- TEAMS (coming soon) -------------------------------------------
-function ScreenTeams() {
+function ScreenTeams({ currentUser }) {
   const [email, setEmail] = useState("");
   const [waitlisted, setWaitlisted] = useState(false);
 

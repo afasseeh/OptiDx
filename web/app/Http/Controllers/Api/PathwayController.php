@@ -14,7 +14,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\File;
 use Illuminate\Validation\Rule;
-use Symfony\Component\Process\Process;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class PathwayController extends Controller
@@ -244,10 +243,8 @@ class PathwayController extends Controller
             return response()->json($run->fresh(), 202);
         }
 
-        $run = $this->optimizer->recordRunStart($run);
-
         try {
-            $this->launchDetachedOptimizationRun($run);
+            $this->optimizer->queueOptimizationRun($run);
         } catch (\Throwable $throwable) {
             $failedRun = $this->optimizer->recordRunFailure($run, $throwable);
             return response()->json($failedRun, 500);
@@ -624,31 +621,6 @@ XML;
             'engine_definition' => $engineDefinition,
             'metadata' => $editorDefinition['metadata'] ?? [],
         ];
-    }
-
-    private function launchDetachedOptimizationRun(OptimizationRun $run): void
-    {
-        $this->bridge->ensureWritableProcessTempDirectory();
-
-        $process = new Process([
-            $this->bridge->resolvePhpCliBinary(),
-            base_path('artisan'),
-            'optidx:run-optimization',
-            (string) $run->id,
-        ], base_path());
-        $process->setTimeout(null);
-        $process->disableOutput();
-
-        if (PHP_OS_FAMILY === 'Windows') {
-            $process->setOptions([
-                'create_new_console' => true,
-            ]);
-        }
-
-        $process->start();
-        $run->forceFill([
-            'process_pid' => method_exists($process, 'getPid') ? ($process->getPid() ?: null) : null,
-        ])->save();
     }
 
     private function looksLikeCanvasGraph(array $definition): bool

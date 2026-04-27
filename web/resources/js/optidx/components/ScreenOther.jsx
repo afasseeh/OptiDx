@@ -88,6 +88,115 @@ function Metric({ label, value, accent }) {
   );
 }
 
+function formatComparisonValue(value, formatter) {
+  if (value === null || value === undefined || value === '') {
+    return 'n/a';
+  }
+
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return String(value);
+  }
+
+  return formatter(numeric);
+}
+
+function normalizeComparisonScenario(scenario, index = 0) {
+  const name = String(scenario?.name || scenario?.label || scenario?.objectiveName || scenario?.id || 'Untitled pathway');
+  const shortName = name.trim().split(/\s+/).filter(Boolean)[0] || 'Pathway';
+
+  return {
+    id: scenario?.id || `${shortName.toLowerCase()}-${index}`,
+    name,
+    shortName,
+    sens: scenario?.sens ?? null,
+    spec: scenario?.spec ?? null,
+    cost: scenario?.cost ?? null,
+    tat: scenario?.tat || scenario?.tatAverageLabel || 'n/a',
+    ppv: scenario?.ppv ?? null,
+    npv: scenario?.npv ?? null,
+    skill: scenario?.skill || 'n/a',
+    samples: scenario?.samples || 'n/a',
+    feasible: scenario?.feasible !== false,
+    reason: scenario?.reason || '',
+    pathway: scenario?.pathway || null,
+  };
+}
+
+function buildCurrentComparisonScenario() {
+  const evaluation = window.OptiDxLatestEvaluationView || null;
+  const pathwayRecord = window.OptiDxCurrentPathwayRecord || window.OptiDxSavedPathway || null;
+  const pathway = window.OptiDxLatestEvaluationPathway
+    || window.OptiDxCurrentPathway
+    || window.OptiDxCanvasDraft
+    || pathwayRecord?._canonical
+    || pathwayRecord?.editor_definition
+    || pathwayRecord?.engine_definition
+    || null;
+
+  if (!evaluation && !pathway && !pathwayRecord) {
+    return null;
+  }
+
+  return normalizeComparisonScenario({
+    id: 'current',
+    name: pathwayRecord?.name || pathway?.metadata?.label || 'Current pathway',
+    objectiveName: 'Current pathway',
+    sens: evaluation?.sens ?? pathwayRecord?.sens ?? null,
+    spec: evaluation?.spec ?? pathwayRecord?.spec ?? null,
+    cost: evaluation?.summary?.expectedCost ?? pathwayRecord?.cost ?? null,
+    tat: evaluation?.summary?.expectedTatLabel ?? evaluation?.tatAverageLabel ?? pathwayRecord?.tat ?? 'n/a',
+    ppv: evaluation?.ppv ?? null,
+    npv: evaluation?.npv ?? null,
+    samples: evaluation?.summary?.pathCount ? `${evaluation.summary.pathCount} paths` : 'n/a',
+    feasible: true,
+    reason: evaluation ? 'Latest evaluated workspace pathway.' : 'Current workspace pathway record.',
+    pathway,
+  });
+}
+
+function buildWorkspaceComparisonRows() {
+  const optimizationRows = Array.isArray(window.OptiDxOptimizationScenarios)
+    ? window.OptiDxOptimizationScenarios.map((scenario, index) => normalizeComparisonScenario(scenario, index))
+    : [];
+
+  if (optimizationRows.length > 0) {
+    return optimizationRows;
+  }
+
+  const rows = [];
+  const current = buildCurrentComparisonScenario();
+  if (current) {
+    rows.push(current);
+  }
+
+  const pathways = window.OptiDxActions.getWorkspacePathways?.() || [];
+  for (const [index, record] of pathways.entries()) {
+    const evaluation = record?.latestEvaluationResult?.result_payload || record?.latestEvaluationResult?.resultPayload || null;
+    if (!evaluation && record?.sens == null && record?.spec == null && record?.cost == null && record?.tat == null) {
+      continue;
+    }
+
+    const pathway = record?._canonical || record?.editor_definition || record?.engine_definition || null;
+    rows.push(normalizeComparisonScenario({
+      id: record.id,
+      name: record.name || record.metadata?.label || `Pathway ${index + 1}`,
+      sens: evaluation?.metrics?.sensitivity ?? record?.sens ?? null,
+      spec: evaluation?.metrics?.specificity ?? record?.spec ?? null,
+      cost: evaluation?.summary?.expectedCost ?? record?.cost ?? null,
+      tat: evaluation?.summary?.expectedTatLabel ?? evaluation?.tatAverageLabel ?? record?.tat ?? 'n/a',
+      ppv: evaluation?.metrics?.ppv ?? null,
+      npv: evaluation?.metrics?.npv ?? null,
+      samples: pathway?.tests ? `${Object.keys(pathway.tests).length} tests` : 'n/a',
+      feasible: record.validation_status !== 'invalid',
+      reason: record.validation_status === 'invalid' ? 'Validation failed.' : '',
+      pathway,
+    }, index));
+  }
+
+  return rows;
+}
+
 function ScreenCompare({ setScreen }) {
   const normalizeScenario = scenario => {
     const name = String(scenario?.name || scenario?.label || scenario?.objectiveName || scenario?.id || "Untitled pathway");
@@ -110,23 +219,16 @@ function ScreenCompare({ setScreen }) {
     };
   };
 
-  const rawScenarios = Array.isArray(window.OptiDxOptimizationScenarios) && window.OptiDxOptimizationScenarios.length
-    ? window.OptiDxOptimizationScenarios
-    : Array.isArray(window.SEED_COMPARE)
-      ? window.SEED_COMPARE
-      : [];
-  const scenarios = rawScenarios.map(normalizeScenario);
+  const scenarios = buildWorkspaceComparisonRows();
   return (
     <>
       <TopBar crumbs={[
         { label: "OptiDx", onClick: () => setScreen("home"), title: "Back to home" },
-        { label: "TB Community Screening", onClick: () => setScreen("results"), title: "Back to results" },
+        { label: window.OptiDxActions.getActiveProjectRecord?.()?.title || window.OptiDxActions.getActiveProjectRecord?.()?.name || window.OptiDxCurrentProjectRecord?.name || "Workspace project", onClick: () => setScreen("results"), title: "Back to results" },
         { label: "Compare" },
       ]}
         actions={<><button className="btn" onClick={() => window.OptiDxActions.downloadJson("optidx-compare-candidates.json", scenarios)}><Icon name="download"/>Export</button><button className="btn btn--primary" onClick={async () => {
-          const candidate = Array.isArray(window.OptiDxOptimizationScenarios)
-            ? window.OptiDxOptimizationScenarios.find(item => item.pathway) || null
-            : null;
+          const candidate = scenarios.find(item => item.pathway) || null;
           if (!candidate?.pathway) {
             window.OptiDxActions.showToast?.("Load a live optimization run before applying a suggestion.", "info");
             return;
@@ -143,7 +245,7 @@ function ScreenCompare({ setScreen }) {
           <div>
             <div className="sme-eyebrow" style={{marginBottom:6}}>Optimization</div>
             <h1>Compare candidate pathways</h1>
-            <p>Trade-offs between cost, TAT, sensitivity, and specificity under current constraints.</p>
+            <p>Trade-offs between cost, TAT, sensitivity, and specificity from live workspace data.</p>
           </div>
         </div>
 
@@ -546,57 +648,82 @@ function ScreenOptimizationHistory({ setScreen }) {
 }
 
 function RadarChart() {
-  const axes = ["Sens","Spec","Low cost","Fast","Low skill","Few samples"];
-  const current = [0.84,0.95,0.60,0.75,0.80,0.50];
-  const balanced = [0.86,0.95,0.55,0.80,0.80,0.50];
-  const cx=140, cy=140, R=100;
-  const pt = (v,i) => {
-    const a = (Math.PI*2*i)/axes.length - Math.PI/2;
-    return [cx + Math.cos(a)*v*R, cy + Math.sin(a)*v*R];
+  const source = buildWorkspaceComparisonRows().filter(row => Number.isFinite(Number(row.sens)) || Number.isFinite(Number(row.spec)) || Number.isFinite(Number(row.cost)));
+  if (source.length === 0) {
+    return <div className="u-meta">No real comparison data yet.</div>;
+  }
+
+  const axes = ["Sens","Spec","Low cost"];
+  const current = source[0];
+  const challenger = source[1] || source[0];
+  const maxCost = Math.max(...source.map(row => Number(row.cost ?? 0)).filter(value => Number.isFinite(value)), 1);
+  const cx = 140;
+  const cy = 140;
+  const radius = 100;
+
+  const valuesFor = row => ([
+    Math.max(0, Math.min(1, Number(row.sens ?? 0) || 0)),
+    Math.max(0, Math.min(1, Number(row.spec ?? 0) || 0)),
+    Math.max(0, Math.min(1, 1 - ((Number(row.cost ?? maxCost) || maxCost) / maxCost))),
+  ]);
+
+  const pointFor = (value, index) => {
+    const angle = (Math.PI * 2 * index) / axes.length - Math.PI / 2;
+    return [cx + Math.cos(angle) * value * radius, cy + Math.sin(angle) * value * radius];
   };
-  const poly = arr => arr.map((v,i) => pt(v,i).join(",")).join(" ");
+
+  const polygonFor = values => values.map((value, index) => pointFor(value, index).join(',')).join(' ');
+  const currentValues = valuesFor(current);
+  const challengerValues = valuesFor(challenger);
+
   return (
     <svg width="280" height="280" viewBox="0 0 280 280">
-      {[0.25,0.5,0.75,1].map(r => <polygon key={r} points={poly(axes.map(()=>r))} fill="none" stroke="var(--edge)"/>)}
-      {axes.map((a,i) => { const [x,y] = pt(1.1,i); return <text key={a} x={x} y={y} fontSize="10" fill="var(--fg-3)" textAnchor="middle">{a}</text>; })}
-      <polygon points={poly(current)} fill="var(--sme-orange)" fillOpacity="0.2" stroke="var(--sme-orange)" strokeWidth="1.5"/>
-      <polygon points={poly(balanced)} fill="var(--refer)" fillOpacity="0.15" stroke="var(--refer)" strokeWidth="1.5" strokeDasharray="3 3"/>
+      {[0.25, 0.5, 0.75, 1].map(value => (
+        <polygon key={value} points={polygonFor(axes.map(() => value))} fill="none" stroke="var(--edge)"/>
+      ))}
+      {axes.map((axis, index) => {
+        const [x, y] = pointFor(1.12, index);
+        return <text key={axis} x={x} y={y} fontSize="10" fill="var(--fg-3)" textAnchor="middle">{axis}</text>;
+      })}
+      <polygon points={polygonFor(currentValues)} fill="var(--sme-orange)" fillOpacity="0.2" stroke="var(--sme-orange)" strokeWidth="1.5"/>
+      <polygon points={polygonFor(challengerValues)} fill="var(--refer)" fillOpacity="0.15" stroke="var(--refer)" strokeWidth="1.5" strokeDasharray="3 3"/>
     </svg>
   );
 }
 
 function ScatterChart() {
-  const source = Array.isArray(window.OptiDxOptimizationScenarios) && window.OptiDxOptimizationScenarios.length
-    ? window.OptiDxOptimizationScenarios
-    : Array.isArray(window.SEED_COMPARE)
-      ? window.SEED_COMPARE
-      : [];
-  const pts = source.map(c => {
-    const name = String(c?.name || c?.label || c?.objectiveName || c?.id || "Pathway");
-    return {
-      ...c,
-      name,
-      shortName: name.trim().split(/\s+/).filter(Boolean)[0] || "Pathway",
-      cost: Number(c?.cost ?? 0),
-      sens: Number(c?.sens ?? 0),
-      px: 20 + Number(c?.cost ?? 0) * 10,
-      py: 200 - Number(c?.sens ?? 0) * 200,
-    };
-  });
+  const source = buildWorkspaceComparisonRows().filter(row => Number.isFinite(Number(row.cost)) && Number.isFinite(Number(row.sens)));
+  if (source.length === 0) {
+    return <div className="u-meta">No real comparison data yet.</div>;
+  }
+
+  const maxCost = Math.max(...source.map(row => Number(row.cost ?? 0)).filter(value => Number.isFinite(value)), 1);
+  const maxSens = Math.max(...source.map(row => Number(row.sens ?? 0)).filter(value => Number.isFinite(value)), 1);
+
   return (
     <svg width="100%" height="220" viewBox="0 0 500 220">
       <line x1="40" y1="10" x2="40" y2="200" stroke="var(--edge)"/>
       <line x1="40" y1="200" x2="480" y2="200" stroke="var(--edge)"/>
       <text x="10" y="14" fontSize="10" fill="var(--fg-3)">Sens</text>
       <text x="470" y="215" fontSize="10" fill="var(--fg-3)" textAnchor="end">Cost ($)</text>
-      {pts.map(p => (
-        <g key={p.id}>
-          <circle cx={40 + p.cost*12} cy={200 - p.sens*180} r={p.feasible ? 8 : 6}
-            fill={p.id === "c1" ? "var(--sme-orange)" : p.feasible ? "var(--pos)" : "var(--fg-4)"}
-            opacity={p.feasible ? 0.85 : 0.4}/>
-          <text x={40 + p.cost*12 + 10} y={200 - p.sens*180 + 3} fontSize="10" fill="var(--fg-2)">{p.shortName}</text>
-        </g>
-      ))}
+      {source.map((row, index) => {
+        const cost = Number(row.cost ?? 0);
+        const sens = Number(row.sens ?? 0);
+        const x = 40 + (cost / maxCost) * 420;
+        const y = 200 - (sens / maxSens) * 180;
+        return (
+          <g key={row.id}>
+            <circle
+              cx={x}
+              cy={y}
+              r={row.feasible ? 8 : 6}
+              fill={index === 0 ? "var(--sme-orange)" : row.feasible ? "var(--pos)" : "var(--fg-4)"}
+              opacity={row.feasible ? 0.85 : 0.4}
+            />
+            <text x={x + 10} y={y + 3} fontSize="10" fill="var(--fg-2)">{row.shortName}</text>
+          </g>
+        );
+      })}
     </svg>
   );
 }

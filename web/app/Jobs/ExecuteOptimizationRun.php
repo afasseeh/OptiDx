@@ -28,7 +28,7 @@ class ExecuteOptimizationRun implements ShouldQueue
         }
 
         try {
-            $optimizationService->runOptimizationRun($run);
+            $optimizationService->launchOptimizationRunProcess($run);
         } catch (\Throwable $throwable) {
             $failedRun = $optimizationService->recordRunFailure($run, $throwable);
             $optimizationService->notifyCompletionIfNeeded($failedRun);

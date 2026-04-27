@@ -1,5 +1,32 @@
 # Change Log
 
+## 2026-04-28 - Bind teams, report, and compare screens to live workspace data
+
+- Summary: Passed the authenticated user into the Teams screen so it can render its preview card without an out-of-scope variable, replaced the report preview with a workspace-backed summary of the active project/pathway/evaluation, and changed the compare screen to prefer live optimizer outputs or evaluated workspace pathways instead of seeded demo candidates.
+- Files or modules affected: `web/resources/js/optidx/components/App.jsx`, `web/resources/js/optidx/components/ScreenExtras.jsx`, `web/resources/js/optidx/components/ScreenReport.jsx`, `web/resources/js/optidx/components/ScreenOther.jsx`, `ARCHITECTURE.md`, `FUTURE_TASKS.md`, `CHANGE_LOG.md`.
+- Reason for the change: The Teams page was throwing a render error, while the Report and Compare pages were still showing generic prepopulated TB sample content that did not reflect the actual project currently loaded in the workspace.
+- Architecture impact: The report and compare surfaces now consume the same live workspace state boundary used elsewhere in the shell, so they only render real project data or an explicit empty state when no evaluation exists yet.
+- Migration or deployment impact: Frontend bundle rebuild only; no schema or backend migration was required.
+- Follow-up notes: Validation passed with `npm run build` and `php artisan test --filter PathwayApiTest`.
+
+## 2026-04-28 - Fix optimization runs to survive production handoff
+
+- Summary: Replaced the broken request-owned detached optimization launch with a queue-worker handoff that starts the optimizer through a worker-owned `nohup` process on Linux, preserving the PID-backed cancel path while letting the long-running child survive the HTTP request lifecycle.
+- Files or modules affected: `web/app/Http/Controllers/Api/PathwayController.php`, `web/app/Jobs/ExecuteOptimizationRun.php`, `web/app/Services/OptimizationService.php`, `web/tests/Unit/OptimizationServiceTest.php`, `ARCHITECTURE.md`, `README.md`, `FUTURE_TASKS.md`, `CHANGE_LOG.md`.
+- Reason for the change: Production optimization runs were remaining in `running` forever because the child process launched from the request died immediately on the VPS, leaving the row without a terminal update.
+- Architecture impact: Optimization dispatch now flows through the queue worker, which becomes the parent of the detached background optimizer process; the worker then records the PID so cancellation can still terminate the live process when needed.
+- Migration or deployment impact: Rebuilt and redeployed the Docker stack on the VPS, then ran a live smoke optimization that completed successfully with `status=success` on the new build.
+- Follow-up notes: The earlier broken smoke rows were marked `failed` so the workspace history no longer shows them as active runs.
+
+## 2026-04-27 - Replace production deployment and sync database migrations
+
+- Summary: Deployed the current local `main` release to `optidx.syreon.me`, backed up the live SQLite/storage volumes and code tree, rebuilt the Docker stack, and then synced the `web/database` tree into the mounted database volume so Laravel could see and apply the new migrations.
+- Files or modules affected: `ARCHITECTURE.md`, `FUTURE_TASKS.md`, `CHANGE_LOG.md`, and the live VPS deployment under `/opt/optidx/web`, `/opt/optidx/optidx_package`, and the Docker volumes `web_optidx-database` and `web_optidx-storage`.
+- Reason for the change: The live site was still running an older release behind local `main`, and the Docker database volume was masking the newer migration files so the schema upgrade would have been skipped without an explicit sync step.
+- Architecture impact: The production compose stack now has a confirmed operational requirement to mirror the `web/database` tree into the database volume before startup, because that volume overlays `/var/www/html/database` at runtime.
+- Migration or deployment impact: Production was rebuilt in place, the six pending migrations through `2026_04_27_000240_add_process_tracking_to_optimization_runs_table` were applied, and the app/queue/scheduler containers were restarted successfully.
+- Follow-up notes: Future releases should automate the database-tree sync step so container startup cannot silently miss new migration files.
+
 ## 2026-04-27 - Normalize extensive optimization terminal snapshots
 
 - Summary: Updated the shared optimization run-state normalization so terminal `result_payload` data is flattened before the wizard and scenarios screens consume it, and cleared the wizard's live-run latch when a terminal state arrives.

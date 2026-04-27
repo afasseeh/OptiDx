@@ -4,11 +4,13 @@ namespace Tests\Unit;
 
 use App\Models\OptimizationRun;
 use App\Models\User;
+use App\Jobs\ExecuteOptimizationRun;
 use App\Notifications\OptimizationRunCompletedNotification;
 use App\Services\OptimizationService;
 use App\Services\PythonEngineBridge;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
@@ -200,6 +202,53 @@ class OptimizationServiceTest extends TestCase
         $this->assertSame('searching', $updated->progress_stage);
         $this->assertSame('Expanded 120 partial pathways.', $updated->progress_message);
         $this->assertSame(120, $updated->progress_payload['expanded_count']);
+    }
+
+    public function test_queue_optimization_run_dispatches_job(): void
+    {
+        Queue::fake();
+
+        $service = new OptimizationService($this->createMock(PythonEngineBridge::class));
+        $run = OptimizationRun::create([
+            'status' => 'queued',
+            'run_mode' => 'light',
+            'input_payload' => ['tests' => [], 'constraints' => ['prevalence' => 0.1], 'search_config' => []],
+            'constraints' => ['prevalence' => 0.1],
+        ]);
+
+        $service->queueOptimizationRun($run);
+
+        Queue::assertPushed(ExecuteOptimizationRun::class, function (ExecuteOptimizationRun $job) use ($run): bool {
+            return $job->optimizationRunId === $run->id;
+        });
+    }
+
+    public function test_execute_optimization_run_job_launches_the_background_process(): void
+    {
+        $run = OptimizationRun::create([
+            'status' => 'queued',
+            'run_mode' => 'light',
+            'input_payload' => ['tests' => [], 'constraints' => ['prevalence' => 0.1], 'search_config' => []],
+            'constraints' => ['prevalence' => 0.1],
+        ]);
+
+        $service = $this->getMockBuilder(OptimizationService::class)
+            ->disableOriginalConstructor()
+            ->onlyMethods(['launchOptimizationRunProcess', 'recordRunFailure', 'notifyCompletionIfNeeded'])
+            ->getMock();
+
+        $service->expects($this->once())
+            ->method('launchOptimizationRunProcess')
+            ->with($this->callback(fn (OptimizationRun $queuedRun): bool => $queuedRun->id === $run->id))
+            ->willReturn($run->refresh());
+
+        $service->expects($this->never())
+            ->method('recordRunFailure');
+
+        $service->expects($this->never())
+            ->method('notifyCompletionIfNeeded');
+
+        (new ExecuteOptimizationRun($run->id))->handle($service);
     }
 
     public function test_cancel_run_marks_run_cancelled_without_notification(): void

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Jobs\ExecuteOptimizationRun;
 use App\Models\User;
 use App\Models\DiagnosticTest;
 use App\Models\OptimizationRun;
@@ -79,6 +80,57 @@ class OptimizationService
         $this->notifyCompletionIfNeeded($updatedRun);
 
         return $updatedRun;
+    }
+
+    public function queueOptimizationRun(OptimizationRun $run): void
+    {
+        ExecuteOptimizationRun::dispatch($run->id);
+    }
+
+    public function launchOptimizationRunProcess(OptimizationRun $run): OptimizationRun
+    {
+        $this->bridge->ensureWritableProcessTempDirectory();
+
+        if (PHP_OS_FAMILY === 'Windows') {
+            $process = new Process([
+                $this->bridge->resolvePhpCliBinary(),
+                base_path('artisan'),
+                'optidx:run-optimization',
+                (string) $run->id,
+            ], base_path());
+            $process->setTimeout(null);
+            $process->disableOutput();
+            $process->setOptions([
+                'create_new_console' => true,
+            ]);
+            $process->start();
+            $run->forceFill([
+                'process_pid' => method_exists($process, 'getPid') ? ($process->getPid() ?: null) : null,
+            ])->save();
+
+            return $run->refresh();
+        }
+
+        $command = sprintf(
+            'cd %s && nohup %s artisan optidx:run-optimization %s >/dev/null 2>&1 </dev/null & echo $!',
+            escapeshellarg(base_path()),
+            escapeshellarg($this->bridge->resolvePhpCliBinary()),
+            escapeshellarg((string) $run->id),
+        );
+        $process = Process::fromShellCommandline($command, base_path());
+        $process->setTimeout(10);
+        $process->run();
+
+        if (! $process->isSuccessful()) {
+            throw new \RuntimeException(trim($process->getErrorOutput()) ?: 'Unable to launch optimization worker process.');
+        }
+
+        $pid = trim($process->getOutput());
+        $run->forceFill([
+            'process_pid' => is_numeric($pid) ? (int) $pid : null,
+        ])->save();
+
+        return $run->refresh();
     }
 
     public function normalizeConstraints(array $constraints): array

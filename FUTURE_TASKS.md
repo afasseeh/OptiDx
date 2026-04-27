@@ -169,8 +169,8 @@
 ## 20. VPS container bootstrap for OptiDx
 
 - **Context:** Cloudflare now routes `optidx.syreon.me` through the shared tunnel to `127.0.0.1:8082`.
-- **Limitation:** The compose stack is deployed and verified, but repeat releases still require manual SSH steps to rebuild and restart the containers.
-- **Improvement:** Add a small provisioning script or deployment helper that pulls the latest code, refreshes the environment file if needed, runs `docker compose up -d --build`, confirms the `python` runtime and `/var/www/optidx_package` bind mount are present, and checks the tunnel health endpoint.
+- **Limitation:** The compose stack is deployed and verified, but repeat releases still require manual SSH steps to rebuild and restart the containers, and the database volume overlays the app's `database/` tree unless the migration files are synced first.
+- **Improvement:** Add a small provisioning script or deployment helper that pulls the latest code, syncs `web/database` into the mounted volume, refreshes the environment file if needed, runs `docker compose up -d --build`, confirms the `python` runtime and `/var/www/optidx_package` bind mount are present, checks the tunnel health endpoint, and alerts on optimization runs that remain queued or running longer than expected.
 - **Benefit:** Makes future releases safer and removes the remaining manual step from the deployment path.
 - **Priority:** High
 
@@ -252,6 +252,14 @@
 - **Improvement:** Add a one-time repair command or migration that rewrites legacy infeasible result payloads into a single canonical shape with explicit placeholder metadata for each fixed objective.
 - **Benefit:** Simplifies frontend rendering, reduces future regression risk, and makes stored optimization history easier to inspect or export consistently.
 - **Priority:** Medium
+
+## 31. Consolidate workspace comparison preview helpers
+
+- **Context:** The report and compare screens now both read from live workspace state instead of seeded demo data.
+- **Limitation:** The live-data normalization logic still lives in the browser component layer, which leaves a small amount of duplication across the report and compare preview paths.
+- **Improvement:** Extract a shared workspace preview helper for pathway summaries, comparison rows, and report metrics so both screens reuse one normalization boundary.
+- **Benefit:** Reduces drift between the report preview, compare view, and future export previews while keeping the real-data rule in one place.
+- **Priority:** Low
 # Stabilize Vite Dev Loading For Legacy Global Components
 
 - Context: The React workspace still loads several legacy component modules that assign themselves onto `window`, and some of those files keep their `import React ...` statement at the bottom of the file.

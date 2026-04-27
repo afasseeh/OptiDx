@@ -216,7 +216,7 @@ function App() {
       {screen === "evidence" && <ScreenErrorBoundary resetKey={screen} onRecover={() => setScreen("evidence")}><Frame><ScreenEvidence setScreen={setScreen}/></Frame></ScreenErrorBoundary>}
       {screen === "report"   && <ScreenErrorBoundary resetKey={screen} onRecover={() => setScreen("report")}><Frame fullBleed><ScreenReport setScreen={setScreen} onShare={() => setShowShare(true)}/></Frame></ScreenErrorBoundary>}
       {screen === "settings" && <ScreenErrorBoundary resetKey={screen} onRecover={() => setScreen("settings")}><Frame><ScreenSettingsFull currentUser={currentUser}/></Frame></ScreenErrorBoundary>}
-      {screen === "teams"    && <ScreenErrorBoundary resetKey={screen} onRecover={() => setScreen("teams")}><Frame><ScreenTeams/></Frame></ScreenErrorBoundary>}
+      {screen === "teams"    && <ScreenErrorBoundary resetKey={screen} onRecover={() => setScreen("teams")}><Frame><ScreenTeams currentUser={currentUser}/></Frame></ScreenErrorBoundary>}
 
       {openPanel === "parallel" && <ParallelModal onClose={() => setOpenPanel(null)}/>}
       {showTestEditor && <DiagnosticTestEditorModal

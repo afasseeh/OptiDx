@@ -71,7 +71,8 @@ cd web
 docker compose up -d --build
 ```
 
-The stack exposes the app on `8082` and includes a queue worker. The first container start runs Laravel migrations automatically unless `RUN_MIGRATIONS=0` is set.
+The stack exposes the app on `8082` and includes a queue worker that owns optimization runs. The first container start runs Laravel migrations automatically unless `RUN_MIGRATIONS=0` is set.
+Because the production compose stack mounts the database volume over `web/database`, make sure the migration files are synced into that volume before starting the container or Laravel will not see new schema files.
 
 ## Validation
 
