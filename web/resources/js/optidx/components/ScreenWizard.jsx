@@ -133,12 +133,20 @@ function ScreenWizard({ setScreen }) {
         return;
       }
 
-      const normalizedStatus = String(run.status || '').toLowerCase();
-      const nextStage = run.progress_stage || run.progress_message || run.status || '';
+      const normalizedStatus = String(run.status || run.result_payload?.status || '').toLowerCase();
+      const nextStage = run.progress_stage || run.result_payload?.progress_stage || run.progress_message || run.result_payload?.progress_message || run.status || '';
       const shouldAdoptLiveState = optimizationStartRef.current != null || ['success', 'infeasible', 'no_feasible_found_time_limit', 'failed'].includes(normalizedStatus);
 
       if (!shouldAdoptLiveState) {
         return;
+      }
+
+      const nextProgress = Number.isFinite(Number(run.progress_percent ?? run.result_payload?.progress_percent))
+        ? Number(run.progress_percent ?? run.result_payload?.progress_percent)
+        : null;
+
+      if (!['queued', 'running'].includes(normalizedStatus)) {
+        optimizationStartRef.current = null;
       }
 
       setOptimization(current => ({
@@ -148,9 +156,7 @@ function ScreenWizard({ setScreen }) {
           : ['queued', 'running'].includes(normalizedStatus)
             ? 'running'
             : 'done',
-        progress: Number.isFinite(Number(run.progress_percent))
-          ? Number(run.progress_percent)
-          : current.progress,
+        progress: nextProgress ?? current.progress,
         stage: nextStage,
         error: normalizedStatus === 'failed'
           ? run.failure_reason || run.progress_message || 'Optimization failed.'
@@ -389,10 +395,13 @@ function ScreenWizard({ setScreen }) {
       const finalState = window.OptiDxOptimizationResults || result;
       const candidateCount = finalState?.pareto_frontier_ids?.length ?? finalState?.feasible_candidate_count ?? 0;
       const elapsedMs = Date.now() - (optimizationStartRef.current || Date.now());
-      const terminalStatus = String(finalState?.status || '').toLowerCase();
+      const terminalStatus = String(finalState?.status || finalState?.result_payload?.status || '').toLowerCase();
       const shouldHoldVisibleProgress = elapsedMs < MIN_OPTIMIZATION_VISIBLE_MS && !['queued', 'running'].includes(terminalStatus);
 
       if (runMode === "extensive" || ['queued', 'running'].includes(String(finalState?.status || '').toLowerCase())) {
+        if (!['queued', 'running'].includes(terminalStatus)) {
+          optimizationStartRef.current = null;
+        }
         setOptimization({
           status: "idle",
           progress: 0,
@@ -432,6 +441,7 @@ function ScreenWizard({ setScreen }) {
           if (elapsed >= MIN_OPTIMIZATION_VISIBLE_MS) {
             window.clearInterval(optimizationHoldTimerRef.current);
             optimizationHoldTimerRef.current = null;
+            optimizationStartRef.current = null;
             setOptimization({ status: "idle", progress: 0, stage: "", error: null });
             setScreen("scenarios");
           }

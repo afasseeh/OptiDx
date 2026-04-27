@@ -195,6 +195,32 @@ function clearOptimizationRunState() {
   dispatchOptimizationEvent();
 }
 
+function getOptimizationRunStatus(run) {
+  return String(run?.status ?? run?.result_payload?.status ?? '').toLowerCase();
+}
+
+function normalizeOptimizationRunState(run) {
+  const normalizedRun = run && typeof run === 'object' ? { ...run } : null;
+  if (!normalizedRun) {
+    return null;
+  }
+
+  const resultPayload = normalizedRun.result_payload && typeof normalizedRun.result_payload === 'object'
+    ? normalizedRun.result_payload
+    : null;
+  const terminalStatus = getOptimizationRunStatus(normalizedRun);
+
+  if (resultPayload && (OPTIMIZATION_RUN_REUSABLE_STATUSES.has(terminalStatus) || OPTIMIZATION_RUN_TERMINAL_STATUSES.has(terminalStatus))) {
+    return {
+      ...normalizedRun,
+      ...resultPayload,
+      result_payload: resultPayload,
+    };
+  }
+
+  return normalizedRun;
+}
+
 function dismissOptimizationRunFromWorkspace() {
   stopOptimizationRunWatcher();
 
@@ -2496,7 +2522,9 @@ function buildScenarioFromSelectedOutput(key, entry, result, index) {
 function buildOptimizationScenarios(result) {
   const selectedOutputs = result?.selected_outputs && typeof result.selected_outputs === 'object'
     ? result.selected_outputs
-    : null;
+    : result?.result_payload?.selected_outputs && typeof result.result_payload.selected_outputs === 'object'
+      ? result.result_payload.selected_outputs
+      : null;
   const prevalence = Number(result?.constraints?.prevalence ?? result?.prevalence ?? NaN);
   const resolvedPrevalence = Number.isFinite(prevalence) ? prevalence : null;
 
@@ -2725,7 +2753,7 @@ async function openOptimizationRunHistoryItem(runId) {
 }
 
 function applyOptimizationRunState(run) {
-  const normalizedRun = run && typeof run === 'object' ? { ...run } : null;
+  const normalizedRun = normalizeOptimizationRunState(run);
   window.OptiDxOptimizationRun = normalizedRun;
   if (normalizedRun?.id != null) {
     writeStoredOptimizationRunState(normalizedRun);

@@ -1,5 +1,14 @@
 # Change Log
 
+## 2026-04-27 - Normalize extensive optimization terminal snapshots
+
+- Summary: Updated the shared optimization run-state normalization so terminal `result_payload` data is flattened before the wizard and scenarios screens consume it, and cleared the wizard's live-run latch when a terminal state arrives.
+- Files or modules affected: `web/resources/js/optidx/actions.js`, `web/resources/js/optidx/components/ScreenWizard.jsx`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: Extensive optimization runs could complete successfully in the backend but still leave the browser stuck on a stale running snapshot, which kept the progress card visible instead of handing control to the actual scenario results.
+- Architecture impact: Browser-side optimization state is now normalized at the shared action layer before it reaches any screen, which keeps the wizard, Home, and scenarios views aligned on the same terminal contract.
+- Migration or deployment impact: Rebuild and redeploy the frontend bundle so the updated browser-state normalization ships. No database migration was required.
+- Follow-up notes: Validate a full extensive optimization flow in the browser to confirm the progress card dismisses and the scenarios view opens with the completed outputs.
+
 ## 2026-04-27 - Fix optimization history metric renderer
 
 - Summary: Added the missing metric card renderer to the optimization-history screen so stored runs can render their summary blocks without throwing a `Metric is not defined` runtime error.
