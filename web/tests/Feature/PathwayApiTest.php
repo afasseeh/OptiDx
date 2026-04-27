@@ -422,7 +422,6 @@ class PathwayApiTest extends TestCase
     public function test_optimize_creates_a_queued_run_and_returns_run_metadata(): void
     {
         $this->actingAs($this->workspaceUser('optimizer@example.com'));
-        Queue::fake();
 
         $response = $this->postJson('/api/pathways/optimize', [
             'project_id' => null,
@@ -485,7 +484,6 @@ class PathwayApiTest extends TestCase
                 ],
             ]);
 
-        Queue::assertPushed(\App\Jobs\ExecuteOptimizationRun::class);
         $run = OptimizationRun::query()->first();
         $this->assertNotNull($run);
         $this->assertSame('queued', $run?->status);
@@ -496,6 +494,38 @@ class PathwayApiTest extends TestCase
             ->assertJsonPath('id', $run->id)
             ->assertJsonPath('run_mode', 'light')
             ->assertJsonPath('progress_percent', null);
+    }
+
+    public function test_optimization_runs_latest_endpoint_returns_account_latest_run(): void
+    {
+        $user = $this->workspaceUser('optimizer-latest@example.com');
+        $this->actingAs($user);
+
+        OptimizationRun::create([
+            'created_by' => $user->id,
+            'project_id' => null,
+            'run_mode' => 'light',
+            'status' => 'success',
+            'input_payload' => ['tests' => [], 'constraints' => ['prevalence' => 0.08], 'search_config' => []],
+            'constraints' => ['prevalence' => 0.08],
+            'result_payload' => ['status' => 'success', 'message' => 'First run'],
+        ]);
+
+        $latest = OptimizationRun::create([
+            'created_by' => $user->id,
+            'project_id' => null,
+            'run_mode' => 'extensive',
+            'status' => 'success',
+            'input_payload' => ['tests' => [], 'constraints' => ['prevalence' => 0.08], 'search_config' => []],
+            'constraints' => ['prevalence' => 0.08],
+            'result_payload' => ['status' => 'success', 'message' => 'Latest run'],
+        ]);
+
+        $this->getJson('/api/optimization-runs/latest')
+            ->assertOk()
+            ->assertJsonPath('id', $latest->id)
+            ->assertJsonPath('run_mode', 'extensive')
+            ->assertJsonPath('message', 'Latest run');
     }
 
     public function test_optimize_falls_back_to_workspace_tests_and_normalizes_prevalence(): void

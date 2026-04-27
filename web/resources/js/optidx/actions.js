@@ -51,6 +51,7 @@ function dispatchOptimizationEvent() {
 }
 
 const ACTIVE_PROJECT_STORAGE_KEY = 'optidx.active-project-id';
+const OPTIMIZATION_RUN_STORAGE_KEY = 'optidx.optimization-run-state';
 
 function dispatchAuthEvent(detail = null, type = 'optidx-auth-updated') {
   window.dispatchEvent(new CustomEvent(type, {
@@ -74,6 +75,46 @@ function writeActiveProjectId(projectId) {
     }
 
     window.localStorage?.setItem(ACTIVE_PROJECT_STORAGE_KEY, String(projectId));
+  } catch {
+    // Ignore storage failures in hardened browser contexts.
+  }
+}
+
+function readStoredOptimizationRunState() {
+  try {
+    const raw = window.localStorage?.getItem(OPTIMIZATION_RUN_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredOptimizationRunState(run) {
+  try {
+    if (!run || run.id == null) {
+      window.localStorage?.removeItem(OPTIMIZATION_RUN_STORAGE_KEY);
+      return;
+    }
+
+    const signature = run.input_payload ? buildOptimizationPayloadSignature(run.input_payload) : null;
+    window.localStorage?.setItem(OPTIMIZATION_RUN_STORAGE_KEY, JSON.stringify({
+      runId: String(run.id),
+      signature,
+      updatedAt: new Date().toISOString(),
+    }));
+  } catch {
+    // Ignore storage failures in hardened browser contexts.
+  }
+}
+
+function clearStoredOptimizationRunState() {
+  try {
+    window.localStorage?.removeItem(OPTIMIZATION_RUN_STORAGE_KEY);
   } catch {
     // Ignore storage failures in hardened browser contexts.
   }
@@ -124,6 +165,7 @@ function clearWorkspaceState(options = {}) {
   window.OptiDxOptimizationResults = null;
   window.OptiDxOptimizationScenarios = null;
   window.OptiDxOptimizationRun = null;
+  clearStoredOptimizationRunState();
   if (window.OptiDxOptimizationRunTimer) {
     window.clearInterval(window.OptiDxOptimizationRunTimer);
     window.OptiDxOptimizationRunTimer = null;
@@ -810,6 +852,8 @@ async function loadWorkspaceData() {
   if (normalizedTests.length) {
     window.SEED_TESTS = normalizedTests;
   }
+
+  void restoreStoredOptimizationRun().catch(() => {});
 
   return window.OptiDxWorkspace;
 }
@@ -2299,6 +2343,120 @@ function buildOptimizationScenarios(result) {
   });
 }
 
+function normalizeOptimizationSignatureList(items) {
+  return items
+    .map(value => String(value ?? '').trim())
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b));
+}
+
+function buildOptimizationPayloadSignature(payload = {}) {
+  const tests = Array.isArray(payload?.tests)
+    ? payload.tests
+    : payload?.tests && typeof payload.tests === 'object'
+      ? Object.entries(payload.tests).map(([key, test]) => ({
+          ...(test && typeof test === 'object' ? test : {}),
+          id: test?.id ?? key,
+        }))
+      : [];
+  const normalizedTests = tests
+    .map(test => ({
+      id: String(test?.id ?? test?.name ?? '').trim(),
+      sensitivity: Number(test?.sensitivity ?? test?.sens ?? 0),
+      specificity: Number(test?.specificity ?? test?.spec ?? 0),
+      turnaround_time: Number(test?.turnaround_time ?? test?.tat ?? 0),
+      turnaround_time_unit: String(test?.turnaround_time_unit ?? test?.tatUnit ?? 'hr').trim().toLowerCase(),
+      skill_level: String(test?.skill_level ?? test?.skill ?? '').trim().toLowerCase(),
+      cost: Number(test?.cost ?? 0),
+      sample_types: normalizeOptimizationSignatureList(test?.sample_types ?? [test?.sample].filter(Boolean)),
+      requires_lab_technician: Boolean(test?.requires_lab_technician),
+      requires_radiologist: Boolean(test?.requires_radiologist),
+      requires_specialist_physician: Boolean(test?.requires_specialist_physician),
+    }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+
+  return JSON.stringify({
+    project_id: payload?.project_id ?? null,
+    run_mode: String(payload?.run_mode ?? 'light').toLowerCase(),
+    constraints: {
+      prevalence: payload?.constraints?.prevalence ?? payload?.prevalence ?? null,
+      min_sensitivity: payload?.constraints?.min_sensitivity ?? null,
+      min_specificity: payload?.constraints?.min_specificity ?? null,
+      max_cost_per_patient_usd: payload?.constraints?.max_cost_per_patient_usd ?? null,
+      max_turnaround_time_hours: payload?.constraints?.max_turnaround_time_hours ?? null,
+      lab_technician_allowed: Boolean(payload?.constraints?.lab_technician_allowed),
+      radiologist_allowed: Boolean(payload?.constraints?.radiologist_allowed),
+      specialist_physician_allowed: Boolean(payload?.constraints?.specialist_physician_allowed),
+      primary_care: Boolean(payload?.constraints?.primary_care),
+      hospital: Boolean(payload?.constraints?.hospital),
+      community: Boolean(payload?.constraints?.community),
+      mobile_unit: Boolean(payload?.constraints?.mobile_unit),
+      none_allowed: Boolean(payload?.constraints?.none_allowed),
+      blood_allowed: Boolean(payload?.constraints?.blood_allowed),
+      urine_allowed: Boolean(payload?.constraints?.urine_allowed),
+      stool_allowed: Boolean(payload?.constraints?.stool_allowed),
+      sputum_allowed: Boolean(payload?.constraints?.sputum_allowed),
+      nasal_swab_allowed: Boolean(payload?.constraints?.nasal_swab_allowed),
+      imaging_allowed: Boolean(payload?.constraints?.imaging_allowed),
+    },
+    search_config: {
+      max_stages: payload?.search_config?.max_stages ?? null,
+      max_tests_per_realized_path: payload?.search_config?.max_tests_per_realized_path ?? null,
+      max_parallel_block_size: payload?.search_config?.max_parallel_block_size ?? null,
+      max_candidates: payload?.search_config?.max_candidates ?? null,
+      time_limit_seconds: payload?.search_config?.time_limit_seconds ?? null,
+      allow_repeated_test: Boolean(payload?.search_config?.allow_repeated_test),
+      allow_same_test_in_different_branches: Boolean(payload?.search_config?.allow_same_test_in_different_branches),
+    },
+    tests: normalizedTests,
+  });
+}
+
+async function restoreStoredOptimizationRun() {
+  const stored = readStoredOptimizationRunState();
+  if (!stored?.runId) {
+    return null;
+  }
+
+  try {
+    const run = await fetchOptimizationRun(stored.runId);
+    return applyOptimizationRunState(run);
+  } catch {
+    try {
+      const latest = await request('get', '/api/optimization-runs/latest');
+      return applyOptimizationRunState(latest);
+    } catch {
+      return null;
+    }
+  }
+}
+
+async function getReusableOptimizationRun(payload) {
+  const stored = readStoredOptimizationRunState();
+  if (!stored?.runId) {
+    return null;
+  }
+
+  const signature = buildOptimizationPayloadSignature(payload);
+  if (stored.signature && stored.signature !== signature) {
+    return null;
+  }
+
+  try {
+    const run = window.OptiDxOptimizationRun?.id && String(window.OptiDxOptimizationRun.id) === String(stored.runId)
+      ? window.OptiDxOptimizationRun
+      : await fetchOptimizationRun(stored.runId);
+    const state = applyOptimizationRunState(run);
+    const status = String(state?.status || '').toLowerCase();
+    if (['queued', 'running'].includes(status)) {
+      watchOptimizationRun(stored.runId);
+    }
+    return state;
+  } catch {
+    return null;
+  }
+}
+
 async function fetchOptimizationRun(runId) {
   return request('get', `/api/optimization-runs/${runId}`);
 }
@@ -2306,6 +2464,9 @@ async function fetchOptimizationRun(runId) {
 function applyOptimizationRunState(run) {
   const normalizedRun = run && typeof run === 'object' ? { ...run } : null;
   window.OptiDxOptimizationRun = normalizedRun;
+  if (normalizedRun?.id != null) {
+    writeStoredOptimizationRunState(normalizedRun);
+  }
   window.OptiDxOptimizationResults = normalizedRun
     ? {
         ...normalizedRun,
@@ -2373,6 +2534,15 @@ async function waitForOptimizationRun(runId, { intervalMs = 1000, timeoutMs = 42
 }
 
 async function optimizePathways(payload, options = {}) {
+  const reusableRun = await getReusableOptimizationRun(payload);
+  if (reusableRun && !['failed'].includes(String(reusableRun?.status || '').toLowerCase())) {
+    if (String(reusableRun?.status || '').toLowerCase() === 'success') {
+      showToast('Reopened the stored optimization results.', 'info');
+    }
+
+    return reusableRun.result_payload || reusableRun;
+  }
+
   const response = await request('post', '/api/pathways/optimize', payload);
   const runMode = String(payload?.run_mode || response?.run_mode || 'light').toLowerCase();
   const shouldWaitForCompletion = options.waitForCompletion ?? runMode !== 'extensive';

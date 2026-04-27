@@ -66,10 +66,10 @@
 
 ## 9. Asynchronous optimization runner
 
-- **Context:** The optimizer now runs as a queued Laravel job and the browser polls the run-status endpoint until completion.
-- **Limitation:** Progress is still coarse-grained, and the UI only learns about completion, infeasibility, or timeout after polling the run record.
-- **Improvement:** Add incremental progress snapshots, cancellation support, and structured stage messages to the queued run lifecycle.
-- **Benefit:** Makes large optimization runs feel more responsive without reintroducing a long synchronous request.
+- **Context:** The optimizer now launches through a detached Artisan command and the browser polls the run-status endpoint until completion.
+- **Limitation:** Progress snapshots are live now, but there is still no append-only history view or cancellation support, and the run list still only rehydrates the latest matching result.
+- **Improvement:** Add incremental progress history, cancellation support, and structured stage messages to the detached run lifecycle.
+- **Benefit:** Makes large optimization runs feel more responsive and auditable without reintroducing a long synchronous request or queue-worker dependency.
 - **Priority:** High
 
 ## 10. Persisted latest evaluation state
@@ -225,7 +225,15 @@
 ## 27. Optimization progress calibration and run detail view
 
 - **Context:** The optimizer now streams live progress snapshots from Python into `optimization_runs` and the browser renders those backend values directly.
-- **Limitation:** The progress percent is still an estimated score derived from search counters and configured budgets, and there is no dedicated run-detail screen for inspecting the full progress history or notification history of a long extensive run.
-- **Improvement:** Add a richer run history view, store progress snapshots as a small append-only audit trail, and refine the percent estimator once real large-catalog runs have been measured in production.
-- **Benefit:** Gives users a clearer audit trail for long-running optimization work and makes the visible progress bar more trustworthy over time.
+- **Limitation:** The UI now uses an indeterminate activity animation, but there is still no dedicated run-detail screen for inspecting the full progress history or notification history of a long extensive run.
+- **Improvement:** Add a richer run history view and store progress snapshots as a small append-only audit trail so the activity animation can be paired with a readable event log.
+- **Benefit:** Gives users a clearer audit trail for long-running optimization work without pretending the app knows the final pathway count in advance.
+
+## 28. Optimization result library
+
+- **Context:** Optimization results are now persisted on `optimization_runs`, the browser stores the last run reference, and the latest stored result can be reopened without re-running when the request signature matches.
+- **Limitation:** Reuse is still limited to the most recent matching run, so there is no dedicated optimization-library UI for browsing older runs or comparing historical optimizations.
+- **Improvement:** Add a run library with searchable history, saved filters, and side-by-side comparison of previous optimization outputs.
+- **Benefit:** Makes optimization work reusable across sessions and provides a durable review trail for decision-making.
+- **Priority:** Medium
 - **Priority:** Medium

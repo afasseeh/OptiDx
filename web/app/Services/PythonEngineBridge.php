@@ -18,6 +18,8 @@ class PythonEngineBridge
         $process->setEnv([
             'PYTHONPATH' => $root,
         ]);
+        $process->setTimeout(null);
+        $process->setIdleTimeout(null);
         $process->run();
 
         if (! $process->isSuccessful()) {
@@ -60,6 +62,8 @@ class PythonEngineBridge
         $process->setEnv([
             'PYTHONPATH' => $root,
         ]);
+        $process->setTimeout(null);
+        $process->setIdleTimeout(null);
 
         $stdoutBuffer = '';
         $stderrBuffer = '';

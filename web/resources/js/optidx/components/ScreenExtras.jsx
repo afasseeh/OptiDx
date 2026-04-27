@@ -188,21 +188,21 @@ function LegacyScreenScenarios({ setScreen }) {
           </>}
         />
         <div className="page" style={{maxWidth:1280}}>
-          <div className="card card--pad" style={{borderLeft:"3px solid var(--sme-orange)"}}>
-            <div className="row" style={{marginBottom:10}}>
-              <div>
-                <div className="u-meta">Background run</div>
-                <h1 style={{fontSize:22, marginTop:4}}>The optimization is still running</h1>
+        <div className="card card--pad" style={{borderLeft:"3px solid var(--sme-orange)"}}>
+          <div className="row" style={{marginBottom:10}}>
+            <div>
+              <div className="u-meta">Background run</div>
+              <h1 style={{fontSize:22, marginTop:4}}>The optimization is still running</h1>
               </div>
               <div className="spacer"/>
               <span className="chip chip--orange">{String(optimization?.run_mode || "light").toUpperCase()}</span>
             </div>
-            <div className="optimization-progress" aria-label="Optimization progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(optimization?.progress_percent || 0)}>
-              <div className="optimization-progress__bar is-running" style={{width:`${optimization?.progress_percent ?? 0}%`}} />
+            <div className="optimization-progress optimization-progress--indeterminate" aria-label="Optimization activity" role="progressbar" aria-busy="true" aria-valuetext="Optimization in progress">
+              <div className="optimization-progress__bar is-running" />
             </div>
             <div className="optimization-progress__meta">
-              <span>{optimization?.progress_stage || optimization?.status || "Running"}</span>
-              <span>{formatOptimizationProgress(optimization?.progress_percent ?? 0)}</span>
+              <span>{optimization?.progress_stage || optimization?.status || "Working"}</span>
+              <span>Search in progress</span>
             </div>
             {optimization?.progress_message && (
               <p style={{marginTop:8, color:"var(--fg-2)", fontSize:13, lineHeight:1.5}}>{optimization.progress_message}</p>
@@ -271,12 +271,12 @@ function LegacyScreenScenarios({ setScreen }) {
               <div className="spacer"/>
               <span className="chip chip--orange">{String(optimization?.run_mode || "light").toUpperCase()}</span>
             </div>
-            <div className="optimization-progress" aria-label="Optimization progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(optimization?.progress_percent || 0)}>
-              <div className="optimization-progress__bar is-running" style={{width:`${optimization?.progress_percent ?? 0}%`}} />
+            <div className="optimization-progress optimization-progress--indeterminate" aria-label="Optimization activity" role="progressbar" aria-busy="true" aria-valuetext="Optimization in progress">
+              <div className="optimization-progress__bar is-running" />
             </div>
             <div className="optimization-progress__meta">
-              <span>{optimization?.progress_stage || optimization?.status || "Running"}</span>
-              <span>{formatOptimizationProgress(optimization?.progress_percent ?? 0)}</span>
+              <span>{optimization?.progress_stage || optimization?.status || "Working"}</span>
+              <span>Search in progress</span>
             </div>
             {optimization?.progress_message && (
               <p style={{marginTop:8, color:"var(--fg-2)", fontSize:13, lineHeight:1.5}}>{optimization.progress_message}</p>
@@ -477,12 +477,12 @@ function ScreenScenarios({ setScreen }) {
               <div className="spacer"/>
               <span className="chip chip--orange">{String(optimization?.run_mode || "light").toUpperCase()}</span>
             </div>
-            <div className="optimization-progress" aria-label="Optimization progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(optimization?.progress_percent || 0)}>
-              <div className="optimization-progress__bar is-running" style={{width:`${optimization?.progress_percent ?? 0}%`}} />
+            <div className="optimization-progress optimization-progress--indeterminate" aria-label="Optimization activity" role="progressbar" aria-busy="true" aria-valuetext="Optimization in progress">
+              <div className="optimization-progress__bar is-running" />
             </div>
             <div className="optimization-progress__meta">
               <span>{optimization?.progress_stage || optimization?.status || "Running"}</span>
-              <span>{formatOptimizationProgress(optimization?.progress_percent ?? 0)}</span>
+              <span>Search in progress</span>
             </div>
             {optimization?.progress_message && (
               <p style={{marginTop:8, color:"var(--fg-2)", fontSize:13, lineHeight:1.5}}>{optimization.progress_message}</p>

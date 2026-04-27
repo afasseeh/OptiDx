@@ -627,6 +627,13 @@ input, select, textarea { font-family: inherit; font-size: inherit; color: inher
   position: relative;
 }
 
+.optimization-progress--indeterminate .optimization-progress__bar {
+  width: 38%;
+  min-width: 120px;
+  animation: optimization-indeterminate 1.55s ease-in-out infinite;
+}
+
+.optimization-progress--indeterminate .optimization-progress__bar::after,
 .optimization-progress__bar.is-running::after {
   content: "";
   position: absolute;
@@ -638,6 +645,12 @@ input, select, textarea { font-family: inherit; font-size: inherit; color: inher
 @keyframes optimization-shimmer {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(100%); }
+}
+
+@keyframes optimization-indeterminate {
+  0% { transform: translateX(-120%); }
+  50% { transform: translateX(80%); }
+  100% { transform: translateX(220%); }
 }
 
 .optimization-progress__meta {

@@ -1,5 +1,41 @@
 # Change Log
 
+## 2026-04-27 - Switch optimization progress to indeterminate activity
+
+- Summary: Replaced the percentage-style optimization progress bars with indeterminate activity animations on the wizard, scenarios, and workspace home surfaces so the UI no longer implies a known total pathway count.
+- Files or modules affected: `web/resources/js/optidx/app.css`, `web/resources/js/optidx/components/ScreenWizard.jsx`, `web/resources/js/optidx/components/ScreenExtras.jsx`, `web/resources/js/optidx/components/ScreenHome.jsx`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: The optimizer does not know the total number of pathways up front, so a completion-style bar was misleading even when the backend was genuinely making progress.
+- Architecture impact: The progress indicator is now an activity animation rather than a completion meter, while the backend still owns the live run status and terminal result.
+- Migration or deployment impact: Rebuild the frontend bundle and redeploy the PHP app so the new activity animation is live. No database migration was required.
+- Follow-up notes: Validation should include a quick browser smoke once the rebuilt bundle is deployed so the wizard and scenarios screens both show the new indeterminate treatment.
+
+## 2026-04-27 - Remove the Python bridge timeout for optimization runs
+
+- Summary: Disabled Symfony Process timeouts in the Python bridge so long extensive optimization runs are not terminated after 60 seconds by the PHP launcher, while keeping the existing detached launcher and progress-persistence flow intact.
+- Files or modules affected: `web/app/Services/PythonEngineBridge.php`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: Extensive optimization runs were still being killed by the default Process timeout even though the detached launcher was working correctly and the optimizer itself was still running.
+- Architecture impact: The Python bridge now treats optimization subprocesses as long-lived work units with no launcher-imposed timeout, which matches the intended background-search behavior.
+- Migration or deployment impact: Rebuild and redeploy the PHP app so the bridge timeout change is active. No database migration was required.
+- Follow-up notes: Validation passed with `php artisan test --filter=PythonEngineBridgeTest` and `php artisan test --filter=OptimizationServiceTest`.
+
+## 2026-04-27 - Persist and reopen optimization runs
+
+- Summary: Added server-side latest-run lookup for optimization results, stored the last optimization run reference and request signature in browser storage so identical runs can reopen stored results instead of rerunning, hid the wizard overlay once terminal results are handed off, and kept the minimum 30-second progress illusion only for runs that actually finish very quickly.
+- Files or modules affected: `web/app/Http/Controllers/Api/OptimizationRunController.php`, `web/routes/api.php`, `web/resources/js/optidx/actions.js`, `web/resources/js/optidx/components/ScreenWizard.jsx`, `web/resources/js/optidx/components/ScreenHome.jsx`, `web/tests/Feature/PathwayApiTest.php`, `ARCHITECTURE.md`, `FUTURE_TASKS.md`, `CHANGE_LOG.md`.
+- Reason for the change: The optimizer results were being treated as one-off UI state, the completion overlay was lingering longer than it should, and the fast-run smoothing rule needed to apply only to genuinely short runs instead of every optimization.
+- Architecture impact: Optimization results are now rehydratable from persisted run records, the browser can reuse a stored result when the request signature matches, and the wizard progress overlay is now a transient display layer rather than a persistent blocking surface.
+- Migration or deployment impact: Rebuild the frontend bundle and redeploy the Laravel app so the latest-run endpoint, result reuse, and overlay timing changes are active. No database migration was required.
+- Follow-up notes: Validation passed with `php artisan test --filter=PathwayApiTest`, `php artisan test --filter=OptimizationServiceTest`, and `npm run build`.
+
+## 2026-04-27 - Detach optimization runs from the queue worker on Windows
+
+- Summary: Switched both light and extensive optimization launches to a detached Artisan process with a Windows new-console option, marked runs as `running` immediately instead of leaving them queued, and verified the launcher by invoking it against a live run that completed to a terminal result.
+- Files or modules affected: `web/app/Http/Controllers/Api/PathwayController.php`, `web/resources/js/optidx/components/ScreenWizard.jsx`, `web/app/Services/OptimizationService.php`, `web/tests/Feature/PathwayApiTest.php`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: Extensive runs were never leaving the `queued` state because the database queue worker was not active, and the previous detached launch path did not reliably survive the Windows request boundary.
+- Architecture impact: Optimization execution is now owned by a single detached Artisan command path for both run modes, with queued jobs no longer required for the optimization lifecycle on this environment.
+- Migration or deployment impact: Redeploy the PHP app and rebuild the frontend bundle so the new detached-launch controller path is live. No database migration was needed.
+- Follow-up notes: Verification passed with `php artisan test --filter=OptimizationServiceTest`, `php artisan test --filter=PathwayApiTest`, and a live `php -r` smoke that launched a run and observed it reach `infeasible` through the detached path.
+
 ## 2026-04-27 - Fix false infeasible optimization runs from malformed wizard payloads
 
 - Summary: Fixed the optimization launch path so persisted workspace tests with numeric database ids are no longer dropped during backend normalization, prevalence values are defensively rescaled back into fractions on both the browser and Laravel sides, light runs now carry the active project id into the run record, and infeasible/time-limit completions no longer flash a transient toast over the scenarios screen.

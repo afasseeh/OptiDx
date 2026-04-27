@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\EvaluationResult;
 use App\Models\OptimizationRun;
 use App\Models\Pathway;
-use App\Jobs\ExecuteOptimizationRun;
 use App\Services\OptimizationService;
 use App\Services\PathwayGraphService;
 use App\Services\PathwayDefinitionService;
@@ -241,22 +240,17 @@ class PathwayController extends Controller
             'search_exhaustive' => false,
         ]);
 
-        if ($payload['run_mode'] === 'light' && ! app()->runningUnitTests()) {
-            $this->bridge->ensureWritableProcessTempDirectory();
-            $optimizerService = $this->optimizer;
-            $optimizerService->recordRunStart($run);
+        if (app()->runningUnitTests()) {
+            return response()->json($run->fresh(), 202);
+        }
 
-            $process = new Process([
-                $this->bridge->resolvePhpCliBinary(),
-                base_path('artisan'),
-                'optidx:run-optimization',
-                (string) $run->id,
-            ], base_path());
-            $process->setTimeout(null);
-            $process->disableOutput();
-            $process->start();
-        } else {
-            ExecuteOptimizationRun::dispatch($run->id);
+        $run = $this->optimizer->recordRunStart($run);
+
+        try {
+            $this->launchDetachedOptimizationRun($run);
+        } catch (\Throwable $throwable) {
+            $failedRun = $this->optimizer->recordRunFailure($run, $throwable);
+            return response()->json($failedRun, 500);
         }
 
         return response()->json($run->fresh(), 202);
@@ -630,6 +624,28 @@ XML;
             'engine_definition' => $engineDefinition,
             'metadata' => $editorDefinition['metadata'] ?? [],
         ];
+    }
+
+    private function launchDetachedOptimizationRun(OptimizationRun $run): void
+    {
+        $this->bridge->ensureWritableProcessTempDirectory();
+
+        $process = new Process([
+            $this->bridge->resolvePhpCliBinary(),
+            base_path('artisan'),
+            'optidx:run-optimization',
+            (string) $run->id,
+        ], base_path());
+        $process->setTimeout(null);
+        $process->disableOutput();
+
+        if (PHP_OS_FAMILY === 'Windows') {
+            $process->setOptions([
+                'create_new_console' => true,
+            ]);
+        }
+
+        $process->start();
     }
 
     private function looksLikeCanvasGraph(array $definition): bool

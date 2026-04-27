@@ -6,6 +6,7 @@ const OPTIMIZATION_STAGES = [
   "Ranking the Pareto frontier candidates.",
   "Packaging the best pathways for review.",
 ];
+const MIN_OPTIMIZATION_VISIBLE_MS = 30000;
 
 const DEFAULT_WIZARD_PROJECT = {
   conditionName: "Pulmonary tuberculosis",
@@ -107,6 +108,8 @@ function ScreenWizard({ setScreen }) {
     settingMobileUnit: initialProject.settingMobileUnit,
   }));
   const [optimization, setOptimization] = useState({ status: "idle", progress: 0, stage: "", error: null });
+  const optimizationStartRef = useRef(null);
+  const optimizationHoldTimerRef = useRef(null);
   const steps = ["Disease", "Test library", "Constraints", "Review", "Run"];
 
   useEffect(() => {
@@ -142,6 +145,13 @@ function ScreenWizard({ setScreen }) {
     window.addEventListener('optidx-optimization-updated', syncOptimizationState);
     syncOptimizationState();
     return () => window.removeEventListener('optidx-optimization-updated', syncOptimizationState);
+  }, []);
+
+  useEffect(() => () => {
+    if (optimizationHoldTimerRef.current) {
+      window.clearInterval(optimizationHoldTimerRef.current);
+      optimizationHoldTimerRef.current = null;
+    }
   }, []);
 
   const projectRef = useRef(project);
@@ -267,6 +277,12 @@ function ScreenWizard({ setScreen }) {
   const runOptimization = async () => {
     if (optimization.status === "running") return;
 
+    if (optimizationHoldTimerRef.current) {
+      window.clearInterval(optimizationHoldTimerRef.current);
+      optimizationHoldTimerRef.current = null;
+    }
+
+    optimizationStartRef.current = Date.now();
     setOptimization({ status: "running", progress: 2, stage: OPTIMIZATION_STAGES[0], error: null });
 
     try {
@@ -357,26 +373,65 @@ function ScreenWizard({ setScreen }) {
       });
       const finalState = window.OptiDxOptimizationResults || result;
       const candidateCount = finalState?.pareto_frontier_ids?.length ?? finalState?.feasible_candidate_count ?? 0;
+      const elapsedMs = Date.now() - (optimizationStartRef.current || Date.now());
+      const terminalStatus = String(finalState?.status || '').toLowerCase();
+      const shouldHoldVisibleProgress = elapsedMs < MIN_OPTIMIZATION_VISIBLE_MS && !['queued', 'running'].includes(terminalStatus);
 
       if (runMode === "extensive" || ['queued', 'running'].includes(String(finalState?.status || '').toLowerCase())) {
         setOptimization({
-          status: "done",
-          progress: Number.isFinite(Number(finalState?.progress_percent)) ? Number(finalState.progress_percent) : 12,
-          stage: finalState?.progress_stage || "Optimization continues in the background.",
+          status: "idle",
+          progress: 0,
+          stage: "",
           error: null,
         });
         setScreen("scenarios");
         return;
       }
 
-      setOptimization({
-        status: "done",
-        progress: 100,
-        stage: `Prepared ${candidateCount} candidates.`,
-        error: null,
-      });
+      if (shouldHoldVisibleProgress) {
+        const startProgress = Math.max(10, Number.isFinite(Number(finalState?.progress_percent))
+          ? Number(finalState.progress_percent)
+          : Number(optimization.progress || 0));
+        const startedAt = optimizationStartRef.current || Date.now();
+
+        setOptimization({
+          status: "running",
+          progress: startProgress,
+          stage: finalState?.progress_stage || "Finalizing outputs.",
+          error: null,
+        });
+
+        optimizationHoldTimerRef.current = window.setInterval(() => {
+          const elapsed = Date.now() - startedAt;
+          const ratio = Math.min(1, elapsed / MIN_OPTIMIZATION_VISIBLE_MS);
+          const nextProgress = Math.min(99.5, startProgress + ((100 - startProgress) * ratio));
+
+          setOptimization(current => ({
+            ...current,
+            status: "running",
+            progress: nextProgress,
+            stage: finalState?.progress_stage || current.stage || "Finalizing outputs.",
+            error: null,
+          }));
+
+          if (elapsed >= MIN_OPTIMIZATION_VISIBLE_MS) {
+            window.clearInterval(optimizationHoldTimerRef.current);
+            optimizationHoldTimerRef.current = null;
+            setOptimization({ status: "idle", progress: 0, stage: "", error: null });
+            setScreen("scenarios");
+          }
+        }, 100);
+
+        return;
+      }
+
+      setOptimization({ status: "idle", progress: 0, stage: "", error: null });
       setScreen("scenarios");
     } catch (error) {
+      if (optimizationHoldTimerRef.current) {
+        window.clearInterval(optimizationHoldTimerRef.current);
+        optimizationHoldTimerRef.current = null;
+      }
       setOptimization({
         status: "error",
         progress: 0,
@@ -454,7 +509,7 @@ function ScreenWizard({ setScreen }) {
         {step === 2 && <WizardStep3 project={project} setProject={setProject}/>}
         {step === 3 && <WizardStep4 project={project}/>}
         {step === 4 && <WizardStep5 mode={mode} setMode={setMode} runMode={runMode} setRunMode={setRunMode}/>}
-        {optimization.status !== "idle" && (
+        {(optimization.status === "running" || optimization.status === "error") && (
           <OptimizationOverlay optimization={optimization} onOpenScenarios={() => setScreen("scenarios")} />
         )}
       </div>
@@ -465,6 +520,7 @@ function ScreenWizard({ setScreen }) {
 function OptimizationOverlay({ optimization, onOpenScenarios }) {
   const currentStage = optimization.stage || "Preparing candidate pathways.";
   const currentStageIndex = Math.max(0, OPTIMIZATION_STAGES.findIndex(stage => stage === currentStage));
+  const isRunning = optimization.status === "running";
   return (
     <div className="optimization-overlay">
       <div className={"card optimization-card " + (optimization.status === "running" ? "is-running" : optimization.status === "done" ? "is-done" : optimization.status === "error" ? "is-error" : "")}>
@@ -492,15 +548,18 @@ function OptimizationOverlay({ optimization, onOpenScenarios }) {
                 </span>
               ))}
             </div>
-            <div className="optimization-progress" aria-label="Optimization progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(optimization.progress || 0)}>
-              <div
-                className={"optimization-progress__bar " + (optimization.status === "running" ? "is-running" : "")}
-                style={{width: `${optimization.progress}%`}}
-              />
+            <div
+              className={"optimization-progress" + (isRunning ? " optimization-progress--indeterminate" : "")}
+              aria-label="Optimization progress"
+              role="progressbar"
+              aria-busy={isRunning ? "true" : "false"}
+              aria-valuetext={isRunning ? "Optimization in progress" : optimization.status === "error" ? "Optimization stopped" : "Optimization complete"}
+            >
+              <div className={"optimization-progress__bar " + (isRunning ? "is-running" : "")} />
             </div>
             <div className="optimization-progress__meta">
-              <span>{optimization.status === "done" ? "Finished" : optimization.status === "error" ? "Stopped" : "Running"}</span>
-              <span>{formatOptimizationProgress(optimization.progress)}</span>
+              <span>{optimization.status === "done" ? "Finished" : optimization.status === "error" ? "Stopped" : "Working"}</span>
+              <span>{isRunning ? "Search in progress" : "Ready"}</span>
             </div>
             {optimization.error && (
               <div className="banner banner--err" style={{marginTop:12}}>

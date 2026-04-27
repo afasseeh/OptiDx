@@ -26,6 +26,7 @@ Route::middleware(['web', 'auth'])->group(function () {
     Route::post('pathways/import', [PathwayController::class, 'import']);
     Route::get('pathways/{pathway}/export/json', [PathwayController::class, 'exportJson']);
     Route::get('pathways/{pathway}/export/report', [PathwayController::class, 'exportReport']);
+    Route::get('optimization-runs/latest', [OptimizationRunController::class, 'latest']);
     Route::get('optimization-runs/{optimizationRun}', [OptimizationRunController::class, 'show']);
 
     Route::apiResource('projects', ProjectController::class);
