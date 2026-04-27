@@ -52,6 +52,21 @@ function dispatchOptimizationEvent() {
 
 const ACTIVE_PROJECT_STORAGE_KEY = 'optidx.active-project-id';
 const OPTIMIZATION_RUN_STORAGE_KEY = 'optidx.optimization-run-state';
+const OPTIMIZATION_RUN_SESSION_KEY = 'optidx.optimization-run-active';
+const OPTIMIZATION_RUN_ACTIVE_STATUSES = new Set(['queued', 'running']);
+const OPTIMIZATION_RUN_TERMINAL_STATUSES = new Set([
+  'success',
+  'infeasible',
+  'no_feasible_found_time_limit',
+  'failed',
+  'cancelled',
+]);
+const OPTIMIZATION_RUN_REUSABLE_STATUSES = new Set([
+  'success',
+  'infeasible',
+  'no_feasible_found_time_limit',
+  'failed',
+]);
 
 function dispatchAuthEvent(detail = null, type = 'optidx-auth-updated') {
   window.dispatchEvent(new CustomEvent(type, {
@@ -82,6 +97,14 @@ function writeActiveProjectId(projectId) {
 
 function readStoredOptimizationRunState() {
   try {
+    const sessionRaw = window.localStorage?.getItem(OPTIMIZATION_RUN_SESSION_KEY);
+    if (sessionRaw) {
+      const sessionParsed = JSON.parse(sessionRaw);
+      if (sessionParsed && typeof sessionParsed === 'object') {
+        return sessionParsed;
+      }
+    }
+
     const raw = window.localStorage?.getItem(OPTIMIZATION_RUN_STORAGE_KEY);
     if (!raw) {
       return null;
@@ -98,11 +121,53 @@ function writeStoredOptimizationRunState(run) {
   try {
     if (!run || run.id == null) {
       window.localStorage?.removeItem(OPTIMIZATION_RUN_STORAGE_KEY);
+      window.localStorage?.removeItem(OPTIMIZATION_RUN_SESSION_KEY);
+      return;
+    }
+
+    const status = String(run.status || '').toLowerCase();
+    const signature = run.input_payload ? buildOptimizationPayloadSignature(run.input_payload) : null;
+    const storagePayload = {
+      runId: String(run.id),
+      signature,
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (OPTIMIZATION_RUN_ACTIVE_STATUSES.has(status)) {
+      window.localStorage?.setItem(OPTIMIZATION_RUN_SESSION_KEY, JSON.stringify(storagePayload));
+      return;
+    }
+
+    window.localStorage?.removeItem(OPTIMIZATION_RUN_SESSION_KEY);
+    window.localStorage?.setItem(OPTIMIZATION_RUN_STORAGE_KEY, JSON.stringify(storagePayload));
+  } catch {
+    // Ignore storage failures in hardened browser contexts.
+  }
+}
+
+function readStoredOptimizationRunSession() {
+  try {
+    const raw = window.localStorage?.getItem(OPTIMIZATION_RUN_SESSION_KEY);
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredOptimizationRunSession(run) {
+  try {
+    if (!run || run.id == null) {
+      window.localStorage?.removeItem(OPTIMIZATION_RUN_SESSION_KEY);
       return;
     }
 
     const signature = run.input_payload ? buildOptimizationPayloadSignature(run.input_payload) : null;
-    window.localStorage?.setItem(OPTIMIZATION_RUN_STORAGE_KEY, JSON.stringify({
+    window.localStorage?.setItem(OPTIMIZATION_RUN_SESSION_KEY, JSON.stringify({
       runId: String(run.id),
       signature,
       updatedAt: new Date().toISOString(),
@@ -115,8 +180,64 @@ function writeStoredOptimizationRunState(run) {
 function clearStoredOptimizationRunState() {
   try {
     window.localStorage?.removeItem(OPTIMIZATION_RUN_STORAGE_KEY);
+    window.localStorage?.removeItem(OPTIMIZATION_RUN_SESSION_KEY);
   } catch {
     // Ignore storage failures in hardened browser contexts.
+  }
+}
+
+function clearOptimizationRunState() {
+  stopOptimizationRunWatcher();
+  clearStoredOptimizationRunState();
+  window.OptiDxOptimizationRun = null;
+  window.OptiDxOptimizationResults = null;
+  window.OptiDxOptimizationScenarios = null;
+  dispatchOptimizationEvent();
+}
+
+function dismissOptimizationRunFromWorkspace() {
+  stopOptimizationRunWatcher();
+
+  try {
+    window.localStorage?.removeItem(OPTIMIZATION_RUN_SESSION_KEY);
+  } catch {
+    // Ignore storage failures in hardened browser contexts.
+  }
+
+  const run = window.OptiDxOptimizationRun || window.OptiDxOptimizationResults;
+  const status = String(run?.status || '').toLowerCase();
+  if (!OPTIMIZATION_RUN_TERMINAL_STATUSES.has(status)) {
+    window.OptiDxOptimizationRun = null;
+    window.OptiDxOptimizationResults = null;
+    window.OptiDxOptimizationScenarios = null;
+    dispatchOptimizationEvent();
+    return;
+  }
+
+  clearStoredOptimizationRunState();
+  window.OptiDxOptimizationRun = null;
+  window.OptiDxOptimizationResults = null;
+  window.OptiDxOptimizationScenarios = null;
+  dispatchOptimizationEvent();
+}
+
+async function cancelOptimizationRun(runId, options = {}) {
+  if (!runId) {
+    return null;
+  }
+
+  try {
+    stopOptimizationRunWatcher();
+    const response = await request('post', `/api/optimization-runs/${runId}/cancel`, {
+      reason: options.reason || 'Optimization run was cancelled by the user.',
+    });
+    dismissOptimizationRunFromWorkspace();
+    showToast(options.toastMessage || 'Optimization run stopped.', 'info');
+    return response;
+  } catch (error) {
+    const message = error?.response?.data?.message || error?.message || 'Unable to stop the optimization run.';
+    showToast(message, 'error');
+    throw error;
   }
 }
 
@@ -590,7 +711,8 @@ function buildProjectPayloadFromWizard(wizardState = {}, currentRecord = null) {
 }
 
 function getWorkspaceProjects() {
-  return window.OptiDxWorkspace?.projects || window.SEED_PROJECTS || [];
+  const projects = window.OptiDxWorkspace?.projects || window.SEED_PROJECTS || [];
+  return Array.isArray(projects) ? projects : [];
 }
 
 function getActiveProjectRecord() {
@@ -693,17 +815,51 @@ function toWorkspaceIndex(items, key = 'id') {
 }
 
 function setWorkspaceSnapshot(partial) {
+  const previousWorkspace = window.OptiDxWorkspace || {};
+  const nextProjects = Array.isArray(partial?.projects)
+    ? partial.projects
+    : Array.isArray(previousWorkspace.projects)
+      ? previousWorkspace.projects
+      : [];
+  const nextPathways = Array.isArray(partial?.pathways)
+    ? partial.pathways
+    : Array.isArray(previousWorkspace.pathways)
+      ? previousWorkspace.pathways
+      : [];
+  const nextTests = Array.isArray(partial?.tests)
+    ? partial.tests
+    : Array.isArray(previousWorkspace.tests)
+      ? previousWorkspace.tests
+      : [];
+  const nextSettings = Array.isArray(partial?.settings)
+    ? partial.settings
+    : Array.isArray(previousWorkspace.settings)
+      ? previousWorkspace.settings
+      : [];
+  const nextProjectsById = partial?.projectsById && typeof partial.projectsById === 'object'
+    ? partial.projectsById
+    : previousWorkspace.projectsById || {};
+  const nextPathwaysById = partial?.pathwaysById && typeof partial.pathwaysById === 'object'
+    ? partial.pathwaysById
+    : previousWorkspace.pathwaysById || {};
+  const nextTestsById = partial?.testsById && typeof partial.testsById === 'object'
+    ? partial.testsById
+    : previousWorkspace.testsById || {};
+  const nextSettingsByKey = partial?.settingsByKey && typeof partial.settingsByKey === 'object'
+    ? partial.settingsByKey
+    : previousWorkspace.settingsByKey || {};
+
   window.OptiDxWorkspace = {
-    projects: window.OptiDxWorkspace?.projects || [],
-    pathways: window.OptiDxWorkspace?.pathways || [],
-    tests: window.OptiDxWorkspace?.tests || [],
-    settings: window.OptiDxWorkspace?.settings || [],
-    projectsById: window.OptiDxWorkspace?.projectsById || {},
-    pathwaysById: window.OptiDxWorkspace?.pathwaysById || {},
-    testsById: window.OptiDxWorkspace?.testsById || {},
-    settingsByKey: window.OptiDxWorkspace?.settingsByKey || {},
-    ...window.OptiDxWorkspace,
+    ...previousWorkspace,
     ...partial,
+    projects: nextProjects,
+    pathways: nextPathways,
+    tests: nextTests,
+    settings: nextSettings,
+    projectsById: nextProjectsById,
+    pathwaysById: nextPathwaysById,
+    testsById: nextTestsById,
+    settingsByKey: nextSettingsByKey,
   };
   dispatchWorkspaceEvent();
   return window.OptiDxWorkspace;
@@ -737,15 +893,18 @@ function upsertWorkspacePathwayRecord(record) {
 }
 
 function getWorkspacePathways() {
-  return window.OptiDxWorkspace?.pathways || window.SEED_PATHWAYS || [];
+  const pathways = window.OptiDxWorkspace?.pathways || window.SEED_PATHWAYS || [];
+  return Array.isArray(pathways) ? pathways : [];
 }
 
 function getWorkspaceTests() {
-  return window.OptiDxWorkspace?.tests || window.SEED_TESTS || [];
+  const tests = window.OptiDxWorkspace?.tests || window.SEED_TESTS || [];
+  return Array.isArray(tests) ? tests : [];
 }
 
 function getWorkspaceSettings() {
-  return window.OptiDxWorkspace?.settings || [];
+  const settings = window.OptiDxWorkspace?.settings || [];
+  return Array.isArray(settings) ? settings : [];
 }
 
 function getWorkspaceSetting(key, scope = 'workspace') {
@@ -787,6 +946,11 @@ async function loadWorkspaceData() {
     testsById: {},
     settingsByKey: {},
   });
+
+  // Replace the prototype seed graph before the async workspace bootstrap
+  // resolves so the Builder cannot mount against stale demo pathway data.
+  setActivePathwayRecord(null);
+  setActivePathwayDraft(createStarterCanvasGraph());
 
   const [projectsResponse, pathwaysResponse, testsResponse, settingsResponse] = await Promise.allSettled([
     request('get', '/api/projects'),
@@ -2179,6 +2343,33 @@ const OPTIMIZATION_RESULT_LABELS = {
   most_cost_effective: 'Most cost-effective',
 };
 
+function isGenericScenarioLabel(value) {
+  const label = String(value || '').trim().toLowerCase();
+  return !label
+    || label === 'search_candidate'
+    || label === 'search candidate'
+    || label === 'candidate'
+    || /^candidate[_\s-]?\d*$/.test(label)
+    || /^search[_\s-]?candidate(?:[_\s-]?\d+)?$/.test(label);
+}
+
+function resolveScenarioLabel(...candidates) {
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+
+    const label = String(candidate).trim();
+    if (!label || isGenericScenarioLabel(label)) {
+      continue;
+    }
+
+    return label;
+  }
+
+  return null;
+}
+
 function scenarioTitle(key, fallback = null) {
   if (fallback) return fallback;
   return OPTIMIZATION_RESULT_LABELS[key] || key.replaceAll('_', ' ');
@@ -2207,13 +2398,34 @@ function formatScenarioMetric(metricName, value) {
 
 function buildScenarioFromSelectedOutput(key, entry, result, index) {
   if (!entry) {
+    const objectiveName = scenarioTitle(key);
     return {
-      id: key,
+      id: String(index + 1).padStart(2, '0'),
       key,
-      label: scenarioTitle(key),
+      label: objectiveName,
+      objectiveName,
+      metricName: null,
+      metricValue: null,
+      metricDisplay: 'n/a',
+      sens: 0,
+      spec: 0,
+      cost: 0,
+      cpdc: 0,
+      balancedAccuracy: 0,
+      youdenIndex: 0,
+      ppv: 0,
+      npv: 0,
+      tatHours: null,
+      tat: 'n/a',
+      tests: [],
+      trade: 'No feasible pathway',
+      tag: 'No feasible output',
       status: result?.status || 'infeasible',
       feasible: false,
       notes: result?.message || 'No feasible pathway.',
+      pathway: null,
+      pathwayJson: null,
+      optimizerMetadata: {},
     };
   }
 
@@ -2242,11 +2454,19 @@ function buildScenarioFromSelectedOutput(key, entry, result, index) {
   };
   const metricName = metricLookup[key] || 'expected_cost_population';
   const metricValue = metrics[metricName] ?? null;
+  const objectiveName = scenarioTitle(key);
+  const displayLabel = resolveScenarioLabel(
+    entry.label,
+    entry.template_summary,
+    entry.optimizer_metadata?.template_summary,
+    entry.templateSummary,
+  ) || objectiveName;
 
   return {
     id: String(index + 1).padStart(2, '0'),
     key,
-    label: scenarioTitle(key, entry.template_summary || entry.optimizer_metadata?.template_summary || entry.templateSummary),
+    label: displayLabel,
+    objectiveName,
     metricName,
     metricValue,
     metricDisplay: formatScenarioMetric(metricName, metricValue),
@@ -2260,11 +2480,11 @@ function buildScenarioFromSelectedOutput(key, entry, result, index) {
     npv: Number(metrics.npv ?? 0),
     tatHours: Number(metrics.expected_turnaround_time_population ?? 0),
     tat: normalizeTAT(metrics.expected_turnaround_time_population ?? null, 'hr'),
-    notes: entry.warnings?.[0] || result?.message || `${scenarioTitle(key)} selected from feasible candidates.`,
+    notes: entry.warnings?.[0] || result?.message || `${objectiveName} selected from the feasible frontier.`,
     tests: testNames.map(id => window.SEED_TESTS?.find(test => test.id === id)?.name || id),
     prevalence: result?.constraints?.prevalence ?? null,
-    trade: `Selected by ${scenarioTitle(key)}`,
-    tag: scenarioTitle(key),
+    trade: objectiveName,
+    tag: objectiveName,
     status: result?.status || 'success',
     feasible: true,
     pathway: scenarioPathway,
@@ -2316,7 +2536,8 @@ function buildOptimizationScenarios(result) {
     return {
       id: String.fromCharCode(65 + index),
       key: entry?.key || `candidate_${index + 1}`,
-      label: scenarioTitle(entry?.label || entry?.template_summary, `Candidate ${index + 1}`),
+      label: resolveScenarioLabel(entry?.label, entry?.template_summary, entry?.optimizer_metadata?.template_summary) || `Feasible pathway ${index + 1}`,
+      objectiveName: 'Feasible pathway',
       metricName: 'expected_cost_population',
       metricValue: metrics.expected_cost_population ?? null,
       metricDisplay: formatScenarioMetric('expected_cost_population', metrics.expected_cost_population),
@@ -2332,7 +2553,7 @@ function buildOptimizationScenarios(result) {
       notes: entry?.warnings?.[0] || `Backend-ranked candidate ${index + 1}.`,
       tests: testNames.map(id => window.SEED_TESTS?.find(test => test.id === id)?.name || id),
       prevalence: resolvedPrevalence,
-      trade: index === 0 ? 'Top ranked by expected population cost' : 'Pareto frontier candidate',
+      trade: index === 0 ? 'Lowest average cost per patient' : 'Pareto frontier pathway',
       tag: 'Optimizer output',
       status: result?.status || 'success',
       feasible: true,
@@ -2420,11 +2641,19 @@ async function restoreStoredOptimizationRun() {
 
   try {
     const run = await fetchOptimizationRun(stored.runId);
-    return applyOptimizationRunState(run);
+    const state = applyOptimizationRunState(run);
+    if (OPTIMIZATION_RUN_ACTIVE_STATUSES.has(String(state?.status || '').toLowerCase())) {
+      watchOptimizationRun(stored.runId);
+    }
+    return state;
   } catch {
     try {
-      const latest = await request('get', '/api/optimization-runs/latest');
-      return applyOptimizationRunState(latest);
+      const latest = await request('get', '/api/optimization-runs/latest?terminal=0');
+      const state = applyOptimizationRunState(latest);
+      if (state?.id && OPTIMIZATION_RUN_ACTIVE_STATUSES.has(String(state?.status || '').toLowerCase())) {
+        watchOptimizationRun(state.id);
+      }
+      return state;
     } catch {
       return null;
     }
@@ -2448,8 +2677,8 @@ async function getReusableOptimizationRun(payload) {
       : await fetchOptimizationRun(stored.runId);
     const state = applyOptimizationRunState(run);
     const status = String(state?.status || '').toLowerCase();
-    if (['queued', 'running'].includes(status)) {
-      watchOptimizationRun(stored.runId);
+    if (!OPTIMIZATION_RUN_REUSABLE_STATUSES.has(status)) {
+      return null;
     }
     return state;
   } catch {
@@ -2459,6 +2688,40 @@ async function getReusableOptimizationRun(payload) {
 
 async function fetchOptimizationRun(runId) {
   return request('get', `/api/optimization-runs/${runId}`);
+}
+
+async function listOptimizationRuns(options = {}) {
+  const query = new URLSearchParams();
+  const projectId = options.projectId ?? getActiveProjectRecord()?.id ?? null;
+
+  if (projectId != null) {
+    query.set('project_id', String(projectId));
+  }
+
+  if (options.limit != null) {
+    query.set('limit', String(options.limit));
+  }
+
+  if (options.terminal != null) {
+    query.set('terminal', options.terminal ? '1' : '0');
+  }
+
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  const response = await request('get', `/api/optimization-runs${suffix}`);
+  return Array.isArray(response?.data) ? response.data : Array.isArray(response) ? response : [];
+}
+
+async function openOptimizationRunHistoryItem(runId) {
+  if (!runId) {
+    return null;
+  }
+
+  const run = await fetchOptimizationRun(runId);
+  const state = applyOptimizationRunState(run);
+  if (state && ['queued', 'running'].includes(String(state.status || '').toLowerCase())) {
+    watchOptimizationRun(state.id);
+  }
+  return state;
 }
 
 function applyOptimizationRunState(run) {
@@ -2535,12 +2798,18 @@ async function waitForOptimizationRun(runId, { intervalMs = 1000, timeoutMs = 42
 
 async function optimizePathways(payload, options = {}) {
   const reusableRun = await getReusableOptimizationRun(payload);
-  if (reusableRun && !['failed'].includes(String(reusableRun?.status || '').toLowerCase())) {
-    if (String(reusableRun?.status || '').toLowerCase() === 'success') {
-      showToast('Reopened the stored optimization results.', 'info');
+  if (reusableRun) {
+    const reusableStatus = String(reusableRun?.status || '').toLowerCase();
+    if (OPTIMIZATION_RUN_ACTIVE_STATUSES.has(reusableStatus)) {
+      watchOptimizationRun(reusableRun.id);
+      showToast('Reopened the current optimization run.', 'info');
+      return reusableRun.result_payload || reusableRun;
     }
 
-    return reusableRun.result_payload || reusableRun;
+    if (OPTIMIZATION_RUN_REUSABLE_STATUSES.has(reusableStatus)) {
+      showToast('Reopened the stored optimization results.', 'info');
+      return reusableRun.result_payload || reusableRun;
+    }
   }
 
   const response = await request('post', '/api/pathways/optimize', payload);
@@ -2956,6 +3225,9 @@ window.OptiDxActions = {
   getCurrentUser,
   clearWorkspaceState,
   clearSessionState,
+  clearOptimizationRunState,
+  dismissOptimizationRunFromWorkspace,
+  cancelOptimizationRun,
   logout,
   deleteAccount,
   normalizeTAT,
@@ -2975,6 +3247,8 @@ window.OptiDxActions = {
   evaluatePathway,
   buildEvaluationView,
   buildOptimizationScenarios,
+  listOptimizationRuns,
+  openOptimizationRunHistoryItem,
   openDiagnosticTestEditor,
   addManualTest,
   deleteDiagnosticTest,

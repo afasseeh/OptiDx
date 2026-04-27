@@ -646,6 +646,9 @@ XML;
         }
 
         $process->start();
+        $run->forceFill([
+            'process_pid' => method_exists($process, 'getPid') ? ($process->getPid() ?: null) : null,
+        ])->save();
     }
 
     private function looksLikeCanvasGraph(array $definition): bool

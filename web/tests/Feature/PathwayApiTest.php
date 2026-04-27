@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Pathway;
 use App\Models\DiagnosticTest;
 use App\Models\OptimizationRun;
+use App\Models\Project;
 use App\Models\Setting;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -526,6 +527,108 @@ class PathwayApiTest extends TestCase
             ->assertJsonPath('id', $latest->id)
             ->assertJsonPath('run_mode', 'extensive')
             ->assertJsonPath('message', 'Latest run');
+    }
+
+    public function test_optimization_runs_index_lists_scoped_history(): void
+    {
+        $user = $this->workspaceUser('optimizer-history@example.com');
+        $otherUser = $this->workspaceUser('optimizer-history-other@example.com');
+        $this->actingAs($user);
+
+        $project = Project::create([
+            'created_by' => $user->id,
+            'title' => 'History project',
+        ]);
+
+        $older = OptimizationRun::create([
+            'created_by' => $user->id,
+            'project_id' => null,
+            'run_mode' => 'light',
+            'status' => 'running',
+            'input_payload' => ['tests' => [], 'constraints' => ['prevalence' => 0.08], 'search_config' => []],
+            'constraints' => ['prevalence' => 0.08],
+        ]);
+
+        $latest = OptimizationRun::create([
+            'created_by' => $user->id,
+            'project_id' => $project->id,
+            'run_mode' => 'extensive',
+            'status' => 'success',
+            'input_payload' => ['tests' => [], 'constraints' => ['prevalence' => 0.08], 'search_config' => []],
+            'constraints' => ['prevalence' => 0.08],
+            'result_payload' => [
+                'status' => 'success',
+                'message' => 'Stored result',
+                'selected_outputs' => [
+                    'highest_youden_j' => ['label' => 'Highest Youden J'],
+                ],
+            ],
+        ]);
+
+        OptimizationRun::create([
+            'created_by' => $otherUser->id,
+            'project_id' => $project->id,
+            'run_mode' => 'light',
+            'status' => 'success',
+            'input_payload' => ['tests' => [], 'constraints' => ['prevalence' => 0.08], 'search_config' => []],
+            'constraints' => ['prevalence' => 0.08],
+        ]);
+
+        $this->getJson('/api/optimization-runs?limit=25')
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('data.0.id', $latest->id)
+            ->assertJsonPath('data.0.project_name', 'History project')
+            ->assertJsonPath('data.0.selected_output_count', 1)
+            ->assertJsonPath('data.1.id', $older->id)
+            ->assertJsonPath('data.1.run_mode', 'light');
+
+        $this->getJson("/api/optimization-runs?project_id={$project->id}")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $latest->id);
+    }
+
+    public function test_optimize_run_can_be_cancelled_and_clears_active_state(): void
+    {
+        $this->actingAs($this->workspaceUser('optimizer-cancel@example.com'));
+
+        $run = OptimizationRun::create([
+            'project_id' => null,
+            'run_mode' => 'extensive',
+            'status' => 'running',
+            'process_pid' => 999999,
+            'input_payload' => [
+                'tests' => [
+                    't_xpert' => [
+                        'id' => 't_xpert',
+                        'name' => 'Xpert MTB/RIF Ultra',
+                        'sensitivity' => 0.88,
+                        'specificity' => 0.98,
+                        'turnaround_time' => 2,
+                        'turnaround_time_unit' => 'hr',
+                        'sample_types' => ['sputum'],
+                        'skill_level' => 2,
+                        'cost' => 9.98,
+                    ],
+                ],
+                'constraints' => ['prevalence' => 0.08],
+                'search_config' => [],
+                'run_mode' => 'extensive',
+            ],
+            'constraints' => ['prevalence' => 0.08],
+        ]);
+
+        $this->postJson("/api/optimization-runs/{$run->id}/cancel", [
+            'reason' => 'Stopped by user.',
+        ])
+            ->assertOk()
+            ->assertJsonPath('status', 'cancelled')
+            ->assertJsonPath('failure_reason', 'Stopped by user.');
+
+        $this->assertSame('cancelled', $run->fresh()->status);
+        $this->assertNotNull($run->fresh()->completed_at);
+        $this->assertNull($run->fresh()->process_pid);
     }
 
     public function test_optimize_falls_back_to_workspace_tests_and_normalizes_prevalence(): void

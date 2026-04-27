@@ -5,7 +5,12 @@
 // ---------- PATHWAY LIBRARY -----------------------------------------------
 function ScreenLibrary({ setScreen }) {
   const [query, setQuery] = useState("");
-  const pathways = window.OptiDxActions.getWorkspacePathways?.() || window.SEED_PATHWAYS || [];
+  const workspacePathways = window.OptiDxActions.getWorkspacePathways?.();
+  const pathways = Array.isArray(workspacePathways)
+    ? workspacePathways
+    : Array.isArray(window.SEED_PATHWAYS)
+      ? window.SEED_PATHWAYS
+      : [];
   const filtered = pathways.filter(pathway => {
     const haystack = [
       pathway.name,
@@ -57,10 +62,10 @@ function ScreenLibrary({ setScreen }) {
                     <b>{pathway.name || pathway.metadata?.label || "Untitled pathway"}</b>
                     <div className="u-meta">{pathway.metadata?.source || pathway.notes || "Persisted record"}</div>
                   </td>
-                  <td>{pathway.metadata?.disease || pathway.disease || "—"}</td>
+                  <td>{pathway.metadata?.disease || pathway.disease || "â"}</td>
                   <td><span className={"chip " + (String(pathway.validation_status || pathway.status || "").toLowerCase().includes("valid") ? "chip--pos" : "chip--outline")}>{pathway.validation_status || pathway.status || "Draft"}</span></td>
                   <td className="num mono">{pathway.version || 1}</td>
-                  <td className="num mono">{pathway.updated_at ? new Date(pathway.updated_at).toLocaleDateString() : "—"}</td>
+                  <td className="num mono">{pathway.updated_at ? new Date(pathway.updated_at).toLocaleDateString() : "â"}</td>
                   <td>
                     <div className="row" style={{justifyContent:"flex-end", gap:8}}>
                       <button className="btn btn--sm" onClick={async () => {
@@ -141,16 +146,16 @@ function LegacyScreenScenarios({ setScreen }) {
       tests:["WHO-4","CAD4TB","Xpert Ultra"], trade:"Default configuration", tag:"Matches original pathway"},
     { id:"C", label:"Sensitivity-maximal", sens:0.891, spec:0.911, cost:8.05, cpdc:90.36, tat:"3.4 h",
       notes:"Adds parallel CRP to reduce false negatives.",
-      tests:["WHO-4","CAD4TB","CRP","Xpert Ultra"], trade:"+0.05 sens · +$2.43 cost", tag:"For high-stakes active case-finding"},
+      tests:["WHO-4","CAD4TB","CRP","Xpert Ultra"], trade:"+0.05 sens Â· +$2.43 cost", tag:"For high-stakes active case-finding"},
     { id:"D", label:"Specificity-maximal", sens:0.798, spec:0.978, cost:6.95, cpdc:87.09, tat:"3.9 h",
       notes:"Adds confirmatory Culture node before treatment.",
-      tests:["WHO-4","CAD4TB","Xpert Ultra","Culture"], trade:"+0.03 spec · -0.04 sens", tag:"Prioritizes treatment confirmation"},
+      tests:["WHO-4","CAD4TB","Xpert Ultra","Culture"], trade:"+0.03 spec Â· -0.04 sens", tag:"Prioritizes treatment confirmation"},
     { id:"E", label:"Fastest TAT", sens:0.805, spec:0.928, cost:6.10, cpdc:75.78, tat:"1.4 h",
       notes:"Uses parallel CAD4TB + LF-LAM to cut molecular queue time.",
       tests:["WHO-4","CAD4TB","LF-LAM","Xpert Ultra"], trade:"Cuts TAT by 50% at higher cost"},
     { id:"F", label:"Low-resource", sens:0.773, spec:0.920, cost:2.85, cpdc:36.86, tat:"4.2 h",
       notes:"Drops Xpert, uses sputum-smear microscopy only.",
-      tests:["WHO-4","Chest exam","Sputum smear"], trade:"-0.07 sens · -$2.77 cost"},
+      tests:["WHO-4","Chest exam","Sputum smear"], trade:"-0.07 sens Â· -$2.77 cost"},
   ];
   const optimization = useOptimizationRunState();
   const generatedScenarios = window.OptiDxOptimizationScenarios?.length
@@ -244,14 +249,14 @@ function LegacyScreenScenarios({ setScreen }) {
       <div className="page" style={{maxWidth:1280}}>
         <div className="page__head">
           <div>
-            <div className="sme-eyebrow" style={{marginBottom:6}}>Optimization · {runLabel}</div>
+            <div className="sme-eyebrow" style={{marginBottom:6}}>Optimization Â· {runLabel}</div>
             <h1>Pathway scenarios</h1>
             <p>{optimization ? "Optimization results from the latest run. Select a candidate to load it back into the canvas." : "The optimizer searched 142 pathway configurations and surfaced six along the Pareto frontier. Select one to load into the canvas."}</p>
           </div>
           <div className="row" style={{gap:12}}>
             <div style={{textAlign:"right"}}>
               <div className="u-meta">Search space</div>
-              <div style={{fontWeight:700, fontSize:13}}>{searchSpaceLabel} · {testCountLabel}</div>
+              <div style={{fontWeight:700, fontSize:13}}>{searchSpaceLabel} Â· {testCountLabel}</div>
             </div>
             <div style={{width:1, height:32, background:"var(--edge)"}}/>
             <div style={{textAlign:"right"}}>
@@ -291,9 +296,9 @@ function LegacyScreenScenarios({ setScreen }) {
         <div className="grid" style={{gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:16}}>
           <div className="card" style={{padding:16}}>
             <div className="row" style={{marginBottom:10}}>
-              <h3 style={{fontSize:13}}>Cost per detected case × Sensitivity</h3>
+              <h3 style={{fontSize:13}}>Average cost per patient × Youden's J</h3>
               <div className="spacer"/>
-              <span className="u-meta">Pareto frontier ↗</span>
+              <span className="u-meta">Pareto frontier â</span>
             </div>
             <svg viewBox="0 0 520 280" width="100%" height="280">
               <defs>
@@ -304,8 +309,8 @@ function LegacyScreenScenarios({ setScreen }) {
               <rect x="40" y="20" width="460" height="220" fill="url(#gridp)"/>
               <line x1="40" y1="240" x2="500" y2="240" stroke="var(--edge-2)"/>
               <line x1="40" y1="20" x2="40" y2="240" stroke="var(--edge-2)"/>
-              <text x="270" y="268" textAnchor="middle" fontSize="10" fill="var(--fg-3)" style={{letterSpacing:"0.1em"}}>COST PER DETECTED CASE (USD) →</text>
-              <text x="20" y="130" textAnchor="middle" fontSize="10" fill="var(--fg-3)" transform="rotate(-90 20 130)" style={{letterSpacing:"0.1em"}}>SENSITIVITY →</text>
+              <text x="270" y="268" textAnchor="middle" fontSize="10" fill="var(--fg-3)" style={{letterSpacing:"0.1em"}}>AVERAGE COST PER PATIENT (USD) ?</text>
+              <text x="20" y="130" textAnchor="middle" fontSize="10" fill="var(--fg-3)" transform="rotate(-90 20 130)" style={{letterSpacing:"0.1em"}}>YOUDEN'S J ?</text>
               {/* Pareto line */}
               <path d="M70 220 Q 160 180 230 110 Q 300 70 420 45" stroke="var(--sme-orange)" strokeWidth="1.5" fill="none" strokeDasharray="3 3"/>
               {(scenarios.length ? scenarios : []).map((s, i) => {
@@ -328,7 +333,7 @@ function LegacyScreenScenarios({ setScreen }) {
 
           <div className="card" style={{padding:0}}>
             <div className="row" style={{padding:"12px 16px", borderBottom:"1px solid var(--edge)"}}>
-              <h3 style={{fontSize:13}}>Candidate ranking</h3>
+              <h3 style={{fontSize:13}}>Objective ranking</h3>
               <div className="spacer"/>
               <select className="select" style={{height:24, fontSize:11, width:"auto"}}>
                 <option>Rank by selected output</option>
@@ -338,7 +343,7 @@ function LegacyScreenScenarios({ setScreen }) {
             </div>
             <table className="table">
               <thead>
-                <tr><th></th><th>Scenario</th><th className="num">Sens</th><th className="num">Spec</th><th className="num">$/case</th><th className="num">TAT</th></tr>
+                <tr><th></th><th>Pathway</th><th className="num">Sens</th><th className="num">Spec</th><th className="num">$/patient</th><th className="num">TAT</th></tr>
               </thead>
               <tbody>
                 {(scenarios.length ? scenarios : []).map((s, i) => (
@@ -368,12 +373,15 @@ function LegacyScreenScenarios({ setScreen }) {
             <div style={{width:36, height:36, borderRadius:6, background:"var(--sme-orange)", color:"#fff",
               display:"grid", placeItems:"center", fontWeight:700, fontSize:16}}>{current.id}</div>
             <div>
-              <div className="u-meta">Scenario {current.id}</div>
-              <h2 style={{fontSize:20, letterSpacing:"-0.01em"}}>{current.label} pathway</h2>
+              <div className="u-meta">Selected objective {current.id}</div>
+              <h2 style={{fontSize:20, letterSpacing:"-0.01em"}}>{current.objectiveName || current.label}</h2>
             </div>
             <div className="spacer"/>
             {current.tag && <span className="chip chip--orange" style={{height:24, padding:"0 10px"}}>{current.tag}</span>}
           </div>
+          {current.label && current.label !== current.objectiveName && (
+            <p style={{color:"var(--fg-3)", fontSize:13, marginBottom:8, lineHeight:1.45}}>{current.label}</p>
+          )}
           <p style={{color:"var(--fg-2)", fontSize:14, marginBottom:18, lineHeight:1.55}}>{current.notes}</p>
 
           <div className="grid" style={{gridTemplateColumns:"repeat(5, 1fr)", gap:12, marginBottom:18}}>
@@ -388,7 +396,7 @@ function LegacyScreenScenarios({ setScreen }) {
             <div>
               <div className="u-meta">Tests used</div>
               <div style={{marginTop:4, display:"flex", gap:6, flexWrap:"wrap"}}>
-                {current.tests.map(t => <span key={t} className="chip chip--outline">{t}</span>)}
+                {(Array.isArray(current.tests) ? current.tests : []).map(t => <span key={t} className="chip chip--outline">{t}</span>)}
               </div>
             </div>
             <div style={{width:1, height:32, background:"var(--edge)"}}/>
@@ -436,9 +444,12 @@ function ScreenScenarios({ setScreen }) {
   const [selected, setSelected] = useState(0);
   const [sortKey, setSortKey] = useState("expected_cost_population");
   const optimization = useOptimizationRunState();
-  const scenarios = window.OptiDxOptimizationScenarios?.length
+  const optimizationScenarios = Array.isArray(window.OptiDxOptimizationScenarios)
     ? window.OptiDxOptimizationScenarios
-    : window.OptiDxActions.buildOptimizationScenarios?.(optimization) || [];
+    : [];
+  const generatedScenariosRaw = window.OptiDxActions.buildOptimizationScenarios?.(optimization);
+  const generatedScenarios = Array.isArray(generatedScenariosRaw) ? generatedScenariosRaw : [];
+  const scenarios = optimizationScenarios.length ? optimizationScenarios : generatedScenarios;
   const candidates = Array.isArray(optimization?.ranked_results) ? optimization.ranked_results : [];
   const current = scenarios[selected] || scenarios[0] || null;
   const selectedCandidateIndex = Number(current?.candidateIndex ?? current?.candidate_index ?? -1);
@@ -489,6 +500,30 @@ function ScreenScenarios({ setScreen }) {
             )}
             <p style={{marginTop:8, color:"var(--fg-3)", fontSize:12}}>
               Extensive runs continue in the background and will email the launching user when they finish.
+            </p>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  if (!current) {
+    return (
+      <>
+        <TopBar
+          crumbs={["OptiDx","TB Community Screening","Optimization scenarios"]}
+          actions={<>
+            <button className="btn" onClick={() => setScreen("wizard")}>
+              <Icon name="arrow-left"/>Back to setup
+            </button>
+          </>}
+        />
+        <div className="page" style={{maxWidth:1280}}>
+          <div className="card card--pad">
+            <div className="u-meta">No stored optimization result</div>
+            <h1 style={{fontSize:22, marginTop:4}}>Run the optimizer to view scenarios</h1>
+            <p style={{marginTop:8, color:"var(--fg-2)", lineHeight:1.5}}>
+              This page opens a stored optimization result. If no run has completed yet, start one from the wizard.
             </p>
           </div>
         </div>
@@ -575,8 +610,8 @@ function ScreenScenarios({ setScreen }) {
   const scatterCandidates = Array.isArray(optimization?.pareto_frontier) && optimization.pareto_frontier.length
     ? optimization.pareto_frontier
     : candidates;
-  const scatterMaxCpdc = Math.max(
-    ...scatterCandidates.map(candidate => Number(candidate?.metrics?.cost_per_detected_case ?? 0)),
+  const scatterMaxCostPerPatient = Math.max(
+    ...scatterCandidates.map(candidate => Number(candidate?.metrics?.expected_cost_population ?? 0)),
     1,
   );
 
@@ -608,14 +643,14 @@ function ScreenScenarios({ setScreen }) {
       <div className="page" style={{maxWidth:1280}}>
         <div className="page__head">
           <div>
-            <div className="sme-eyebrow" style={{marginBottom:6}}>Optimization · {runLabel}</div>
+            <div className="sme-eyebrow" style={{marginBottom:6}}>Optimization Â· {runLabel}</div>
             <h1>Pathway scenarios</h1>
             <p>{optimization ? "Named scenario buckets are selected from the feasible optimization set after project constraints are applied. Review the fixed options first, then inspect the full candidate table and frontier." : "Run the optimizer to populate the named scenario buckets and the sortable feasible-candidate table."}</p>
           </div>
           <div className="row" style={{gap:12}}>
             <div style={{textAlign:"right"}}>
               <div className="u-meta">Search space</div>
-              <div style={{fontWeight:700, fontSize:13}}>{searchSpaceLabel} · {testCountLabel}</div>
+              <div style={{fontWeight:700, fontSize:13}}>{searchSpaceLabel} Â· {testCountLabel}</div>
             </div>
             <div style={{width:1, height:32, background:"var(--edge)"}}/>
             <div style={{textAlign:"right"}}>
@@ -644,7 +679,7 @@ function ScreenScenarios({ setScreen }) {
                 <div className="spacer"/>
                 <span className="chip chip--outline">{scenario.metricDisplay}</span>
               </div>
-              <div style={{fontWeight:700, fontSize:14, marginBottom:6}}>{scenario.label}</div>
+              <div style={{fontWeight:700, fontSize:14, marginBottom:6}}>{scenario.objectiveName || scenario.label}</div>
               <div className="u-meta" style={{marginBottom:10}}>{String(scenario.metricName || "ranked metric").split("_").join(" ")}</div>
               <div style={{fontSize:12, color:"var(--fg-2)", lineHeight:1.45}}>{scenario.notes}</div>
             </button>
@@ -659,7 +694,7 @@ function ScreenScenarios({ setScreen }) {
         <div className="grid" style={{gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:16}}>
           <div className="card" style={{padding:16}}>
             <div className="row" style={{marginBottom:10}}>
-              <h3 style={{fontSize:13}}>Cost per detected case × Sensitivity</h3>
+              <h3 style={{fontSize:13}}>Average cost per patient × Youden's J</h3>
               <div className="spacer"/>
               <span className="u-meta">Pareto frontier</span>
             </div>
@@ -672,14 +707,14 @@ function ScreenScenarios({ setScreen }) {
               <rect x="40" y="20" width="460" height="220" fill="url(#gridp-v2)"/>
               <line x1="40" y1="240" x2="500" y2="240" stroke="var(--edge-2)"/>
               <line x1="40" y1="20" x2="40" y2="240" stroke="var(--edge-2)"/>
-              <text x="270" y="268" textAnchor="middle" fontSize="10" fill="var(--fg-3)" style={{letterSpacing:"0.1em"}}>COST PER DETECTED CASE (USD) →</text>
-              <text x="20" y="130" textAnchor="middle" fontSize="10" fill="var(--fg-3)" transform="rotate(-90 20 130)" style={{letterSpacing:"0.1em"}}>SENSITIVITY →</text>
+              <text x="270" y="268" textAnchor="middle" fontSize="10" fill="var(--fg-3)" style={{letterSpacing:"0.1em"}}>AVERAGE COST PER PATIENT (USD) ?</text>
+              <text x="20" y="130" textAnchor="middle" fontSize="10" fill="var(--fg-3)" transform="rotate(-90 20 130)" style={{letterSpacing:"0.1em"}}>YOUDEN'S J ?</text>
               {scatterCandidates.map((candidate, index) => {
                 const metrics = candidate?.metrics || {};
-                const cpdc = Number(metrics.cost_per_detected_case ?? 0);
-                const sens = Number(metrics.sensitivity ?? 0);
-                const x = 40 + (cpdc / scatterMaxCpdc) * 460;
-                const y = 240 - (Math.max(0, Math.min(1, sens)) * 220);
+                const costPerPatient = Number(metrics.expected_cost_population ?? 0);
+                const youdenJ = Number(metrics.youden_j ?? 0);
+                const x = 40 + (costPerPatient / scatterMaxCostPerPatient) * 460;
+                const y = 240 - (((Math.max(-1, Math.min(1, youdenJ)) + 1) / 2) * 220);
                 const candidateIndex = Number(candidate?.candidate_index ?? index);
                 const isSel = candidateIndex === selectedCandidateIndex;
                 return (
@@ -712,7 +747,7 @@ function ScreenScenarios({ setScreen }) {
             </div>
             <table className="table">
               <thead>
-                <tr><th>#</th><th>Candidate</th><th className="num">Sens</th><th className="num">Spec</th><th className="num">$/case</th><th className="num">TAT</th></tr>
+                <tr><th>#</th><th>Pathway</th><th className="num">Sens</th><th className="num">Spec</th><th className="num">$/patient</th><th className="num">TAT</th></tr>
               </thead>
               <tbody>
                 {sortableCandidates.map((candidate, index) => {
@@ -723,10 +758,10 @@ function ScreenScenarios({ setScreen }) {
                   return (
                     <tr key={candidateIndex} style={{background: isSel ? "var(--sme-orange-050)" : undefined}}>
                       <td className="mono">{candidateIndex + 1}</td>
-                      <td><b>{candidate?.label || `Candidate ${candidateIndex + 1}`}</b></td>
+                      <td><b>{candidate?.label || `Pathway ${candidateIndex + 1}`}</b></td>
                       <td className="num mono">{((metrics.sensitivity ?? 0) * 100).toFixed(1)}%</td>
                       <td className="num mono">{((metrics.specificity ?? 0) * 100).toFixed(1)}%</td>
-                      <td className="num mono">${Number(metrics.cost_per_detected_case ?? 0).toFixed(2)}</td>
+                      <td className="num mono">${Number(metrics.expected_cost_population ?? 0).toFixed(2)}</td>
                       <td className="num mono">{window.OptiDxActions.normalizeTAT?.(metrics.expected_turnaround_time_population ?? null, "hr") || "n/a"}</td>
                     </tr>
                   );
@@ -734,7 +769,7 @@ function ScreenScenarios({ setScreen }) {
                 {!sortableCandidates.length && (
                   <tr>
                     <td colSpan="6" style={{textAlign:"center", color:"var(--fg-3)", padding:"24px 12px"}}>
-                      No feasible candidates returned from the optimizer.
+                      No feasible pathways returned from the optimizer.
                     </td>
                   </tr>
                 )}
@@ -749,12 +784,15 @@ function ScreenScenarios({ setScreen }) {
               <div style={{width:36, height:36, borderRadius:6, background:"var(--sme-orange)", color:"#fff",
                 display:"grid", placeItems:"center", fontWeight:700, fontSize:16}}>{current.id}</div>
               <div>
-                <div className="u-meta">Named scenario {current.id}</div>
-                <h2 style={{fontSize:20, letterSpacing:"-0.01em"}}>{current.label}</h2>
+                <div className="u-meta">Selected objective {current.id}</div>
+                <h2 style={{fontSize:20, letterSpacing:"-0.01em"}}>{current.objectiveName || current.label}</h2>
               </div>
               <div className="spacer"/>
               {current.metricDisplay && <span className="chip chip--orange" style={{height:24, padding:"0 10px"}}>{current.metricDisplay}</span>}
             </div>
+            {current.label && current.label !== current.objectiveName && (
+              <p style={{color:"var(--fg-3)", fontSize:13, marginBottom:8, lineHeight:1.45}}>{current.label}</p>
+            )}
             <p style={{color:"var(--fg-2)", fontSize:14, marginBottom:18, lineHeight:1.55}}>{current.notes}</p>
 
             <div className="grid" style={{gridTemplateColumns:"repeat(6, 1fr)", gap:12, marginBottom:18}}>
@@ -763,19 +801,19 @@ function ScreenScenarios({ setScreen }) {
               <Metric label="Cost / patient" value={"$" + current.cost.toFixed(2)}/>
               <Metric label="Cost / detected case" value={"$" + current.cpdc.toFixed(2)} accent/>
               <Metric label="Turnaround" value={current.tat}/>
-              <Metric label="Balanced accuracy" value={(current.balancedAccuracy*100).toFixed(1) + "%"}/>
+              <Metric label="Youden's J" value={(current.youdenIndex*100).toFixed(1) + "%"}/>
             </div>
 
             <div className="row" style={{gap:24, borderTop:"1px solid var(--edge)", paddingTop:14}}>
               <div>
                 <div className="u-meta">Tests used</div>
                 <div style={{marginTop:4, display:"flex", gap:6, flexWrap:"wrap"}}>
-                  {current.tests.map(t => <span key={t} className="chip chip--outline">{t}</span>)}
+                {(Array.isArray(current.tests) ? current.tests : []).map(t => <span key={t} className="chip chip--outline">{t}</span>)}
                 </div>
               </div>
               <div style={{width:1, height:32, background:"var(--edge)"}}/>
               <div>
-                <div className="u-meta">Ranking basis</div>
+                <div className="u-meta">Objective</div>
                 <div style={{fontWeight:700, fontSize:13, marginTop:4}}>{current.trade}</div>
               </div>
               <div className="spacer"/>
@@ -1072,7 +1110,7 @@ function SetWorkspace({ currentUser }) {
             <select className="select" value={profile.currency || "USD"} onChange={e => setProfile(current => ({ ...current, currency: e.target.value }))}><option>USD</option><option>EUR</option><option>EGP</option><option>AED</option></select>
           </div>
           <div className="field"><label className="field__label">Default language</label>
-            <select className="select" value={profile.language || "English"} onChange={e => setProfile(current => ({ ...current, language: e.target.value }))}><option>English</option><option>العربية</option><option>Français</option></select>
+            <select className="select" value={profile.language || "English"} onChange={e => setProfile(current => ({ ...current, language: e.target.value }))}><option>English</option><option>Ø§ÙØ¹Ø±Ø¨ÙØ©</option><option>FranÃ§ais</option></select>
           </div>
         </div>
       </div>
@@ -1108,8 +1146,8 @@ function SetWorkspace({ currentUser }) {
         <div className="row" style={{gap:16}}>
           <div style={{flex:1, padding:16, background:"var(--sme-orange-050)", borderRadius:6, border:"1px solid var(--sme-orange-100)"}}>
             <div className="sme-eyebrow" style={{color:"var(--sme-orange-600)", marginBottom:4}}>Current plan</div>
-            <div style={{fontSize:18, fontWeight:700}}>Research · Non-profit</div>
-            <div className="u-meta" style={{marginTop:4}}>Unlimited pathways · 8 seats · Priority support</div>
+            <div style={{fontSize:18, fontWeight:700}}>Research Â· Non-profit</div>
+            <div className="u-meta" style={{marginTop:4}}>Unlimited pathways Â· 8 seats Â· Priority support</div>
           </div>
           <div style={{flex:1, padding:16, background:"var(--surface-2)", borderRadius:6}}>
             <div className="u-meta">Next renewal</div>
@@ -1279,7 +1317,7 @@ function SetBranding() {
           <div className="stack" style={{gap:10}}>
             {[
               { icon:"image", label:"Organization logo", val:"Syreon" },
-              { icon:"sliders", label:"Accent color", val:"#F37739 · SME orange" },
+              { icon:"sliders", label:"Accent color", val:"#F37739 Â· SME orange" },
               { icon:"file-text", label:"Report footer", val:"Today's research for tomorrow's health" },
               { icon:"users", label:"Issuing entity", val:"Syreon MENA HTA" },
               { icon:"info", label:"Publication domain", val:"optidx.syreon.me" },
@@ -1312,7 +1350,7 @@ function SetBranding() {
                 <div style={{color:"var(--fg-3)", fontSize:9, marginTop:2}}>HEALTH TECHNOLOGY ASSESSMENT</div>
               </div>
               <div className="spacer"/>
-              <div style={{color:"var(--fg-3)", fontSize:10, textAlign:"right"}}>OptiDx Decision Report<br/>v3 · 24 Apr 2026</div>
+              <div style={{color:"var(--fg-3)", fontSize:10, textAlign:"right"}}>OptiDx Decision Report<br/>v3 Â· 24 Apr 2026</div>
             </div>
             <div style={{padding:"16px 0 8px", fontWeight:700, fontSize:14, color:"var(--sme-ink-900)"}}>TB Community Screening Pathway</div>
             <div style={{color:"var(--fg-3)", lineHeight:1.5, fontSize:10}}>Under a prevalence of 8% in the target community, the proposed three-step pathway achieves an aggregate sensitivity of 84.2%...</div>
@@ -1467,7 +1505,7 @@ function ShareModal({ onClose }) {
           </div>
           <div>
             <h2>Share pathway & summary</h2>
-            <div className="u-meta">TB Community Screening Pathway · v3</div>
+            <div className="u-meta">TB Community Screening Pathway Â· v3</div>
           </div>
           <div className="spacer"/>
           <button className="btn btn--sm btn--icon" onClick={onClose}><Icon name="x" size={12}/></button>
@@ -1478,10 +1516,10 @@ function ShareModal({ onClose }) {
           <div style={{border:"1px solid var(--edge)", borderRadius:6, overflow:"hidden", marginBottom:20}}>
             <div style={{padding:"14px 16px", background:"var(--sme-ink-900)", color:"#fff"}}>
               <div style={{fontSize:10, color:"var(--sme-orange)", letterSpacing:"0.12em", textTransform:"uppercase", fontWeight:700, marginBottom:4}}>
-                OptiDx · Pathway summary
+                OptiDx Â· Pathway summary
               </div>
               <div style={{fontSize:15, fontWeight:700}}>TB Community Screening Pathway</div>
-              <div style={{fontSize:11, color:"#B0B5B9", marginTop:4}}>WHO-4 → CAD4TB → Xpert Ultra · 3 tests · 8% prevalence</div>
+              <div style={{fontSize:11, color:"#B0B5B9", marginTop:4}}>WHO-4 â CAD4TB â Xpert Ultra Â· 3 tests Â· 8% prevalence</div>
             </div>
             <div style={{padding:"12px 16px", display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, fontSize:11}}>
               <div><div className="u-meta">Sens</div><b className="mono">84.2%</b></div>
@@ -1584,7 +1622,7 @@ function ScreenTeams() {
       <div className="page" style={{maxWidth:1200}}>
         <div className="page__head">
           <div>
-            <div className="sme-eyebrow" style={{marginBottom:6}}>Collaboration · In development</div>
+            <div className="sme-eyebrow" style={{marginBottom:6}}>Collaboration Â· In development</div>
             <h1>Teams &amp; collaboration</h1>
             <p>Invite colleagues, share pathways for review, and co-author with role-based permissions. Currently in private beta, join the waitlist to get early access.</p>
           </div>
@@ -1644,7 +1682,7 @@ function ScreenTeams() {
                 </div>
               )}
               <div style={{marginTop:14, fontSize:11, color:"#8A9299"}}>
-                Estimated rollout: <b style={{color:"#fff"}}>Q3 2027</b> · Already invited 142 organizations
+                Estimated rollout: <b style={{color:"#fff"}}>Q3 2027</b> Â· Already invited 142 organizations
               </div>
             </div>
 
@@ -1673,7 +1711,7 @@ function ScreenTeams() {
         {/* Mock team list */}
         <div className="card" style={{padding:0, opacity:0.85}}>
           <div className="card__head">
-            <h3>Members <span className="u-meta" style={{marginLeft:8, fontWeight:400}}>(preview · disabled)</span></h3>
+            <h3>Members <span className="u-meta" style={{marginLeft:8, fontWeight:400}}>(preview Â· disabled)</span></h3>
             <div className="spacer"/>
             <button className="btn btn--sm" onClick={() => window.OptiDxActions.comingSoon("Invite member")}><Icon name="plus" size={12}/>Invite member</button>
           </div>
@@ -1684,7 +1722,7 @@ function ScreenTeams() {
             <tbody>
               {[
                 [[currentUser?.first_name, currentUser?.last_name].filter(Boolean).join(" ") || currentUser?.name || "Current user", currentUser?.email || "your.email@example.com", currentUser?.title || "Owner", "All projects","Just now","active", getInitials([currentUser?.first_name, currentUser?.last_name].filter(Boolean).join(" ") || currentUser?.name || "Current user"), "var(--sme-orange)"],
-                ["Ahmed Khalil","ahmed.khalil@syreon.me","Editor","TB MENA · NCD Egypt","2h ago","active","AK","var(--refer)"],
+                ["Ahmed Khalil","ahmed.khalil@syreon.me","Editor","TB MENA Â· NCD Egypt","2h ago","active","AK","var(--refer)"],
                 ["Dr. Layla Haddad","l.haddad@cu.edu.eg","Clinical reviewer","TB MENA","Yesterday","invited","LH","var(--pos)"],
                 ["Omar Fouad","omar.f@minhealth.gov.eg","Viewer","NCD Egypt","3 days","active","OF","var(--inconcl)"],
                 ["Reem Saleh","reem.saleh@who.int","Analyst","All projects","1 wk","invited","RS","#7B5BA6"],
@@ -1746,7 +1784,7 @@ function TeamsPreviewCard({ currentUser }) {
     }}>
       <div className="row" style={{marginBottom:14, paddingBottom:10, borderBottom:"1px solid var(--edge)"}}>
         <div style={{width:8, height:8, borderRadius:"50%", background:"var(--pos)"}}/>
-        <b style={{fontSize:12}}>TB Community Screening · v3</b>
+        <b style={{fontSize:12}}>TB Community Screening Â· v3</b>
         <div className="spacer"/>
         <div style={{display:"flex"}}>
           {[[currentInitials,"var(--sme-orange)"],["AK","var(--refer)"],["LH","var(--pos)"]].map(([i,c],k) => (
@@ -1779,7 +1817,7 @@ function CommentRow({ initials, color, name, role, time, text, reply, status }) 
       <div style={{flex:1, fontSize:11, lineHeight:1.45}}>
         <div className="row" style={{gap:6, marginBottom:2}}>
           <b>{name}</b>
-          <span className="u-meta" style={{fontSize:10}}>{role} · {time}</span>
+          <span className="u-meta" style={{fontSize:10}}>{role} Â· {time}</span>
           {status === "approved" && <span className="chip chip--pos" style={{height:16, padding:"0 6px", fontSize:9}}>Approved</span>}
         </div>
         <div style={{color:"var(--fg-2)"}}>{text}</div>
@@ -1788,3 +1826,5 @@ function CommentRow({ initials, color, name, role, time, text, reply, status }) 
   );
 }
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+
+

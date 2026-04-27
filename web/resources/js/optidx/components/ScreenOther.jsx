@@ -1,11 +1,11 @@
 // Remaining screens: trace, compare, evidence, report, settings, parallel modal
 function ScreenTrace({ setScreen }) {
-  const r = window.OptiDxLatestEvaluationView || window.SEED_RESULTS;
+  const r = window.OptiDxLatestEvaluationView || window.SEED_RESULTS || { paths: [], warnings: [] };
   const pathwayLabel = window.OptiDxLatestEvaluationPathway?.metadata?.label || "Latest pathway";
   const pathCount = Number(r.pathCount ?? (Array.isArray(r.paths) ? r.paths.length : 0)) || 0;
   const csv = [
     ["Path", "Sequence", "Terminal", "P(path | D+)", "P(path | D-)", "Cost", "TAT", "Samples", "Skill"],
-    ...r.paths.map(p => [
+    ...(Array.isArray(r.paths) ? r.paths : []).map(p => [
       p.id,
       p.sequence,
       p.terminal,
@@ -41,7 +41,7 @@ function ScreenTrace({ setScreen }) {
               <th className="num">Cost</th><th className="num">TAT</th><th>Samples</th><th>Skill</th>
             </tr></thead>
             <tbody>
-              {r.paths.map(p => (
+              {(Array.isArray(r.paths) ? r.paths : []).map(p => (
                 <tr key={p.id}>
                   <td className="mono"><b>{p.id}</b></td>
                   <td className="mono" style={{fontSize:12}}>{p.sequence}</td>
@@ -79,8 +79,43 @@ function ScreenTrace({ setScreen }) {
   );
 }
 
+function Metric({ label, value, accent }) {
+  return (
+    <div className="metric" style={accent ? {borderColor:"var(--sme-orange-100)", background:"var(--sme-orange-050)"} : undefined}>
+      <div className="metric__label">{label}</div>
+      <div className="metric__value" style={{fontSize:22, color: accent ? "var(--sme-orange-600)" : undefined}}>{value}</div>
+    </div>
+  );
+}
+
 function ScreenCompare({ setScreen }) {
-  const scenarios = window.OptiDxOptimizationScenarios?.length ? window.OptiDxOptimizationScenarios : window.SEED_COMPARE;
+  const normalizeScenario = scenario => {
+    const name = String(scenario?.name || scenario?.label || scenario?.objectiveName || scenario?.id || "Untitled pathway");
+    const shortName = name.trim().split(/\s+/).filter(Boolean)[0] || "Pathway";
+
+    return {
+      id: scenario?.id || name,
+      name,
+      shortName,
+      sens: Number(scenario?.sens ?? 0),
+      spec: Number(scenario?.spec ?? 0),
+      cost: Number(scenario?.cost ?? 0),
+      tat: scenario?.tat || "n/a",
+      ppv: Number(scenario?.ppv ?? 0),
+      npv: Number(scenario?.npv ?? 0),
+      skill: scenario?.skill || "n/a",
+      samples: scenario?.samples || "n/a",
+      feasible: !!scenario?.feasible,
+      reason: scenario?.reason || "",
+    };
+  };
+
+  const rawScenarios = Array.isArray(window.OptiDxOptimizationScenarios) && window.OptiDxOptimizationScenarios.length
+    ? window.OptiDxOptimizationScenarios
+    : Array.isArray(window.SEED_COMPARE)
+      ? window.SEED_COMPARE
+      : [];
+  const scenarios = rawScenarios.map(normalizeScenario);
   return (
     <>
       <TopBar crumbs={[
@@ -89,7 +124,9 @@ function ScreenCompare({ setScreen }) {
         { label: "Compare" },
       ]}
         actions={<><button className="btn" onClick={() => window.OptiDxActions.downloadJson("optidx-compare-candidates.json", scenarios)}><Icon name="download"/>Export</button><button className="btn btn--primary" onClick={async () => {
-          const candidate = window.OptiDxOptimizationScenarios?.find(item => item.pathway) || null;
+          const candidate = Array.isArray(window.OptiDxOptimizationScenarios)
+            ? window.OptiDxOptimizationScenarios.find(item => item.pathway) || null
+            : null;
           if (!candidate?.pathway) {
             window.OptiDxActions.showToast?.("Load a live optimization run before applying a suggestion.", "info");
             return;
@@ -114,7 +151,7 @@ function ScreenCompare({ setScreen }) {
           {scenarios.slice(0,3).map(c => (
             <div key={c.id} className="card card--pad" style={{borderColor: c.id === "c1" ? "var(--sme-orange)" : "var(--edge)"}}>
               <div className="row" style={{marginBottom:6}}>
-                <div className="sme-eyebrow">{c.id === "c1" ? "Current" : c.name.split(" ")[0]}</div>
+                <div className="sme-eyebrow">{c.id === "c1" ? "Current" : c.shortName}</div>
                 <div className="spacer"/>
                 {c.id === "c1" && <span className="chip chip--orange">Baseline</span>}
               </div>
@@ -172,6 +209,342 @@ function ScreenCompare({ setScreen }) {
   );
 }
 
+function ScreenOptimizationHistory({ setScreen }) {
+  const [runs, setRuns] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedRunId, setSelectedRunId] = useState(null);
+  const [selectedRun, setSelectedRun] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const selectedRunIdRef = useRef(null);
+
+  const currentProject = window.OptiDxActions.getActiveProjectRecord?.() || window.OptiDxCurrentProject || null;
+
+  const formatDate = value => {
+    if (!value) return "n/a";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return new Intl.DateTimeFormat(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(date);
+  };
+
+  const normalizeHistoryText = value => {
+    if (value == null) return "";
+    if (typeof value === "string") return value;
+    if (typeof value === "number" || typeof value === "boolean") return String(value);
+    if (Array.isArray(value)) {
+      const parts = value
+        .map(item => normalizeHistoryText(item))
+        .filter(Boolean);
+      return parts.join(", ");
+    }
+    if (typeof value === "object") {
+      return normalizeHistoryText(
+        value.label
+        ?? value.title
+        ?? value.name
+        ?? value.message
+        ?? value.summary
+        ?? value.text
+        ?? null
+      );
+    }
+    return "";
+  };
+
+  useEffect(() => {
+    selectedRunIdRef.current = selectedRunId;
+  }, [selectedRunId]);
+
+  const loadRuns = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await window.OptiDxActions.listOptimizationRuns?.({
+        limit: 50,
+        terminal: false,
+        projectId: currentProject?.id || null,
+      });
+      const nextRuns = Array.isArray(response) ? response : [];
+      setRuns(nextRuns);
+      const nextSelectedId = selectedRunIdRef.current || nextRuns[0]?.id || null;
+      setSelectedRunId(nextSelectedId);
+      if (nextSelectedId) {
+        const nextSelected = nextRuns.find(run => String(run.id) === String(nextSelectedId)) || nextRuns[0] || null;
+        setSelectedRun(nextSelected || null);
+      }
+    } catch (error) {
+      window.OptiDxActions.showToast?.(error?.message || "Unable to load optimization history", "error");
+      setRuns([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [currentProject?.id]);
+
+  useEffect(() => {
+    let active = true;
+    const sync = async () => {
+      if (!active) return;
+      await loadRuns();
+    };
+    void sync();
+    return () => {
+      active = false;
+    };
+  }, [loadRuns]);
+
+  useEffect(() => {
+    if (!selectedRunId) {
+      setSelectedRun(null);
+      return;
+    }
+
+    const summary = runs.find(run => String(run.id) === String(selectedRunId)) || null;
+    setSelectedRun(summary);
+  }, [runs, selectedRunId]);
+
+  const selectRun = useCallback(async (run) => {
+    if (!run?.id) return;
+    setSelectedRunId(run.id);
+    setDetailLoading(true);
+    try {
+      const fullRun = await window.OptiDxActions.fetchOptimizationRun?.(run.id) || await window.OptiDxActions.request?.('get', `/api/optimization-runs/${run.id}`);
+      setSelectedRun(fullRun || run);
+    } catch (error) {
+      window.OptiDxActions.showToast?.(error?.message || "Unable to open stored optimization run", "error");
+      setSelectedRun(run);
+    } finally {
+      setDetailLoading(false);
+    }
+  }, []);
+
+  const openSelectedInScenarios = useCallback(async () => {
+    if (!selectedRun?.id) {
+      return;
+    }
+
+    try {
+      const run = selectedRun?.result_payload ? selectedRun : await window.OptiDxActions.openOptimizationRunHistoryItem?.(selectedRun.id);
+      if (!run) {
+        return;
+      }
+      setScreen("scenarios");
+    } catch (error) {
+      window.OptiDxActions.showToast?.(error?.message || "Unable to open stored run", "error");
+    }
+  }, [selectedRun, setScreen]);
+
+  const selectedResult = selectedRun?.result_payload || selectedRun?.result || null;
+  const selectedOutputs = selectedResult?.selected_outputs || null;
+  const selectedOutputKeys = Array.isArray(selectedRun?.selected_output_keys)
+    ? selectedRun.selected_output_keys
+    : selectedOutputs && typeof selectedOutputs === "object"
+      ? Object.keys(selectedOutputs)
+      : [];
+
+  return (
+    <>
+      <TopBar
+        crumbs={[
+          { label: "OptiDx", onClick: () => setScreen("home"), title: "Back to home" },
+          { label: "Optimization history" },
+        ]}
+        actions={<>
+          <button className="btn" onClick={() => setScreen("home")}>
+            <Icon name="arrow-left"/>Back to workspace
+          </button>
+          <button className="btn btn--primary" onClick={openSelectedInScenarios} disabled={!selectedRun?.id}>
+            <Icon name="git-branch"/>Open details
+          </button>
+        </>}
+      />
+      <div className="page" style={{maxWidth:1440}}>
+        <div className="page__head">
+          <div>
+            <div className="sme-eyebrow" style={{marginBottom:6}}>Optimization history</div>
+            <h1>Stored optimization runs</h1>
+            <p>Open a previous run to inspect its saved result without running the same project again.</p>
+          </div>
+          <div className="row" style={{gap:12}}>
+            <div style={{textAlign:"right"}}>
+              <div className="u-meta">Scope</div>
+              <div style={{fontWeight:700, fontSize:13}}>{currentProject?.title || currentProject?.name || currentProject?.label || "All projects"}</div>
+            </div>
+            <div style={{width:1, height:32, background:"var(--edge)"}}/>
+            <button className="btn btn--sm" onClick={loadRuns} disabled={loading}>
+              <Icon name="refresh-cw" size={12}/>Refresh
+            </button>
+          </div>
+        </div>
+
+        <div className="grid" style={{gridTemplateColumns:"360px 1fr", gap:16, alignItems:"start"}}>
+          <div className="card card--flush">
+            <div className="card__head">
+              <h3>Runs</h3>
+              <div className="spacer"/>
+              <span className="u-meta">{runs.length} stored</span>
+            </div>
+            <div style={{maxHeight:"calc(100vh - 260px)", overflow:"auto"}}>
+              {loading && (
+                <div style={{padding:16, color:"var(--fg-3)"}}>Loading optimization history...</div>
+              )}
+              {!loading && runs.length === 0 && (
+                <div style={{padding:16, color:"var(--fg-3)"}}>No saved optimization runs were found for this project.</div>
+              )}
+              {runs.map(run => {
+                const isSelected = String(run.id) === String(selectedRunId);
+                const status = String(run.status || "unknown").toLowerCase();
+                const statusChip = ['success', 'infeasible', 'no_feasible_found_time_limit', 'cancelled'].includes(status)
+                  ? (status === 'success' ? 'chip--pos' : status === 'cancelled' ? 'chip--disc' : 'chip--neg')
+                  : 'chip--orange';
+                return (
+                  <button
+                    key={run.id}
+                    className="card"
+                    onClick={() => selectRun(run)}
+                    style={{
+                      width:"100%",
+                      padding:14,
+                      textAlign:"left",
+                      border:0,
+                      borderBottom:"1px solid var(--edge)",
+                      borderRadius:0,
+                      background: isSelected ? "var(--sme-orange-050)" : "transparent",
+                    }}
+                  >
+                    <div className="row" style={{marginBottom:8}}>
+                      <div className="u-meta">Run {run.id}</div>
+                      <div className="spacer"/>
+                      <span className={"chip " + statusChip}>{String(run.run_mode || "light").toUpperCase()}</span>
+                    </div>
+                    <div style={{fontWeight:700, fontSize:14, marginBottom:4}}>{run.project_name || currentProject?.title || currentProject?.name || "Workspace run"}</div>
+                    <div className="u-meta" style={{marginBottom:8}}>{run.status_message || run.message || run.progress_stage || status}</div>
+                    <div className="row" style={{fontSize:11, color:"var(--fg-3)"}}>
+                      <span>{formatDate(run.created_at)}</span>
+                      <div className="spacer"/>
+                      <span>{run.selected_output_count ? `${run.selected_output_count} outputs` : 'No stored outputs'}</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="card card--pad" style={{minHeight:480}}>
+            {!selectedRun && !loading && (
+              <div style={{color:"var(--fg-3)"}}>Select a run to see its stored result and open it in the scenarios view.</div>
+            )}
+            {selectedRun && (
+              <>
+                <div className="row" style={{marginBottom:14}}>
+                  <div>
+                    <div className="sme-eyebrow" style={{marginBottom:6}}>Selected run</div>
+                    <h2 style={{fontSize:22, letterSpacing:"-0.01em"}}>Run {selectedRun.id}</h2>
+                  </div>
+                  <div className="spacer"/>
+                  <span className="chip chip--orange">{String(selectedRun.run_mode || "light").toUpperCase()}</span>
+                  <span className={"chip " + (String(selectedRun.status || '').toLowerCase() === 'success' ? 'chip--pos' : String(selectedRun.status || '').toLowerCase() === 'infeasible' ? 'chip--neg' : 'chip--outline')} style={{marginLeft:8}}>
+                    {String(selectedRun.status || 'unknown').replaceAll('_', ' ')}
+                  </span>
+                </div>
+
+                <div className="grid" style={{gridTemplateColumns:"repeat(4, minmax(0, 1fr))", gap:12, marginBottom:18}}>
+                  <Metric label="Project" value={selectedRun.project_name || currentProject?.title || currentProject?.name || "Workspace"} />
+                  <Metric label="Candidates" value={String(selectedRun.feasible_count ?? selectedRun.candidate_count ?? 0)} />
+                  <Metric label="Search" value={selectedRun.search_exhaustive ? "Exhaustive" : "Partial"} />
+                  <Metric label="Progress" value={selectedRun.progress_percent != null ? `${selectedRun.progress_percent}%` : "n/a"} />
+                </div>
+
+                <div className="stack" style={{gap:10, marginBottom:18}}>
+                  <div className="banner banner--info">
+                    <Icon name="info" size={16} className="banner__icon"/>
+                    <div>{selectedRun.progress_stage || selectedRun.message || selectedRun.status_message || "Stored run details"}</div>
+                  </div>
+                  {selectedRun.progress_message && (
+                    <div className="banner banner--warn">
+                      <Icon name="alert" size={16} className="banner__icon"/>
+                      <div>{selectedRun.progress_message}</div>
+                    </div>
+                  )}
+                  {selectedRun.failure_reason && (
+                    <div className="banner banner--warn">
+                      <Icon name="alert" size={16} className="banner__icon"/>
+                      <div>{selectedRun.failure_reason}</div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid" style={{gridTemplateColumns:"repeat(3, minmax(0, 1fr))", gap:12, marginBottom:18}}>
+                  <div className="card card--pad" style={{background:"var(--surface-2)"}}>
+                    <div className="u-meta">Created</div>
+                    <div style={{fontWeight:700, marginTop:4}}>{formatDate(selectedRun.created_at)}</div>
+                  </div>
+                  <div className="card card--pad" style={{background:"var(--surface-2)"}}>
+                    <div className="u-meta">Started</div>
+                    <div style={{fontWeight:700, marginTop:4}}>{formatDate(selectedRun.started_at)}</div>
+                  </div>
+                  <div className="card card--pad" style={{background:"var(--surface-2)"}}>
+                    <div className="u-meta">Completed</div>
+                    <div style={{fontWeight:700, marginTop:4}}>{formatDate(selectedRun.completed_at || selectedRun.cancelled_at)}</div>
+                  </div>
+                </div>
+
+                {selectedOutputKeys.length > 0 && (
+                  <div style={{marginBottom:18}}>
+                    <div className="row" style={{marginBottom:10}}>
+                      <h3 style={{fontSize:13}}>Selected outputs</h3>
+                      <div className="spacer"/>
+                      <span className="u-meta">{selectedOutputKeys.length} fixed objectives</span>
+                    </div>
+                    <div className="grid" style={{gridTemplateColumns:"repeat(2, minmax(0, 1fr))", gap:12}}>
+                      {selectedOutputKeys.map(key => {
+                        const entry = selectedOutputs?.[key] || {};
+                        const metric = entry?.metrics?.expected_cost_population ?? entry?.metrics?.cost_per_positive_test ?? null;
+                        const detailLabel = normalizeHistoryText(entry.template_summary || entry.label || key) || key;
+                        const detailNote = normalizeHistoryText(entry.warnings?.[0] || selectedRun.message || "Stored objective from this optimization run.");
+                        return (
+                          <div key={key} className="card card--pad" style={{background:"var(--sme-orange-050)", borderColor:"var(--sme-orange-100)"}}>
+                            <div className="u-meta" style={{marginBottom:6}}>{key.replaceAll('_', ' ')}</div>
+                            <div style={{fontWeight:700, marginBottom:6}}>{detailLabel}</div>
+                            <div style={{fontSize:12, color:"var(--fg-2)", marginBottom:10}}>{detailNote}</div>
+                            <div className="row" style={{fontSize:11}}>
+                              <span className="chip chip--outline">{metric != null ? `$${Number(metric).toFixed(2)}` : 'n/a'}</span>
+                              <div className="spacer"/>
+                              <button className="btn btn--sm" onClick={async () => {
+                                try {
+                                  await window.OptiDxActions.openOptimizationRunHistoryItem?.(selectedRun.id);
+                                  setScreen("scenarios");
+                                } catch (error) {
+                                  window.OptiDxActions.showToast?.(error?.message || "Unable to open scenario", "error");
+                                }
+                              }}>
+                                Open in scenarios
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <div className="row" style={{justifyContent:"flex-end"}}>
+                  <button className="btn" onClick={() => selectRun(selectedRun)}>
+                    <Icon name="refresh-cw" size={12}/>Refresh details
+                  </button>
+                  <button className="btn btn--primary" onClick={openSelectedInScenarios} disabled={!selectedRun?.id}>
+                    <Icon name="git-branch"/>Open details
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 function RadarChart() {
   const axes = ["Sens","Spec","Low cost","Fast","Low skill","Few samples"];
   const current = [0.84,0.95,0.60,0.75,0.80,0.50];
@@ -193,7 +566,23 @@ function RadarChart() {
 }
 
 function ScatterChart() {
-  const pts = (window.OptiDxOptimizationScenarios?.length ? window.OptiDxOptimizationScenarios : window.SEED_COMPARE).map(c => ({ ...c, px: 20 + c.cost*10, py: 200 - c.sens*200 }));
+  const source = Array.isArray(window.OptiDxOptimizationScenarios) && window.OptiDxOptimizationScenarios.length
+    ? window.OptiDxOptimizationScenarios
+    : Array.isArray(window.SEED_COMPARE)
+      ? window.SEED_COMPARE
+      : [];
+  const pts = source.map(c => {
+    const name = String(c?.name || c?.label || c?.objectiveName || c?.id || "Pathway");
+    return {
+      ...c,
+      name,
+      shortName: name.trim().split(/\s+/).filter(Boolean)[0] || "Pathway",
+      cost: Number(c?.cost ?? 0),
+      sens: Number(c?.sens ?? 0),
+      px: 20 + Number(c?.cost ?? 0) * 10,
+      py: 200 - Number(c?.sens ?? 0) * 200,
+    };
+  });
   return (
     <svg width="100%" height="220" viewBox="0 0 500 220">
       <line x1="40" y1="10" x2="40" y2="200" stroke="var(--edge)"/>
@@ -205,7 +594,7 @@ function ScatterChart() {
           <circle cx={40 + p.cost*12} cy={200 - p.sens*180} r={p.feasible ? 8 : 6}
             fill={p.id === "c1" ? "var(--sme-orange)" : p.feasible ? "var(--pos)" : "var(--fg-4)"}
             opacity={p.feasible ? 0.85 : 0.4}/>
-          <text x={40 + p.cost*12 + 10} y={200 - p.sens*180 + 3} fontSize="10" fill="var(--fg-2)">{p.name.split(" ")[0]}</text>
+          <text x={40 + p.cost*12 + 10} y={200 - p.sens*180 + 3} fontSize="10" fill="var(--fg-2)">{p.shortName}</text>
         </g>
       ))}
     </svg>
@@ -222,8 +611,8 @@ function ScreenEvidence({ setScreen }) {
   const [requested, setRequested] = useState(false);
   const [view, setView] = useState("grid"); // grid | table
 
-  const diseases = window.SEED_PRESET_DISEASES;
-  const presets = window.SEED_PRESET_TESTS;
+  const diseases = Array.isArray(window.SEED_PRESET_DISEASES) ? window.SEED_PRESET_DISEASES : [];
+  const presets = Array.isArray(window.SEED_PRESET_TESTS) ? window.SEED_PRESET_TESTS : [];
   const areas = ["all", ...Array.from(new Set(diseases.map(d => d.area)))];
   const cats  = ["all","molecular","imaging","rapid","biomarker","clinical","pathology"];
 
@@ -501,7 +890,8 @@ function PresetCard({ preset:p, onClick, selected }) {
 }
 
 function getDiseaseArea(id) {
-  return window.SEED_PRESET_DISEASES.find(d => d.id === id)?.area || "Other";
+  const diseases = Array.isArray(window.SEED_PRESET_DISEASES) ? window.SEED_PRESET_DISEASES : [];
+  return diseases.find(d => d.id === id)?.area || "Other";
 }
 
 function Stat({ label, value, sub, mono = true }) {
@@ -837,5 +1227,5 @@ function ParallelModal({ onClose }) {
   );
 }
 
-Object.assign(window, { ScreenTrace, ScreenCompare, ScreenEvidence, ParallelModal });
+Object.assign(window, { ScreenTrace, ScreenCompare, ScreenEvidence, ParallelModal, ScreenOptimizationHistory });
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';

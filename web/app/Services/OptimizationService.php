@@ -7,6 +7,7 @@ use App\Models\DiagnosticTest;
 use App\Models\OptimizationRun;
 use App\Notifications\OptimizationRunCompletedNotification;
 use Illuminate\Support\Facades\Notification;
+use Symfony\Component\Process\Process;
 
 class OptimizationService
 {
@@ -143,6 +144,7 @@ class OptimizationService
             'status' => 'running',
             'started_at' => now(),
             'failure_reason' => null,
+            'process_pid' => null,
             'progress_percent' => 0,
             'progress_stage' => 'starting',
             'progress_message' => 'Optimization run is starting.',
@@ -163,6 +165,11 @@ class OptimizationService
 
     public function recordRunProgress(OptimizationRun $run, array $progress): OptimizationRun
     {
+        $latestRun = $run->fresh();
+        if (($latestRun->status ?? $run->status ?? null) === 'cancelled') {
+            return $latestRun->refresh();
+        }
+
         $run->fill([
             'progress_percent' => $this->clampProgressPercent($progress['progress_percent'] ?? null),
             'progress_stage' => (string) ($progress['stage'] ?? $run->progress_stage ?? 'searching'),
@@ -176,6 +183,11 @@ class OptimizationService
 
     public function recordRunResult(OptimizationRun $run, array $result): OptimizationRun
     {
+        $latestRun = $run->fresh();
+        if (($latestRun->status ?? $run->status ?? null) === 'cancelled') {
+            return $latestRun->refresh();
+        }
+
         $status = $result['status'] ?? 'success';
         $warnings = array_values(array_filter(array_map('strval', $result['warnings'] ?? [])));
 
@@ -199,6 +211,7 @@ class OptimizationService
             'warnings' => $warnings,
             'failure_reason' => $status === 'failed' ? ($result['message'] ?? null) : null,
             'completed_at' => now(),
+            'process_pid' => null,
             'result_payload' => $result,
         ]);
         $run->save();
@@ -211,6 +224,7 @@ class OptimizationService
         $run->fill([
             'status' => 'failed',
             'completed_at' => now(),
+            'process_pid' => null,
             'failure_reason' => $error->getMessage(),
             'progress_stage' => 'failed',
             'progress_message' => $error->getMessage(),
@@ -241,6 +255,36 @@ class OptimizationService
 
         Notification::send($user, new OptimizationRunCompletedNotification($run));
         $run->forceFill(['notified_at' => now()])->save();
+    }
+
+    public function cancelRun(OptimizationRun $run, ?string $reason = null): OptimizationRun
+    {
+        $latestRun = $run->fresh();
+        if (in_array($latestRun->status ?? $run->status ?? null, ['success', 'infeasible', 'no_feasible_found_time_limit', 'failed', 'cancelled'], true)) {
+            return $latestRun->refresh();
+        }
+
+        $pid = (int) ($latestRun->process_pid ?? $run->process_pid ?? 0);
+        if ($pid > 0) {
+            $this->terminateProcess($pid);
+        }
+
+        if ($pid <= 0) {
+            $this->terminateProcessByRunId((string) $latestRun->id);
+        }
+
+        $run->fill([
+            'status' => 'cancelled',
+            'completed_at' => now(),
+            'cancelled_at' => now(),
+            'process_pid' => null,
+            'failure_reason' => $reason ?? 'Optimization run was cancelled by the user.',
+            'progress_stage' => 'cancelled',
+            'progress_message' => $reason ?? 'Optimization run was cancelled by the user.',
+        ]);
+        $run->save();
+
+        return $run->refresh();
     }
 
     private function normalizeTestRecord(string|int $resolvedKey, array $test): array
@@ -454,6 +498,63 @@ class OptimizationService
 
         $numeric = (int) round((float) $value);
         return max(0, min(100, $numeric));
+    }
+
+    private function terminateProcess(int $pid): void
+    {
+        if ($pid <= 0) {
+            return;
+        }
+
+        try {
+            if (PHP_OS_FAMILY === 'Windows') {
+                $process = new Process(['taskkill', '/F', '/T', '/PID', (string) $pid]);
+                $process->setTimeout(10);
+                $process->run();
+                return;
+            }
+
+            if (function_exists('posix_kill')) {
+                @posix_kill($pid, SIGTERM);
+                usleep(500000);
+                @posix_kill($pid, SIGKILL);
+                return;
+            }
+
+            $process = new Process(['kill', '-TERM', (string) $pid]);
+            $process->setTimeout(10);
+            $process->run();
+        } catch (\Throwable) {
+            // Best-effort kill only. The run is still marked cancelled so the UI stops treating it as active.
+        }
+    }
+
+    private function terminateProcessByRunId(string $runId): void
+    {
+        if (trim($runId) === '') {
+            return;
+        }
+
+        try {
+            $pattern = 'optidx:run-optimization ' . $runId;
+
+            if (PHP_OS_FAMILY === 'Windows') {
+                $command = sprintf(
+                    "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Get-CimInstance Win32_Process | Where-Object { \$_.CommandLine -like '*%s*' } | ForEach-Object { Stop-Process -Id \$_.ProcessId -Force }\"",
+                    str_replace("'", "''", $pattern)
+                );
+                $process = Process::fromShellCommandline($command);
+                $process->setTimeout(10);
+                $process->run();
+                return;
+            }
+
+            $process = Process::fromShellCommandline(sprintf('pkill -f %s', escapeshellarg($pattern)));
+            $process->setTimeout(10);
+            $process->run();
+        } catch (\Throwable) {
+            // Best-effort fallback only. The run is still marked cancelled so the UI stops treating it as active.
+        }
     }
 
     private function containsAny(array $haystack, array $needles): bool

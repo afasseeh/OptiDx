@@ -1,0 +1,331 @@
+- generic [ref=e91]:
+  - generic [ref=e92]:
+    - generic [ref=e93]: BETA
+    - generic [ref=e94]:
+      - generic [ref=e95]: Public beta
+      - text: by Syreon.
+      - generic [ref=e96]: ·
+      - generic [ref=e97]: Non‑profit, free to use.
+      - generic [ref=e98]: ·
+      - generic [ref=e99]: Not yet validated
+    - generic [ref=e101]:
+      - button "Send feedback" [ref=e102] [cursor=pointer]:
+        - img [ref=e103]
+        - text: Send feedback
+      - button "About beta" [ref=e106] [cursor=pointer]:
+        - text: About beta
+        - img [ref=e107]
+  - navigation [ref=e109]:
+    - generic "OptiDx" [ref=e111]:
+      - generic [ref=e112]: Ox
+    - generic "Home" [ref=e114] [cursor=pointer]:
+      - img [ref=e115]
+    - generic "New" [ref=e118] [cursor=pointer]:
+      - img [ref=e119]
+    - generic "Builder" [ref=e124] [cursor=pointer]:
+      - img [ref=e125]
+    - generic "Results" [ref=e130] [cursor=pointer]:
+      - img [ref=e131]
+    - generic "Compare" [ref=e132] [cursor=pointer]:
+      - img [ref=e133]
+    - generic "Evidence" [ref=e134] [cursor=pointer]:
+      - img [ref=e135]
+    - generic "Report" [ref=e139] [cursor=pointer]:
+      - img [ref=e140]
+    - generic "Teams" [ref=e143] [cursor=pointer]:
+      - img [ref=e144]
+    - generic "Send feedback or report a bug" [ref=e147] [cursor=pointer]:
+      - img [ref=e148]
+    - generic "Settings" [ref=e151] [cursor=pointer]:
+      - img [ref=e152]
+  - main [ref=e155]:
+    - generic [ref=e156]:
+      - generic [ref=e157]:
+        - generic [ref=e158]: OptiDx
+        - img [ref=e159]
+        - generic [ref=e161]: Workspace
+      - generic [ref=e162]:
+        - button "Optimization history" [ref=e163] [cursor=pointer]:
+          - img [ref=e164]
+          - text: Optimization history
+        - button "Import JSON" [ref=e166] [cursor=pointer]:
+          - img [ref=e167]
+          - text: Import JSON
+        - button "New project" [ref=e170] [cursor=pointer]:
+          - img [ref=e171]
+          - text: New project
+    - generic [ref=e173]:
+      - generic [ref=e174]:
+        - generic [ref=e175]:
+          - generic [ref=e176]: Pathways
+          - heading "Diagnostic project workspace" [level=1] [ref=e177]
+          - paragraph [ref=e178]: Design, run, and compare diagnostic projects. Grounded in published evidence.
+        - generic [ref=e180]: Workspace · Syreon MENA HTA
+      - generic [ref=e181]:
+        - generic [ref=e182]:
+          - heading "Recent pathways" [level=2] [ref=e183]
+          - button "View all" [ref=e184] [cursor=pointer]:
+            - text: View all
+            - img [ref=e185]
+        - generic [ref=e187]:
+          - article [ref=e188] [cursor=pointer]:
+            - generic [ref=e189]:
+              - generic [ref=e190]:
+                - generic [ref=e191]: draft
+                - button "Pathway actions for Discordant referee" [ref=e193]:
+                  - img [ref=e194]
+              - heading "Discordant referee" [level=3] [ref=e198]
+              - generic [ref=e199]: Discordant referee
+            - generic [ref=e200]:
+              - generic [ref=e201]: Sens —
+              - generic [ref=e202]: Spec —
+              - generic [ref=e203]: Cost —
+              - generic [ref=e204]: TAT —
+            - generic [ref=e205]: Updated 4/26/2026 · Workspace
+          - article [ref=e206] [cursor=pointer]:
+            - generic [ref=e207]:
+              - generic [ref=e208]:
+                - generic [ref=e209]: draft
+                - button "Pathway actions for Single test" [ref=e211]:
+                  - img [ref=e212]
+              - heading "Single test" [level=3] [ref=e216]
+              - generic [ref=e217]: Single test
+            - generic [ref=e218]:
+              - generic [ref=e219]: Sens —
+              - generic [ref=e220]: Spec —
+              - generic [ref=e221]: Cost —
+              - generic [ref=e222]: TAT —
+            - generic [ref=e223]: Updated 4/26/2026 · Workspace
+          - article [ref=e224] [cursor=pointer]:
+            - generic [ref=e225]:
+              - generic [ref=e226]:
+                - generic [ref=e227]: valid
+                - button "Pathway actions for Serial rescue" [ref=e229]:
+                  - img [ref=e230]
+              - heading "Serial rescue" [level=3] [ref=e234]
+              - generic [ref=e235]: Serial rescue
+            - generic [ref=e236]:
+              - generic [ref=e237]: Sens 0.0%
+              - generic [ref=e238]: Spec 0.0%
+              - generic [ref=e239]: Cost $0.00
+              - generic [ref=e240]: TAT 0 m
+            - generic [ref=e241]: Updated 4/26/2026 · Workspace
+          - article [ref=e242] [cursor=pointer]:
+            - generic [ref=e243]:
+              - generic [ref=e244]:
+                - generic [ref=e245]: draft
+                - button "Pathway actions for Single test" [ref=e247]:
+                  - img [ref=e248]
+              - heading "Single test" [level=3] [ref=e252]
+              - generic [ref=e253]: Single test
+            - generic [ref=e254]:
+              - generic [ref=e255]: Sens —
+              - generic [ref=e256]: Spec —
+              - generic [ref=e257]: Cost —
+              - generic [ref=e258]: TAT —
+            - generic [ref=e259]: Updated 4/26/2026 · Workspace
+          - article [ref=e260] [cursor=pointer]:
+            - generic [ref=e261]:
+              - generic [ref=e262]:
+                - generic [ref=e263]: valid
+                - button "Pathway actions for Serial rescue" [ref=e265]:
+                  - img [ref=e266]
+              - heading "Serial rescue" [level=3] [ref=e270]
+              - generic [ref=e271]: Serial rescue
+            - generic [ref=e272]:
+              - generic [ref=e273]: Sens 0.0%
+              - generic [ref=e274]: Spec 0.0%
+              - generic [ref=e275]: Cost $0.00
+              - generic [ref=e276]: TAT 0 m
+            - generic [ref=e277]: Updated 4/26/2026 · Workspace
+          - article [ref=e278] [cursor=pointer]:
+            - generic [ref=e279]:
+              - generic [ref=e280]:
+                - generic [ref=e281]: draft
+                - button "Pathway actions for Single test" [ref=e283]:
+                  - img [ref=e284]
+              - heading "Single test" [level=3] [ref=e288]
+              - generic [ref=e289]: Single test
+            - generic [ref=e290]:
+              - generic [ref=e291]: Sens —
+              - generic [ref=e292]: Spec —
+              - generic [ref=e293]: Cost —
+              - generic [ref=e294]: TAT —
+            - generic [ref=e295]: Updated 4/26/2026 · Workspace
+          - article [ref=e296] [cursor=pointer]:
+            - generic [ref=e297]:
+              - generic [ref=e298]:
+                - generic [ref=e299]: draft
+                - button "Pathway actions for Parallel OR" [ref=e301]:
+                  - img [ref=e302]
+              - heading "Parallel OR" [level=3] [ref=e306]
+              - generic [ref=e307]: Parallel OR
+            - generic [ref=e308]:
+              - generic [ref=e309]: Sens —
+              - generic [ref=e310]: Spec —
+              - generic [ref=e311]: Cost —
+              - generic [ref=e312]: TAT —
+            - generic [ref=e313]: Updated 4/26/2026 · Workspace
+          - article [ref=e314] [cursor=pointer]:
+            - generic [ref=e315]:
+              - generic [ref=e316]:
+                - generic [ref=e317]: valid
+                - button "Pathway actions for Single test" [ref=e319]:
+                  - img [ref=e320]
+              - heading "Single test" [level=3] [ref=e324]
+              - generic [ref=e325]: Single test
+            - generic [ref=e326]:
+              - generic [ref=e327]: Sens 50.4%
+              - generic [ref=e328]: Spec 87.8%
+              - generic [ref=e329]: Cost $0.20
+              - generic [ref=e330]: TAT 5 m
+            - generic [ref=e331]: Updated 4/26/2026 · Workspace
+          - article [ref=e332] [cursor=pointer]:
+            - generic [ref=e333]:
+              - generic [ref=e334]:
+                - generic [ref=e335]: draft
+                - button "Pathway actions for Parallel OR" [ref=e337]:
+                  - img [ref=e338]
+              - heading "Parallel OR" [level=3] [ref=e342]
+              - generic [ref=e343]: Parallel OR
+            - generic [ref=e344]:
+              - generic [ref=e345]: Sens —
+              - generic [ref=e346]: Spec —
+              - generic [ref=e347]: Cost —
+              - generic [ref=e348]: TAT —
+            - generic [ref=e349]: Updated 4/26/2026 · Workspace
+          - article [ref=e350] [cursor=pointer]:
+            - generic [ref=e351]:
+              - generic [ref=e352]:
+                - generic [ref=e353]: valid
+                - button "Pathway actions for Parallel OR" [ref=e355]:
+                  - img [ref=e356]
+              - heading "Parallel OR" [level=3] [ref=e360]
+              - generic [ref=e361]: Parallel OR
+            - generic [ref=e362]:
+              - generic [ref=e363]: Sens 99.7%
+              - generic [ref=e364]: Spec 95.1%
+              - generic [ref=e365]: Cost $6.41
+              - generic [ref=e366]: TAT 2 d 4 h 6 m
+            - generic [ref=e367]: Updated 4/26/2026 · Workspace
+          - article [ref=e368] [cursor=pointer]:
+            - generic [ref=e369]:
+              - generic [ref=e370]:
+                - generic [ref=e371]: draft
+                - button "Pathway actions for Single test" [ref=e373]:
+                  - img [ref=e374]
+              - heading "Single test" [level=3] [ref=e378]
+              - generic [ref=e379]: Single test
+            - generic [ref=e380]:
+              - generic [ref=e381]: Sens —
+              - generic [ref=e382]: Spec —
+              - generic [ref=e383]: Cost —
+              - generic [ref=e384]: TAT —
+            - generic [ref=e385]: Updated 4/25/2026 · Workspace
+          - article [ref=e386] [cursor=pointer]:
+            - generic [ref=e387]:
+              - generic [ref=e388]:
+                - generic [ref=e389]: draft
+                - button "Pathway actions for Parallel OR" [ref=e391]:
+                  - img [ref=e392]
+              - heading "Parallel OR" [level=3] [ref=e396]
+              - generic [ref=e397]: Parallel OR
+            - generic [ref=e398]:
+              - generic [ref=e399]: Sens —
+              - generic [ref=e400]: Spec —
+              - generic [ref=e401]: Cost —
+              - generic [ref=e402]: TAT —
+            - generic [ref=e403]: Updated 4/25/2026 · Workspace
+          - article [ref=e404] [cursor=pointer]:
+            - generic [ref=e405]:
+              - generic [ref=e406]:
+                - generic [ref=e407]: draft
+                - button "Pathway actions for Single test" [ref=e409]:
+                  - img [ref=e410]
+              - heading "Single test" [level=3] [ref=e414]
+              - generic [ref=e415]: Single test
+            - generic [ref=e416]:
+              - generic [ref=e417]: Sens —
+              - generic [ref=e418]: Spec —
+              - generic [ref=e419]: Cost —
+              - generic [ref=e420]: TAT —
+            - generic [ref=e421]: Updated 4/25/2026 · Workspace
+          - article [ref=e422] [cursor=pointer]:
+            - generic [ref=e423]:
+              - generic [ref=e424]:
+                - generic [ref=e425]: draft
+                - button "Pathway actions for Parallel OR" [ref=e427]:
+                  - img [ref=e428]
+              - heading "Parallel OR" [level=3] [ref=e432]
+              - generic [ref=e433]: Parallel OR
+            - generic [ref=e434]:
+              - generic [ref=e435]: Sens —
+              - generic [ref=e436]: Spec —
+              - generic [ref=e437]: Cost —
+              - generic [ref=e438]: TAT —
+            - generic [ref=e439]: Updated 4/25/2026 · Workspace
+      - generic [ref=e440]:
+        - generic [ref=e441]:
+          - heading "Templates" [level=2] [ref=e442]
+          - generic [ref=e443]: Start from a proven pattern
+        - generic [ref=e444]:
+          - article [ref=e445] [cursor=pointer]:
+            - img [ref=e447]
+            - heading "TB screening pathway" [level=3] [ref=e451]
+            - paragraph [ref=e452]: WHO-4 symptoms → CAD4TB → Xpert Ultra confirm.
+            - generic [ref=e453]:
+              - generic [ref=e454]: 3 tests
+              - generic [ref=e455]:
+                - text: Use template
+                - img [ref=e456]
+          - article [ref=e458] [cursor=pointer]:
+            - img [ref=e460]
+            - heading "HIV serial testing" [level=3] [ref=e463]
+            - paragraph [ref=e464]: Two sequential rapid tests, confirm on discordance.
+            - generic [ref=e465]:
+              - generic [ref=e466]: 3 tests
+              - generic [ref=e467]:
+                - text: Use template
+                - img [ref=e468]
+          - article [ref=e470] [cursor=pointer]:
+            - img [ref=e472]
+            - heading "HCC surveillance" [level=3] [ref=e474]
+            - paragraph [ref=e475]: Ultrasound + AFP in parallel with discordance referee.
+            - generic [ref=e476]:
+              - generic [ref=e477]: 3 tests
+              - generic [ref=e478]:
+                - text: Use template
+                - img [ref=e479]
+          - article [ref=e481] [cursor=pointer]:
+            - img [ref=e483]
+            - heading "Two-step screen-confirm" [level=3] [ref=e485]
+            - paragraph [ref=e486]: Generic sequential screen then confirm pattern.
+            - generic [ref=e487]:
+              - generic [ref=e488]: 2 tests
+              - generic [ref=e489]:
+                - text: Use template
+                - img [ref=e490]
+          - article [ref=e492] [cursor=pointer]:
+            - img [ref=e494]
+            - heading "Parallel + referee" [level=3] [ref=e499]
+            - paragraph [ref=e500]: Two parallel tests with a referee on discordance.
+            - generic [ref=e501]:
+              - generic [ref=e502]: 3 tests
+              - generic [ref=e503]:
+                - text: Use template
+                - img [ref=e504]
+      - generic [ref=e507]:
+        - generic [ref=e508]:
+          - generic [ref=e509]: Evidence database
+          - heading "Pre-curated diagnostic performance data" [level=3] [ref=e510]
+          - paragraph [ref=e511]: Browse published sensitivity and specificity estimates from Cochrane, WHO guidance, and peer-reviewed meta-analyses. Import records directly into your pathway.
+          - button "Open evidence database" [ref=e512] [cursor=pointer]:
+            - img [ref=e513]
+            - text: Open evidence database
+        - generic [ref=e517]:
+          - generic [ref=e518]: Getting started
+          - heading "Build your first pathway" [level=3] [ref=e519]
+          - paragraph [ref=e520]: A 4-step wizard walks you through the disease, test library, and constraints before you enter the canvas.
+          - button "Start wizard" [ref=e521] [cursor=pointer]:
+            - img [ref=e522]
+            - text: Start wizard

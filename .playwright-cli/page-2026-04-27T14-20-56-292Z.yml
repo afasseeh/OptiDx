@@ -1,0 +1,90 @@
+- generic [ref=e98]:
+  - generic [ref=e99]:
+    - generic [ref=e100]: BETA
+    - generic [ref=e101]:
+      - generic [ref=e102]: Public beta
+      - text: by Syreon.
+      - generic [ref=e103]: ·
+      - generic [ref=e104]: Non‑profit, free to use.
+      - generic [ref=e105]: ·
+      - generic [ref=e106]: Not yet validated
+    - generic [ref=e108]:
+      - button "Send feedback" [ref=e109] [cursor=pointer]:
+        - img [ref=e110]
+        - text: Send feedback
+      - button "About beta" [ref=e113] [cursor=pointer]:
+        - text: About beta
+        - img [ref=e114]
+  - navigation [ref=e116]:
+    - generic "OptiDx" [ref=e118]:
+      - generic [ref=e119]: Ox
+    - generic "Home" [ref=e121] [cursor=pointer]:
+      - img [ref=e122]
+    - generic "New" [ref=e125] [cursor=pointer]:
+      - img [ref=e126]
+    - generic "Builder" [ref=e131] [cursor=pointer]:
+      - img [ref=e132]
+    - generic "Results" [ref=e137] [cursor=pointer]:
+      - img [ref=e138]
+    - generic "Compare" [ref=e139] [cursor=pointer]:
+      - img [ref=e140]
+    - generic "Evidence" [ref=e141] [cursor=pointer]:
+      - img [ref=e142]
+    - generic "Report" [ref=e146] [cursor=pointer]:
+      - img [ref=e147]
+    - generic "Teams" [ref=e150] [cursor=pointer]:
+      - img [ref=e151]
+    - generic "Send feedback or report a bug" [ref=e154] [cursor=pointer]:
+      - img [ref=e155]
+    - generic "Settings" [ref=e158] [cursor=pointer]:
+      - img [ref=e159]
+  - main [ref=e4648]:
+    - generic [ref=e4649]:
+      - generic [ref=e4650]:
+        - generic [ref=e4651]: OptiDx
+        - img [ref=e4652]
+        - generic [ref=e4654]: New project
+      - generic [ref=e4655]:
+        - button "Cancel" [ref=e4656] [cursor=pointer]
+        - button "Continue" [ref=e4657] [cursor=pointer]:
+          - text: Continue
+          - img [ref=e4658]
+    - generic [ref=e4660]:
+      - generic [ref=e4661]:
+        - generic [ref=e4662] [cursor=pointer]:
+          - generic [ref=e4663]: "1"
+          - generic [ref=e4664]: Disease
+        - generic [ref=e4666] [cursor=pointer]:
+          - generic [ref=e4667]: "2"
+          - generic [ref=e4668]: Test library
+        - generic [ref=e4670] [cursor=pointer]:
+          - generic [ref=e4671]: "3"
+          - generic [ref=e4672]: Constraints
+        - generic [ref=e4674] [cursor=pointer]:
+          - generic [ref=e4675]: "4"
+          - generic [ref=e4676]: Review
+        - generic [ref=e4678] [cursor=pointer]:
+          - generic [ref=e4679]: "5"
+          - generic [ref=e4680]: Run
+      - generic [ref=e4681]:
+        - generic [ref=e4682]: Step 01
+        - heading "Project and clinical context" [level=2] [ref=e4683]
+        - paragraph [ref=e4684]: Define the project context and prevalence before configuring the optimizer.
+        - generic [ref=e4685]:
+          - generic [ref=e4686]:
+            - generic [ref=e4687]: Condition name
+            - textbox [ref=e4688]: Pulmonary tuberculosis
+          - generic [ref=e4689]:
+            - generic [ref=e4690]: Clinical context
+            - combobox [ref=e4691]:
+              - option "Community screening" [selected]
+              - option "Primary care triage"
+              - option "Hospital admission"
+          - generic [ref=e4692]:
+            - generic [ref=e4693]: Target population
+            - textbox [ref=e4694]: Adults ≥15 yrs presenting with cough >2 weeks
+          - generic [ref=e4695]:
+            - generic [ref=e4696]: Disease prevalence (optional)
+            - spinbutton [ref=e4697]: "8"
+            - generic: "%"
+            - generic [ref=e4698]: Prevalence is mandatory for optimization and report metrics.

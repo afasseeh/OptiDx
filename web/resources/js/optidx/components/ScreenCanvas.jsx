@@ -329,7 +329,35 @@ function hydrateCanvasGraph(pathway) {
 }
 
 function getTestCatalog() {
-  return window.OptiDxActions?.getWorkspaceTests?.() || window.SEED_TESTS || [];
+  const workspaceTests = window.OptiDxActions?.getWorkspaceTests?.();
+  return Array.isArray(workspaceTests)
+    ? workspaceTests
+    : Array.isArray(window.SEED_TESTS)
+      ? window.SEED_TESTS
+      : [];
+}
+
+function normalizeCanvasText(value, fallback = "") {
+  if (value == null) {
+    return fallback;
+  }
+
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+
+  if (typeof value === "object") {
+    return normalizeCanvasText(
+      value.name
+        ?? value.label
+        ?? value.test
+        ?? value.testId
+        ?? value.id,
+      fallback,
+    );
+  }
+
+  return fallback;
 }
 
 function snapshotTestRecord(test, fallbackLabel = null) {
@@ -340,8 +368,12 @@ function snapshotTestRecord(test, fallbackLabel = null) {
       : null;
 
   const fallback = source || {};
-  const id = String(fallback.id ?? test ?? fallbackLabel ?? "test");
-  const name = fallback.name || fallback.label || fallback.test || fallback.testId || fallbackLabel || id;
+  const fallbackText = normalizeCanvasText(fallbackLabel, "test");
+  const id = normalizeCanvasText(fallback.id ?? test ?? fallbackLabel, "test");
+  const name = normalizeCanvasText(
+    fallback.name || fallback.label || fallback.test || fallback.testId || fallbackLabel,
+    id,
+  );
   const sens = Number(fallback.sens ?? fallback.sensitivity ?? 0);
   const spec = Number(fallback.spec ?? fallback.specificity ?? 0);
   const cost = Number(fallback.cost ?? 0);
@@ -356,9 +388,9 @@ function snapshotTestRecord(test, fallbackLabel = null) {
     spec: Number.isFinite(spec) ? spec : 0,
     cost: Number.isFinite(cost) ? cost : 0,
     tat: Number.isFinite(tat) ? tat : 0,
-    tatUnit: fallback.tatUnit || fallback.turnaround_time_unit || "min",
-    sample: fallback.sample || "n/a",
-    skill: fallback.skill || "n/a",
+    tatUnit: normalizeCanvasText(fallback.tatUnit || fallback.turnaround_time_unit, "min"),
+    sample: normalizeCanvasText(fallback.sample, fallback.sample_types?.[0] || "n/a"),
+    skill: normalizeCanvasText(fallback.skill, fallback.skill_level || "n/a"),
   };
 }
 
@@ -1579,7 +1611,7 @@ function LivePathExplorer({ paths }) {
 
 // ---------- Validation Panel ----------
 function ValidationPanel() {
-  const v = window.SEED_VALIDATIONS;
+  const v = Array.isArray(window.SEED_VALIDATIONS) ? window.SEED_VALIDATIONS : [];
   const errs = v.filter(x => x.level === "error");
   const warns = v.filter(x => x.level === "warn");
   const infos = v.filter(x => x.level === "info");

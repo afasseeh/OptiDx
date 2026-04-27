@@ -1,5 +1,158 @@
 # Change Log
 
+## 2026-04-27 - Fix optimization history metric renderer
+
+- Summary: Added the missing metric card renderer to the optimization-history screen so stored runs can render their summary blocks without throwing a `Metric is not defined` runtime error.
+- Files or modules affected: `web/resources/js/optidx/components/ScreenOther.jsx`, `CHANGE_LOG.md`.
+- Reason for the change: The history page was still crashing even after the compare view was stabilized because it referenced a component that only existed in another module's file scope.
+- Architecture impact: Kept the history screen self-contained and removed an accidental cross-file component dependency from the browser workspace.
+- Migration or deployment impact: Rebuild and redeploy the frontend bundle so the history renderer fix ships. No database migration was required.
+- Follow-up notes: Browser verification on the latest bundle shows the history page now loads and lists stored optimization runs without a render error.
+
+## 2026-04-27 - Normalize compare and history scenario summaries
+
+- Summary: Hardened the compare and optimization-history rendering paths so stored scenario summaries are normalized before display, which prevents older optimization payloads with missing names or partial fixed-objective records from crashing the workspace screens.
+- Files or modules affected: `web/resources/js/optidx/components/ScreenOther.jsx`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: The compare screen and history-to-scenarios flow were still assuming every scenario record had the current full shape, but older stored optimization results can omit labels or carry partial fixed-objective payloads.
+- Architecture impact: Reinforced the browser compatibility boundary for historical optimization results by treating comparison data as untrusted presentation input that must be normalized before rendering.
+- Migration or deployment impact: Rebuild and redeploy the frontend bundle so the compare/history normalization ships. No database migration was required.
+- Follow-up notes: A longer-term repair task still tracks canonicalizing the legacy `optimization_runs` payloads at rest so these compatibility branches can eventually be removed.
+
+## 2026-04-27 - Seed the builder with a clean starter draft during auth bootstrap
+
+- Summary: Updated the authenticated shell and browser workspace bootstrap so they both install a clean starter canvas before async account-scoped workspace requests finish, preventing the Builder from mounting against stale demo graph data during fast navigation immediately after login or session restore.
+- Files or modules affected: `web/resources/js/optidx/components/App.jsx`, `web/resources/js/optidx/actions.js`, `ARCHITECTURE.md`, `FUTURE_TASKS.md`, `CHANGE_LOG.md`.
+- Reason for the change: The Builder could still hit the workspace error boundary when users opened it in the narrow gap between auth success and `/api/projects`, `/api/pathways`, `/api/evidence/tests`, and `/api/settings` hydration, because the screen briefly read the old prototype `SEED_PATHWAY`.
+- Architecture impact: Auth bootstrap and workspace bootstrap now share responsibility for installing an immediate safe Builder baseline before persisted-pathway hydration takes over, which removes the race between shell navigation and account-scoped data loading.
+- Migration or deployment impact: Rebuild the frontend bundle and redeploy the PHP app so the bootstrap guard ships. No database migration was required.
+- Follow-up notes: A deferred cleanup item was added for the legacy global-component files so Vite dev mode can provide unminified runtime stacks reliably.
+
+## 2026-04-27 - Guard remaining seed-array reads
+
+- Summary: Hardened the last unguarded seed-data reads in Builder and utility screens so `SEED_TESTS`, `SEED_COMPARE`, `SEED_PRESET_DISEASES`, and `SEED_VALIDATIONS` are treated as empty arrays when the workspace has not fully hydrated yet.
+- Files or modules affected: `web/resources/js/optidx/components/PropertiesPanel.jsx`, `web/resources/js/optidx/components/ScreenCanvas.jsx`, `web/resources/js/optidx/components/ScreenOther.jsx`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: The workspace error boundary could still appear when a screen rendered before seed fixtures or workspace collections were available, especially on Builder and secondary utility pages.
+- Architecture impact: Closed the remaining direct global-seed access paths in the browser UI so collection hydration is consistently defensive across the shell, Builder, and auxiliary screens.
+- Migration or deployment impact: Rebuild the frontend bundle only; no schema or backend migration was required.
+- Follow-up notes: The production bundle was rebuilt successfully after the change.
+
+## 2026-04-27 - Harden workspace collection hydration
+
+- Summary: Coerced the shared workspace getters and the Home, Wizard, Library, Scenarios, Canvas, and Properties panel consumers to arrays before rendering so malformed snapshot data cannot crash the workspace shell through a shared `.map()` path.
+- Files or modules affected: `web/resources/js/optidx/actions.js`, `web/resources/js/optidx/components/ScreenHome.jsx`, `web/resources/js/optidx/components/ScreenExtras.jsx`, `web/resources/js/optidx/components/ScreenWizard.jsx`, `web/resources/js/optidx/components/ScreenCanvas.jsx`, `web/resources/js/optidx/components/PropertiesPanel.jsx`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: The workspace error overlay was still appearing when screen components consumed a non-array workspace snapshot and failed during render.
+- Architecture impact: Tightened the browser-side boundary between workspace state hydration and screen rendering by normalizing collection-shaped data at the action layer and at the consuming screen layer, and removed two render-time crash sources in the wizard and scenarios screens.
+- Migration or deployment impact: Rebuild the frontend bundle only; no schema or backend migration was required.
+- Follow-up notes: The production bundle was rebuilt successfully after the change.
+
+## 2026-04-27 - Scope workspace error handling to individual screens
+
+- Summary: Moved the React error boundary from the entire authenticated shell to each individual screen so a render failure is isolated to the active page instead of blocking navigation across the workspace.
+- Files or modules affected: `web/resources/js/optidx/components/App.jsx`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: The global boundary was too broad and made a single screen failure feel like the whole app had crashed, even though other screens could still render correctly.
+- Architecture impact: The workspace shell and rail remain live even if one screen throws, which keeps the app navigable and makes screen-specific issues easier to recover from.
+- Migration or deployment impact: Rebuild and redeploy the frontend bundle so screen-level recovery boundaries are active. No database migration was required.
+- Follow-up notes: The fallback card is now tied to the current screen only, which is the appropriate blast radius for a render-time error in a multi-screen workspace.
+
+## 2026-04-27 - Hide stored optimization results from workspace Home
+
+- Summary: Changed the Home screen optimization banner so it only appears for live queued or running optimizations, while terminal stored results are accessed from the optimization history page instead of occupying the workspace front page.
+- Files or modules affected: `web/resources/js/optidx/components/ScreenHome.jsx`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: The persistent stored-result card was visually confusing and looked like a still-running optimization, even though it was only a saved terminal result.
+- Architecture impact: Home now functions as a workspace launcher and live-run surface only; historical optimization outputs are retained in the run library/history page rather than being duplicated on the landing view.
+- Migration or deployment impact: Rebuild and redeploy the frontend bundle so the Home surface no longer shows stored terminal optimization banners.
+- Follow-up notes: The optimization history page remains the place to inspect older runs or reopen stored results.
+
+## 2026-04-27 - Reset workspace error boundary on screen change
+
+- Summary: Made the authenticated workspace error boundary clear itself when the active screen changes, so a transient render failure on one screen does not permanently trap the user in the recovery card.
+- Files or modules affected: `web/resources/js/optidx/components/App.jsx`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: The user reported that Builder and other pages could not be opened after an optimization-related runtime error appeared, which meant the shell needed a way to recover without a full reload.
+- Architecture impact: The workspace error boundary is now scoped to the current screen rather than acting like a session-wide dead end after the first render exception.
+- Migration or deployment impact: Rebuild and redeploy the frontend bundle so the reset behavior ships with the app. No database migration was required.
+- Follow-up notes: The boundary still preserves the visible recovery card for the screen that actually failed, but users can now navigate away and continue working.
+
+## 2026-04-27 - Add workspace error boundary for white-screen recovery
+
+- Summary: Wrapped the authenticated workspace shell in a React error boundary so any render-time failure shows a readable recovery card with retry and reload actions instead of a blank white page.
+- Files or modules affected: `web/resources/js/optidx/components/App.jsx`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: The user reported intermittent white screens and crashes across multiple pages, so the shell needed a predictable recovery path even if a screen throws at render time.
+- Architecture impact: The workspace now has a top-level client-side safety net that isolates screen render failures from the rest of the app shell and makes the failure visible to the user.
+- Migration or deployment impact: Rebuild and redeploy the frontend bundle so the error boundary ships with the workspace shell. No database migration was required.
+- Follow-up notes: I reproduced the main workspace screens locally after signing in and they render, but this boundary prevents a hidden render error from taking the whole shell down if it reappears.
+
+## 2026-04-27 - Add stored optimization run history page
+
+- Summary: Added an account-scoped optimization run history endpoint and a dedicated workspace page that lists prior runs, opens a stored run in detail view, and routes into the scenarios screen without rerunning the same project.
+- Files or modules affected: `web/app/Http/Controllers/Api/OptimizationRunController.php`, `web/routes/api.php`, `web/resources/js/optidx/actions.js`, `web/resources/js/optidx/components/App.jsx`, `web/resources/js/optidx/components/ScreenHome.jsx`, `web/resources/js/optidx/components/ScreenOther.jsx`, `web/tests/Feature/PathwayApiTest.php`, `ARCHITECTURE.md`, `FUTURE_TASKS.md`, `CHANGE_LOG.md`.
+- Reason for the change: Users needed a durable place to inspect previous optimization runs and reopen their stored details instead of launching the same optimization multiple times.
+- Architecture impact: Optimization runs now have a browsable history surface in addition to the latest-result shortcut, and the browser can reopen a saved optimization run directly from the history list.
+- Migration or deployment impact: Rebuild the frontend bundle and redeploy the Laravel app so the new history route, index endpoint, and browser page are live. No database migration was required for this slice.
+- Follow-up notes: Validation was run with `npm run build`, and a feature test now covers account-scoped optimization run history listing.
+
+## 2026-04-27 - Rename optimization scenarios to objective labels
+
+- Summary: Updated the scenarios screen so the fixed optimization cards and the detail card are labeled by objective name, removed generic candidate wording from the main scenario view, and changed the Pareto plot to average cost per patient versus Youden's J.
+- Files or modules affected: `web/resources/js/optidx/actions.js`, `web/resources/js/optidx/components/ScreenExtras.jsx`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: The scenario cards needed to read like real optimization objectives instead of placeholder candidate buckets, and the chart needed to match the optimizer metrics users are asked to compare.
+- Architecture impact: The optimization UI now presents the eight fixed outputs using the canonical objective labels and aligns the frontier chart axes with average cost per patient and Youden's J.
+- Migration or deployment impact: Rebuild the frontend bundle and redeploy the PHP app so the updated scenario labels and chart axes are active. No database migration was required.
+- Follow-up notes: Validation passed with `npm run build`.
+
+## 2026-04-27 - Preserve unresolved discordant branches on import
+
+- Summary: Removed the canvas hydration fallback that auto-wired a missing parallel discordant branch to an inconclusive terminal, so imported optimizer drafts now keep the branch unresolved until a user connects it like any other output.
+- Files or modules affected: `web/resources/js/optidx/actions.js`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: The discordant output should remain editable and routeable to any valid downstream node rather than being hardcoded to inconclusive during hydration.
+- Architecture impact: Parallel discordant branches now behave like the other pathway outputs at import time, which keeps validation honest and lets the user decide whether the branch should end in positive, negative, inconclusive, or continue into another test.
+- Migration or deployment impact: Rebuild the frontend bundle and redeploy the PHP app so the updated canvas hydration logic is active. No database migration was required.
+- Follow-up notes: Validation passed with `npm run build`.
+
+## 2026-04-27 - Auto-connect missing parallel discordant branches
+
+- Summary: Updated the canvas hydration path so optimizer and imported pathway drafts automatically add a discordant branch target for parallel blocks when that port is missing, using an inconclusive terminal as the fallback endpoint.
+- Files or modules affected: `web/resources/js/optidx/actions.js`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: Loaded optimizer pathways were rendering a dangling discordant port on parallel blocks, which made the draft look incomplete and forced users to wire the branch manually.
+- Architecture impact: Parallel-block hydration now guarantees a visible downstream target for the discordant output when the source graph omits it, which keeps optimizer results builder-valid and easier to edit.
+- Migration or deployment impact: Rebuild the frontend bundle and redeploy the PHP app so the updated canvas hydration logic is active. No database migration was required.
+- Follow-up notes: Validation should include a browser smoke of an imported optimizer result to confirm the discordant branch renders to the new inconclusive fallback node.
+
+## 2026-04-27 - Add a real stop action for stalled optimization runs
+
+- Summary: Added a cancel endpoint for optimization runs, stored the detached process PID on launch, made the optimization service terminate active runs by PID when possible, and exposed a Stop run button on the wizard and workspace home surfaces.
+- Files or modules affected: `web/app/Http/Controllers/Api/OptimizationRunController.php`, `web/app/Http/Controllers/Api/PathwayController.php`, `web/app/Services/OptimizationService.php`, `web/app/Models/OptimizationRun.php`, `web/resources/js/optidx/actions.js`, `web/resources/js/optidx/components/ScreenHome.jsx`, `web/resources/js/optidx/components/ScreenWizard.jsx`, `web/database/migrations/2026_04_27_000240_add_process_tracking_to_optimization_runs_table.php`, `web/tests/Unit/OptimizationServiceTest.php`, `web/tests/Feature/PathwayApiTest.php`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: A stalled optimization run could be dismissed from the workspace but not truly killed, which left no supported way to stop a long-running detached optimizer process.
+- Architecture impact: Optimization runs now have an explicit backend cancellation path, the detached launcher records the child PID, and the service ignores late progress/result writes from runs that were cancelled mid-flight.
+- Migration or deployment impact: Apply the new optimization-runs migration, rebuild the frontend bundle, and redeploy the PHP app so the stop action and PID-backed cancellation are active.
+- Follow-up notes: Validation passed with `php artisan test --filter=OptimizationServiceTest`, `php artisan test --filter=PathwayApiTest`, and `npm run build`.
+
+## 2026-04-27 - Separate active and terminal optimization run storage
+
+- Summary: Split browser persistence for optimization runs into active and terminal slots so an in-flight run can survive refresh/navigation without overwriting the last completed result, and changed the Home card to show active work only while the run is actually queued or running.
+- Files or modules affected: `web/resources/js/optidx/actions.js`, `web/resources/js/optidx/components/ScreenHome.jsx`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: The workspace was getting stuck on a live optimization card because the same storage slot was being reused for both in-flight progress and completed results.
+- Architecture impact: Browser state now distinguishes live optimization work from stored optimization results, which lets the UI dismiss a live run without deleting the last terminal result and prevents stale active state from shadowing saved results.
+- Migration or deployment impact: Rebuild the frontend bundle and redeploy the PHP app so the browser state split is active. No database migration was required.
+- Follow-up notes: Validation passed with `php artisan test --filter=PathwayApiTest` and `npm run build`.
+
+## 2026-04-27 - Make restored optimization runs non-blocking
+
+- Summary: Changed the wizard so it only treats optimization runs launched in the current session as blocking state, added a `Hide from workspace` action for live optimization cards on Home, and kept background runs informational instead of preventing new work from starting.
+- Files or modules affected: `web/resources/js/optidx/actions.js`, `web/resources/js/optidx/components/ScreenWizard.jsx`, `web/resources/js/optidx/components/ScreenHome.jsx`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: A restored running optimization could leave the workspace feeling stuck because the browser treated the saved run as an active blocker even after the user navigated away.
+- Architecture impact: Restored optimization state is now advisory unless the current wizard session launched it, which keeps the background run visible without locking the user out of new optimization work.
+- Migration or deployment impact: Rebuild the frontend bundle and redeploy the PHP app so the non-blocking restore behavior and hide action are live. No database migration was required.
+- Follow-up notes: Validation passed with `php artisan test --filter=PathwayApiTest` and `npm run build`.
+
+## 2026-04-27 - Reattach polling for restored optimization runs
+
+- Summary: Fixed the browser restore path so a running optimization run loaded from local storage immediately reattaches the poller and continues until a terminal state instead of freezing on the last known 100% snapshot after navigation or refresh.
+- Files or modules affected: `web/resources/js/optidx/actions.js`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: Extended runs could appear stuck at finalizing outputs when the page was refreshed or revisited because the stored run state was restored without resuming polling.
+- Architecture impact: Restored active runs are now treated as live background work again, not as static state snapshots.
+- Migration or deployment impact: Rebuild the frontend bundle and redeploy the PHP app so the restored-run polling fix is active. No database migration was required.
+- Follow-up notes: Validation passed with `php artisan test --filter=PathwayApiTest` and `npm run build`.
+
 ## 2026-04-27 - Switch optimization progress to indeterminate activity
 
 - Summary: Replaced the percentage-style optimization progress bars with indeterminate activity animations on the wizard, scenarios, and workspace home surfaces so the UI no longer implies a known total pathway count.
@@ -636,3 +789,20 @@
 - Architecture impact: Clarified that the framework event listener owns the first verification email, while the controller only creates the account and dispatches the event.
 - Migration or deployment impact: Requires a PHP code deploy and a frontend/backend test pass only; no schema migration.
 - Follow-up notes: The auth feature test now asserts that registration emits exactly one verification notification.
+## 2026-04-27 - Sanitize shared workspace state and legacy screen fallbacks
+
+- Summary: Fixed the shared workspace snapshot helper so array and index fields are always normalized last, and hardened the legacy trace/compare/evidence/results screens so missing seed collections fall back to empty arrays or stub objects instead of throwing during render.
+- Files or modules affected: `web/resources/js/optidx/actions.js`, `web/resources/js/optidx/components/ScreenOther.jsx`, `web/resources/js/optidx/components/ScreenResults.jsx`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: The same workspace render error was appearing across multiple screens, which pointed to a shared state/seed hydration issue rather than a single view bug.
+- Architecture impact: Elevated `setWorkspaceSnapshot()` to the canonical boundary for workspace collection normalization and removed the last unsafe seed-fallback assumptions from the shared legacy screens.
+- Migration or deployment impact: Requires only a frontend rebuild/redeploy; no schema or backend changes were introduced.
+- Follow-up notes: A separate future task still tracks canonical repair of historical optimization payloads at rest.
+
+## 2026-04-27 - Harden optimization history for legacy infeasible runs
+
+- Summary: Normalized legacy optimization-history rendering so older infeasible runs with `selected_outputs` keys mapped to `null` no longer crash the stored-run detail or scenarios path when reopened from history.
+- Files or modules affected: `web/resources/js/optidx/actions.js`, `web/resources/js/optidx/components/ScreenOther.jsx`, `ARCHITECTURE.md`, `FUTURE_TASKS.md`, `CHANGE_LOG.md`.
+- Reason for the change: The Builder/runtime crash moved to optimization history because historical infeasible runs were persisted with partial fixed-objective payloads that the frontend treated like complete scenario records.
+- Architecture impact: Formalized a frontend compatibility rule that historical optimization payloads must be normalized into explicit non-feasible placeholders before any history or scenario screen renders them.
+- Migration or deployment impact: Requires a frontend rebuild/redeploy only; no schema migration was added in this fix.
+- Follow-up notes: A future repair task was added to canonicalize the legacy `optimization_runs` payloads at rest and remove the need for long-term compatibility branches.

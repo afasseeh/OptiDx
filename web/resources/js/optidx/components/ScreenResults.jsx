@@ -9,13 +9,15 @@ function collectPathwayTests(pathway) {
   for (const node of nodes) {
     if (node?.type === 'test' && node.testId && !seen.has(node.testId)) {
       seen.add(node.testId);
-      const t = testsMap[node.testId] || window.SEED_TESTS?.find(x => x.id === node.testId) || {};
+      const seedTests = Array.isArray(window.SEED_TESTS) ? window.SEED_TESTS : [];
+      const t = testsMap[node.testId] || seedTests.find(x => x.id === node.testId) || {};
       items.push({ id: node.testId, name: t.name || node.testId, cost: Number(t.cost ?? 0) });
     } else if (node?.type === 'parallel' && Array.isArray(node.members)) {
       for (const m of node.members) {
         if (m?.testId && !seen.has(m.testId)) {
           seen.add(m.testId);
-          const t = testsMap[m.testId] || window.SEED_TESTS?.find(x => x.id === m.testId) || {};
+          const seedTests = Array.isArray(window.SEED_TESTS) ? window.SEED_TESTS : [];
+          const t = testsMap[m.testId] || seedTests.find(x => x.id === m.testId) || {};
           items.push({ id: m.testId, name: t.name || m.testId, cost: Number(t.cost ?? 0) });
         }
       }
@@ -25,7 +27,7 @@ function collectPathwayTests(pathway) {
 }
 
 function ScreenResults({ variant = "A", setVariant, setScreen, onShare }) {
-  const r = window.OptiDxLatestEvaluationView || window.SEED_RESULTS;
+  const r = window.OptiDxLatestEvaluationView || window.SEED_RESULTS || { warnings: [], paths: [] };
   const pathway = window.OptiDxLatestEvaluationPathway;
   const pathwayLabel = pathway?.metadata?.label || "Latest pathway";
   const prevalenceLabel = window.OptiDxLatestEvaluationView?.prevalence != null
@@ -78,7 +80,7 @@ function ScreenResults({ variant = "A", setVariant, setScreen, onShare }) {
           </div>
           <div className="row" style={{gap:8}}>
             <span className="chip chip--pos"><Icon name="check" size={10}/> Feasible</span>
-            <span className="chip chip--disc">{r.warnings.length} warning{r.warnings.length === 1 ? "" : "s"}</span>
+            <span className="chip chip--disc">{Array.isArray(r.warnings) ? r.warnings.length : 0} warning{Array.isArray(r.warnings) && r.warnings.length === 1 ? "" : "s"}</span>
           </div>
         </div>
 
@@ -87,7 +89,7 @@ function ScreenResults({ variant = "A", setVariant, setScreen, onShare }) {
 
         {/* Warnings */}
         <div className="stack" style={{gap:8, margin:"20px 0"}}>
-          {r.warnings.map((w, i) => (
+          {(Array.isArray(r.warnings) ? r.warnings : []).map((w, i) => (
             <div key={i} className={"banner " + (w.kind === "warn" ? "banner--warn" : "banner--info")}>
               <Icon name={w.kind === "warn" ? "alert" : "info"} size={16} className="banner__icon"/>
               <div>{w.text}</div>
@@ -111,7 +113,7 @@ function ScreenResults({ variant = "A", setVariant, setScreen, onShare }) {
                 <th className="num">Cost</th><th>TAT</th>
               </tr></thead>
               <tbody>
-                {r.paths.map(p => (
+                {(Array.isArray(r.paths) ? r.paths : []).map(p => (
                   <tr key={p.id}>
                     <td className="mono"><b>{p.id}</b></td>
                     <td className="mono" style={{fontSize:11}}>{p.sequence}</td>

@@ -202,6 +202,35 @@ class OptimizationServiceTest extends TestCase
         $this->assertSame(120, $updated->progress_payload['expanded_count']);
     }
 
+    public function test_cancel_run_marks_run_cancelled_without_notification(): void
+    {
+        Notification::fake();
+
+        $service = new OptimizationService($this->createMock(PythonEngineBridge::class));
+        $run = OptimizationRun::create([
+            'created_by' => User::create([
+                'name' => 'Owner',
+                'email' => 'owner-cancel@example.com',
+                'password' => Hash::make('password123'),
+                'email_verified_at' => now(),
+            ])->id,
+            'status' => 'running',
+            'run_mode' => 'extensive',
+            'process_pid' => 999999,
+            'input_payload' => ['tests' => [], 'constraints' => ['prevalence' => 0.1], 'search_config' => []],
+            'constraints' => ['prevalence' => 0.1],
+        ]);
+
+        $cancelled = $service->cancelRun($run, 'Stopped by user.');
+
+        $this->assertSame('cancelled', $cancelled->status);
+        $this->assertSame('Stopped by user.', $cancelled->failure_reason);
+        $this->assertNull($cancelled->process_pid);
+        $this->assertNotNull($cancelled->completed_at);
+
+        Notification::assertNothingSent();
+    }
+
     public function test_notify_completion_sends_email_for_extensive_runs(): void
     {
         Notification::fake();

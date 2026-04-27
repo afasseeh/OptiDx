@@ -1,6 +1,11 @@
 // Home — Workspace home screen
 function ScreenHome({ setScreen }) {
-  const pathways = window.OptiDxActions.getWorkspacePathways?.() || window.SEED_PATHWAYS || [];
+  const workspacePathways = window.OptiDxActions.getWorkspacePathways?.();
+  const pathways = Array.isArray(workspacePathways)
+    ? workspacePathways
+    : Array.isArray(window.SEED_PATHWAYS)
+      ? window.SEED_PATHWAYS
+      : [];
   const templates = window.SEED_TEMPLATES || [];
   const [menuFor, setMenuFor] = useState(null);
   const [optimization, setOptimization] = useState(() => window.OptiDxOptimizationResults || null);
@@ -28,6 +33,9 @@ function ScreenHome({ setScreen }) {
       <TopBar
         crumbs={["OptiDx", "Workspace"]}
         actions={<>
+          <button className="btn" onClick={() => setScreen("history")}>
+            <Icon name="history"/>Optimization history
+          </button>
           <button className="btn" onClick={async () => {
             try {
               await window.OptiDxActions.importJsonFile(async (pathway) => {
@@ -55,29 +63,30 @@ function ScreenHome({ setScreen }) {
           </div>
         </div>
 
-        {optimization && (
+        {optimization && ['queued', 'running'].includes(String(optimization.status || '').toLowerCase()) && (
           <section style={{marginBottom:24}}>
             <div className="card card--pad" style={{borderLeft:"3px solid var(--sme-orange)"}}>
               <div className="row" style={{marginBottom:10}}>
                 <div>
-                  <div className="u-meta">Stored optimization run</div>
+                  <div className="u-meta">Active optimization run</div>
                   <h2 style={{fontSize:18, marginTop:4}}>
-                    {['queued', 'running'].includes(String(optimization.status || '').toLowerCase())
-                      ? 'An optimization run is still in progress'
-                      : 'Most recent optimization results are ready'}
+                    An optimization run is still in progress
                   </h2>
                 </div>
                 <div className="spacer"/>
                 <span className="chip chip--orange">{String(optimization.run_mode || 'light').toUpperCase()}</span>
               </div>
-              <div className="optimization-progress optimization-progress--indeterminate" aria-label="Optimization activity" role="progressbar" aria-busy="true" aria-valuetext={['queued', 'running'].includes(String(optimization.status || '').toLowerCase()) ? 'Optimization in progress' : 'Optimization results ready'}>
+              <div className="optimization-progress optimization-progress--indeterminate" aria-label="Optimization activity" role="progressbar" aria-busy="true" aria-valuetext="Optimization in progress">
                 <div className="optimization-progress__bar is-running" />
               </div>
               <div className="optimization-progress__meta">
                 <span>{optimization.progress_stage || optimization.status || 'Run status'}</span>
-                <span>{['queued', 'running'].includes(String(optimization.status || '').toLowerCase()) ? 'Working' : 'Ready'}</span>
+                <span>Working</span>
               </div>
               <div className="row" style={{marginTop:12, justifyContent:"flex-end"}}>
+                <button className="btn btn--primary" onClick={() => window.OptiDxActions.cancelOptimizationRun?.(optimization.id)}>
+                  Stop run
+                </button>
                 <button className="btn btn--primary" onClick={() => setScreen("scenarios")}>
                   Open run status
                 </button>

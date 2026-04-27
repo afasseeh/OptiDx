@@ -225,15 +225,37 @@
 ## 27. Optimization progress calibration and run detail view
 
 - **Context:** The optimizer now streams live progress snapshots from Python into `optimization_runs` and the browser renders those backend values directly.
-- **Limitation:** The UI now uses an indeterminate activity animation, but there is still no dedicated run-detail screen for inspecting the full progress history or notification history of a long extensive run.
-- **Improvement:** Add a richer run history view and store progress snapshots as a small append-only audit trail so the activity animation can be paired with a readable event log.
+- **Limitation:** The UI now uses an indeterminate activity animation and there is a basic stored-run history page, but there is still no append-only progress audit trail or notification history for a long extensive run.
+- **Improvement:** Add progress snapshot history, notification history, and richer per-stage event logging so the history page can show how a run evolved over time instead of only the final snapshot.
 - **Benefit:** Gives users a clearer audit trail for long-running optimization work without pretending the app knows the final pathway count in advance.
 
 ## 28. Optimization result library
 
 - **Context:** Optimization results are now persisted on `optimization_runs`, the browser stores the last run reference, and the latest stored result can be reopened without re-running when the request signature matches.
-- **Limitation:** Reuse is still limited to the most recent matching run, so there is no dedicated optimization-library UI for browsing older runs or comparing historical optimizations.
-- **Improvement:** Add a run library with searchable history, saved filters, and side-by-side comparison of previous optimization outputs.
+- **Limitation:** Reuse is still limited to the current account's stored runs and the page does not yet offer saved filters, comparison mode, or cross-project search.
+- **Improvement:** Add searchable filters, pagination, and side-by-side comparison of previous optimization outputs.
 - **Benefit:** Makes optimization work reusable across sessions and provides a durable review trail for decision-making.
 - **Priority:** Medium
+
+## 29. Optimization watchdog for orphaned detached runs
+
+- **Context:** Detached optimization runs now store a PID and can be cancelled from the UI, which solves the common stalled-run case.
+- **Limitation:** If a detached child is orphaned outside the normal PID path, the app still depends on the OS kill command or a later manual cleanup.
+- **Improvement:** Add a lightweight watchdog that periodically confirms the detached optimizer process is still alive and reconciles orphaned runs back into a terminal state if the process disappears unexpectedly.
+- **Benefit:** Makes long-running optimization supervision more robust on Windows and reduces the chance of stale active-run records.
+- **Priority:** Low
+
+## 30. Normalize legacy optimization history payloads at rest
+
+- **Context:** The browser now hardens optimization-history and scenario rendering against older `optimization_runs` records where infeasible fixed outputs were saved as eight known keys with `null` entries.
+- **Limitation:** The UI no longer crashes on those records, but the database still contains mixed payload shapes that require extra defensive branches in the frontend.
+- **Improvement:** Add a one-time repair command or migration that rewrites legacy infeasible result payloads into a single canonical shape with explicit placeholder metadata for each fixed objective.
+- **Benefit:** Simplifies frontend rendering, reduces future regression risk, and makes stored optimization history easier to inspect or export consistently.
 - **Priority:** Medium
+# Stabilize Vite Dev Loading For Legacy Global Components
+
+- Context: The React workspace still loads several legacy component modules that assign themselves onto `window`, and some of those files keep their `import React ...` statement at the bottom of the file.
+- Current limitation: The production bundle works, but the Vite hot client can throw `Cannot access 'React' before initialization` in local dev because ESM evaluation is less forgiving than the current built bundle path.
+- Proposed improvement: Normalize the legacy component files so imports live at the top and the global registration pattern is phased into standard module exports/imports.
+- Expected benefit: Local dev debugging becomes reliable with unminified stacks, which makes future Builder/runtime regressions materially faster to diagnose.
+- Priority: Medium

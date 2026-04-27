@@ -1,6 +1,55 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 
 // OptiDx — main app
+class ScreenErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  componentDidCatch(error, info) {
+    console.error('OptiDx workspace render error', error, info);
+  }
+
+  componentDidUpdate(prevProps) {
+    if (this.state.error && prevProps.resetKey !== this.props.resetKey) {
+      this.setState({ error: null });
+    }
+  }
+
+  render() {
+    if (!this.state.error) {
+      return this.props.children;
+    }
+
+    return (
+      <div className="page" style={{minHeight:480, display:"grid", placeItems:"center"}}>
+        <div className="card card--pad" style={{maxWidth:720, width:"100%"}}>
+          <div className="sme-eyebrow" style={{marginBottom:8}}>Workspace error</div>
+          <h1 style={{marginBottom:8}}>This screen could not be rendered</h1>
+          <p style={{marginBottom:16, color:"var(--fg-2)"}}>
+            A runtime error interrupted the workspace view. Your saved data is still available.
+          </p>
+          <div className="row" style={{justifyContent:"flex-end"}}>
+            <button className="btn" onClick={() => this.setState({ error: null })}>
+              Try again
+            </button>
+            {this.props.onRecover && (
+              <button className="btn btn--primary" onClick={this.props.onRecover}>
+                Return to workspace
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+}
+
 function App() {
   const [authed, setAuthed] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
@@ -36,6 +85,9 @@ function App() {
       .then(response => {
         if (!active) return;
         if (response?.data?.authenticated) {
+          if (!window.OptiDxCanvasDraft && !window.OptiDxCurrentPathway) {
+            window.OptiDxActions?.setActivePathwayDraft?.(window.OptiDxActions?.createStarterCanvasGraph?.());
+          }
           window.OptiDxActions?.setCurrentUser?.(response?.data?.user || null, { emit: false });
           setCurrentUser(response?.data?.user || null);
           setAuthed(true);
@@ -75,6 +127,9 @@ function App() {
   useEffect(() => {
     const onAuthUpdated = event => {
       const nextUser = event?.detail || null;
+      if (nextUser && !window.OptiDxCanvasDraft && !window.OptiDxCurrentPathway) {
+        window.OptiDxActions?.setActivePathwayDraft?.(window.OptiDxActions?.createStarterCanvasGraph?.());
+      }
       setCurrentUser(nextUser);
       setAuthed(Boolean(nextUser));
 
@@ -135,6 +190,9 @@ function App() {
   }
 
   if (!authed) return <AuthShell mode={authMode} setMode={setAuthMode} onAuthed={(user) => {
+    if (user && !window.OptiDxCanvasDraft && !window.OptiDxCurrentPathway) {
+      window.OptiDxActions?.setActivePathwayDraft?.(window.OptiDxActions?.createStarterCanvasGraph?.());
+    }
     window.OptiDxActions?.setCurrentUser?.(user || null, { emit: false });
     setCurrentUser(user || null);
     setAuthed(true);
@@ -146,19 +204,19 @@ function App() {
       <BetaBanner onOpenFeedback={() => setShowFeedback(true)}/>
       <Rail screen={screen} setScreen={setScreen} onHelp={() => setShowFeedback(true)}/>
       {showFeedback && <FeedbackModal onClose={() => setShowFeedback(false)}/>}
-      {screen === "home"     && <Frame><ScreenHome setScreen={setScreen}/></Frame>}
-      {screen === "library"  && <Frame><ScreenLibrary setScreen={setScreen}/></Frame>}
-      {screen === "wizard"   && <Frame><ScreenWizard setScreen={setScreen}/></Frame>}
-      {screen === "scenarios"&& <Frame><ScreenScenarios setScreen={setScreen}/></Frame>}
-      {screen === "canvas"   && <CanvasWrapper variant={variant.canvas} setVariant={v => setVariant(s => ({...s, canvas:v}))}
-                                  openPanel={openPanel} setOpenPanel={setOpenPanel} setScreen={setScreen}/>}
-      {screen === "results"  && <ResultsWrapper variant={variant.results} setVariant={v => setVariant(s => ({...s, results:v}))} setScreen={setScreen} onShare={() => setShowShare(true)}/>}
-      {screen === "trace"    && <Frame><ScreenTrace setScreen={setScreen}/></Frame>}
-      {screen === "compare"  && <Frame><ScreenCompare setScreen={setScreen}/></Frame>}
-      {screen === "evidence" && <Frame><ScreenEvidence setScreen={setScreen}/></Frame>}
-      {screen === "report"   && <Frame fullBleed><ScreenReport setScreen={setScreen} onShare={() => setShowShare(true)}/></Frame>}
-      {screen === "settings" && <Frame><ScreenSettingsFull currentUser={currentUser}/></Frame>}
-      {screen === "teams"    && <Frame><ScreenTeams/></Frame>}
+      {screen === "home"     && <ScreenErrorBoundary resetKey={screen} onRecover={() => setScreen("home")}><Frame><ScreenHome setScreen={setScreen}/></Frame></ScreenErrorBoundary>}
+      {screen === "library"  && <ScreenErrorBoundary resetKey={screen} onRecover={() => setScreen("library")}><Frame><ScreenLibrary setScreen={setScreen}/></Frame></ScreenErrorBoundary>}
+      {screen === "history"  && <ScreenErrorBoundary resetKey={screen} onRecover={() => setScreen("history")}><Frame><ScreenOptimizationHistory setScreen={setScreen}/></Frame></ScreenErrorBoundary>}
+      {screen === "wizard"   && <ScreenErrorBoundary resetKey={screen} onRecover={() => setScreen("wizard")}><Frame><ScreenWizard setScreen={setScreen}/></Frame></ScreenErrorBoundary>}
+      {screen === "scenarios"&& <ScreenErrorBoundary resetKey={screen} onRecover={() => setScreen("scenarios")}><Frame><ScreenScenarios setScreen={setScreen}/></Frame></ScreenErrorBoundary>}
+      {screen === "canvas"   && <ScreenErrorBoundary resetKey={screen} onRecover={() => setScreen("canvas")}><CanvasWrapper variant={variant.canvas} setVariant={v => setVariant(s => ({...s, canvas:v}))} openPanel={openPanel} setOpenPanel={setOpenPanel} setScreen={setScreen}/></ScreenErrorBoundary>}
+      {screen === "results"  && <ScreenErrorBoundary resetKey={screen} onRecover={() => setScreen("results")}><ResultsWrapper variant={variant.results} setVariant={v => setVariant(s => ({...s, results:v}))} setScreen={setScreen} onShare={() => setShowShare(true)}/></ScreenErrorBoundary>}
+      {screen === "trace"    && <ScreenErrorBoundary resetKey={screen} onRecover={() => setScreen("trace")}><Frame><ScreenTrace setScreen={setScreen}/></Frame></ScreenErrorBoundary>}
+      {screen === "compare"  && <ScreenErrorBoundary resetKey={screen} onRecover={() => setScreen("compare")}><Frame><ScreenCompare setScreen={setScreen}/></Frame></ScreenErrorBoundary>}
+      {screen === "evidence" && <ScreenErrorBoundary resetKey={screen} onRecover={() => setScreen("evidence")}><Frame><ScreenEvidence setScreen={setScreen}/></Frame></ScreenErrorBoundary>}
+      {screen === "report"   && <ScreenErrorBoundary resetKey={screen} onRecover={() => setScreen("report")}><Frame fullBleed><ScreenReport setScreen={setScreen} onShare={() => setShowShare(true)}/></Frame></ScreenErrorBoundary>}
+      {screen === "settings" && <ScreenErrorBoundary resetKey={screen} onRecover={() => setScreen("settings")}><Frame><ScreenSettingsFull currentUser={currentUser}/></Frame></ScreenErrorBoundary>}
+      {screen === "teams"    && <ScreenErrorBoundary resetKey={screen} onRecover={() => setScreen("teams")}><Frame><ScreenTeams/></Frame></ScreenErrorBoundary>}
 
       {openPanel === "parallel" && <ParallelModal onClose={() => setOpenPanel(null)}/>}
       {showTestEditor && <DiagnosticTestEditorModal

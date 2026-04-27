@@ -4,7 +4,60 @@ function isLockedTerminalNode(node) {
 }
 
 function getPanelTestCatalog() {
-  return window.OptiDxActions?.getWorkspaceTests?.() || window.SEED_TESTS || [];
+  const workspaceTests = window.OptiDxActions?.getWorkspaceTests?.();
+  return Array.isArray(workspaceTests)
+    ? workspaceTests
+    : Array.isArray(window.SEED_TESTS)
+      ? window.SEED_TESTS
+      : [];
+}
+
+function normalizePanelText(value, fallback = "") {
+  if (value == null) {
+    return fallback;
+  }
+
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+
+  if (typeof value === "object") {
+    return normalizePanelText(
+      value.name
+        ?? value.label
+        ?? value.test
+        ?? value.testId
+        ?? value.id,
+      fallback,
+    );
+  }
+
+  return fallback;
+}
+
+function normalizePanelRenderableTest(testRef, fallbackLabel = null) {
+  const id = normalizePanelText(testRef?.id ?? testRef?.testId ?? fallbackLabel, "test");
+  const sens = Number(testRef?.sens ?? testRef?.sensitivity ?? 0);
+  const spec = Number(testRef?.spec ?? testRef?.specificity ?? 0);
+  const cost = Number(testRef?.cost ?? 0);
+  const tat = Number(testRef?.tat ?? testRef?.turnaround_time ?? 0);
+
+  return {
+    id,
+    name: normalizePanelText(testRef?.name ?? testRef?.label ?? testRef?.test ?? fallbackLabel, id),
+    icon: normalizePanelText(testRef?.icon, "flask-conical"),
+    category: normalizePanelText(testRef?.category, "clinical"),
+    sens: Number.isFinite(sens) ? sens : 0,
+    spec: Number.isFinite(spec) ? spec : 0,
+    cost: Number.isFinite(cost) ? cost : 0,
+    tat: Number.isFinite(tat) ? tat : 0,
+    tatUnit: normalizePanelText(testRef?.tatUnit ?? testRef?.turnaround_time_unit, "min"),
+    sample: normalizePanelText(testRef?.sample, testRef?.sample_types?.[0] || "n/a"),
+    sample_types: Array.isArray(testRef?.sample_types) ? testRef.sample_types.filter(Boolean).map(item => normalizePanelText(item)).filter(Boolean) : [],
+    skill: normalizePanelText(testRef?.skill, testRef?.skill_level || "n/a"),
+    skill_level: testRef?.skill_level ?? null,
+    evidence: normalizePanelText(testRef?.evidence ?? testRef?.provenance?.source, "Workspace record"),
+  };
 }
 
 function parsePanelSkillLevel(value) {
@@ -59,30 +112,16 @@ function getPanelRenderableTest(testRef, fallbackLabel = null) {
   if (lookupId != null) {
     const found = catalog.find(item => String(item.id) === String(lookupId));
     if (found) {
-      return found;
+      return normalizePanelRenderableTest(found, fallbackLabel);
     }
   }
 
   if (testRef && typeof testRef === "object") {
-    return testRef;
+    return normalizePanelRenderableTest(testRef, fallbackLabel);
   }
 
   const resolvedId = String(lookupId ?? fallbackLabel ?? "test");
-  return {
-    id: resolvedId,
-    name: fallbackLabel || resolvedId,
-    icon: "flask-conical",
-    category: "clinical",
-    sens: 0,
-    spec: 0,
-    cost: 0,
-    tat: 0,
-    tatUnit: "min",
-    sample: "n/a",
-    sample_types: ["n/a"],
-    skill: "n/a",
-    skill_level: null,
-  };
+  return normalizePanelRenderableTest({ id: resolvedId, label: fallbackLabel || resolvedId }, fallbackLabel);
 }
 
 function getPanelTatMinutes(test) {
@@ -523,7 +562,11 @@ function ConditionBuilder({ node, test }) {
 }
 
 function panelNodeLabel(node, nodes) {
-  return nodes.find(item => item.id === node)?.label || window.SEED_TESTS.find(test => test.id === nodes.find(item => item.id === node)?.testId)?.name || node;
+  const nodeRecord = Array.isArray(nodes)
+    ? nodes.find(item => item.id === node)
+    : null;
+  const testCatalog = Array.isArray(window.SEED_TESTS) ? window.SEED_TESTS : [];
+  return nodeRecord?.label || testCatalog.find(test => test.id === nodeRecord?.testId)?.name || node;
 }
 
 function panelBranchPorts(node) {

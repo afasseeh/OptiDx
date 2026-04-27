@@ -1,0 +1,216 @@
+- generic [ref=e98]:
+  - generic [ref=e99]:
+    - generic [ref=e100]: BETA
+    - generic [ref=e101]:
+      - generic [ref=e102]: Public beta
+      - text: by Syreon.
+      - generic [ref=e103]: ·
+      - generic [ref=e104]: Non‑profit, free to use.
+      - generic [ref=e105]: ·
+      - generic [ref=e106]: Not yet validated
+    - generic [ref=e108]:
+      - button "Send feedback" [ref=e109] [cursor=pointer]:
+        - img [ref=e110]
+        - text: Send feedback
+      - button "About beta" [ref=e113] [cursor=pointer]:
+        - text: About beta
+        - img [ref=e114]
+  - navigation [ref=e116]:
+    - generic "OptiDx" [ref=e118]:
+      - generic [ref=e119]: Ox
+    - generic "Home" [ref=e121] [cursor=pointer]:
+      - img [ref=e122]
+    - generic "New" [ref=e125] [cursor=pointer]:
+      - img [ref=e126]
+    - generic "Builder" [ref=e131] [cursor=pointer]:
+      - img [ref=e132]
+    - generic "Results" [ref=e137] [cursor=pointer]:
+      - img [ref=e138]
+    - generic "Compare" [ref=e139] [cursor=pointer]:
+      - img [ref=e140]
+    - generic "Evidence" [ref=e141] [cursor=pointer]:
+      - img [ref=e142]
+    - generic "Report" [ref=e146] [cursor=pointer]:
+      - img [ref=e147]
+    - generic "Teams" [ref=e150] [cursor=pointer]:
+      - img [ref=e151]
+    - generic "Send feedback or report a bug" [ref=e154] [cursor=pointer]:
+      - img [ref=e155]
+    - generic "Settings" [ref=e158] [cursor=pointer]:
+      - img [ref=e159]
+  - main [ref=e763]:
+    - generic [ref=e764]:
+      - generic [ref=e765]:
+        - button "OptiDx" [ref=e766] [cursor=pointer]
+        - img [ref=e767]
+        - button "TB Community Screening" [ref=e769] [cursor=pointer]
+        - img [ref=e770]
+        - generic [ref=e772]: Compare
+      - generic [ref=e773]:
+        - button "Export" [ref=e774] [cursor=pointer]:
+          - img [ref=e775]
+          - text: Export
+        - button "Apply suggestion" [ref=e778] [cursor=pointer]
+    - generic [ref=e779]:
+      - generic [ref=e781]:
+        - generic [ref=e782]: Optimization
+        - heading "Compare candidate pathways" [level=1] [ref=e783]
+        - paragraph [ref=e784]: Trade-offs between cost, TAT, sensitivity, and specificity under current constraints.
+      - generic [ref=e785]:
+        - generic [ref=e786]:
+          - generic [ref=e787]:
+            - generic [ref=e788]: Current
+            - generic [ref=e789]: Baseline
+          - heading "Current pathway" [level=3] [ref=e790]
+          - generic [ref=e791]:
+            - generic [ref=e792]:
+              - text: Sens
+              - generic [ref=e793]: 84.2%
+            - generic [ref=e794]:
+              - text: Spec
+              - generic [ref=e795]: 94.6%
+            - generic [ref=e796]:
+              - text: Cost
+              - generic [ref=e797]: $5.62
+            - generic [ref=e798]: TAT 2.8h
+        - generic [ref=e799]:
+          - generic [ref=e801]: Cheapest
+          - heading "Cheapest viable" [level=3] [ref=e802]
+          - generic [ref=e803]:
+            - generic [ref=e804]:
+              - text: Sens
+              - generic [ref=e805]: 81.0%
+            - generic [ref=e806]:
+              - text: Spec
+              - generic [ref=e807]: 92.5%
+            - generic [ref=e808]:
+              - text: Cost
+              - generic [ref=e809]: $3.80
+            - generic [ref=e810]: TAT 2.1h
+        - generic [ref=e811]:
+          - generic [ref=e813]: Fastest
+          - heading "Fastest viable" [level=3] [ref=e814]
+          - generic [ref=e815]:
+            - generic [ref=e816]:
+              - text: Sens
+              - generic [ref=e817]: 79.8%
+            - generic [ref=e818]:
+              - text: Spec
+              - generic [ref=e819]: 93.4%
+            - generic [ref=e820]:
+              - text: Cost
+              - generic [ref=e821]: $4.90
+            - generic [ref=e822]: TAT 40m
+      - generic [ref=e823]:
+        - generic [ref=e824]:
+          - heading "All candidates" [level=3] [ref=e825]
+          - generic [ref=e826]: 6 candidates · 2 infeasible
+        - table [ref=e827]:
+          - rowgroup [ref=e828]:
+            - row "Pathway Sens Spec Cost TAT PPV NPV Skill Samples Status" [ref=e829]:
+              - columnheader "Pathway" [ref=e830]
+              - columnheader "Sens" [ref=e831]
+              - columnheader "Spec" [ref=e832]
+              - columnheader "Cost" [ref=e833]
+              - columnheader "TAT" [ref=e834]
+              - columnheader "PPV" [ref=e835]
+              - columnheader "NPV" [ref=e836]
+              - columnheader "Skill" [ref=e837]
+              - columnheader "Samples" [ref=e838]
+              - columnheader "Status" [ref=e839]
+          - rowgroup [ref=e840]:
+            - row "Current pathway 84.2% 94.6% $5.62 2.8h 58.0% 98.7% Lab Tech 3 Feasible" [ref=e841]:
+              - cell "Current pathway" [ref=e842]
+              - cell "84.2%" [ref=e843]
+              - cell "94.6%" [ref=e844]
+              - cell "$5.62" [ref=e845]
+              - cell "2.8h" [ref=e846]
+              - cell "58.0%" [ref=e847]
+              - cell "98.7%" [ref=e848]
+              - cell "Lab Tech" [ref=e849]
+              - cell "3" [ref=e850]
+              - cell "Feasible" [ref=e851]:
+                - generic [ref=e852]: Feasible
+            - row "Cheapest viable 81.0% 92.5% $3.80 2.1h 48.0% 98.2% Lab Tech 2 Feasible" [ref=e853]:
+              - cell "Cheapest viable" [ref=e854]
+              - cell "81.0%" [ref=e855]
+              - cell "92.5%" [ref=e856]
+              - cell "$3.80" [ref=e857]
+              - cell "2.1h" [ref=e858]
+              - cell "48.0%" [ref=e859]
+              - cell "98.2%" [ref=e860]
+              - cell "Lab Tech" [ref=e861]
+              - cell "2" [ref=e862]
+              - cell "Feasible" [ref=e863]:
+                - generic [ref=e864]: Feasible
+            - row "Fastest viable 79.8% 93.4% $4.90 40m 51.0% 98.1% Radiographer 2 Feasible" [ref=e865]:
+              - cell "Fastest viable" [ref=e866]
+              - cell "79.8%" [ref=e867]
+              - cell "93.4%" [ref=e868]
+              - cell "$4.90" [ref=e869]
+              - cell "40m" [ref=e870]
+              - cell "51.0%" [ref=e871]
+              - cell "98.1%" [ref=e872]
+              - cell "Radiographer" [ref=e873]
+              - cell "2" [ref=e874]
+              - cell "Feasible" [ref=e875]:
+                - generic [ref=e876]: Feasible
+            - row "Highest sensitivity TAT > 72h constraint 96.2% 90.1% $24.30 15d 46.0% 99.6% Specialist 2 Infeasible" [ref=e877]:
+              - cell "Highest sensitivity TAT > 72h constraint" [ref=e878]:
+                - text: Highest sensitivity
+                - generic [ref=e879]: TAT > 72h constraint
+              - cell "96.2%" [ref=e880]
+              - cell "90.1%" [ref=e881]
+              - cell "$24.30" [ref=e882]
+              - cell "15d" [ref=e883]
+              - cell "46.0%" [ref=e884]
+              - cell "99.6%" [ref=e885]
+              - cell "Specialist" [ref=e886]
+              - cell "2" [ref=e887]
+              - cell "Infeasible" [ref=e888]:
+                - generic [ref=e889]: Infeasible
+            - row "Highest specificity 71.2% 99.3% $11.20 3.5h 86.0% 97.6% Lab Tech 3 Feasible" [ref=e890]:
+              - cell "Highest specificity" [ref=e891]
+              - cell "71.2%" [ref=e892]
+              - cell "99.3%" [ref=e893]
+              - cell "$11.20" [ref=e894]
+              - cell "3.5h" [ref=e895]
+              - cell "86.0%" [ref=e896]
+              - cell "97.6%" [ref=e897]
+              - cell "Lab Tech" [ref=e898]
+              - cell "3" [ref=e899]
+              - cell "Feasible" [ref=e900]:
+                - generic [ref=e901]: Feasible
+            - row "Balanced MCDA 85.6% 95.1% $6.10 2.4h 60.0% 98.8% Lab Tech 3 Feasible" [ref=e902]:
+              - cell "Balanced MCDA" [ref=e903]
+              - cell "85.6%" [ref=e904]
+              - cell "95.1%" [ref=e905]
+              - cell "$6.10" [ref=e906]
+              - cell "2.4h" [ref=e907]
+              - cell "60.0%" [ref=e908]
+              - cell "98.8%" [ref=e909]
+              - cell "Lab Tech" [ref=e910]
+              - cell "3" [ref=e911]
+              - cell "Feasible" [ref=e912]:
+                - generic [ref=e913]: Feasible
+      - generic [ref=e914]:
+        - generic [ref=e915]:
+          - heading "Trade-off radar" [level=3] [ref=e917]
+          - img [ref=e919]:
+            - generic [ref=e924]: Sens
+            - generic [ref=e925]: Spec
+            - generic [ref=e926]: Low cost
+            - generic [ref=e927]: Fast
+            - generic [ref=e928]: Low skill
+            - generic [ref=e929]: Few samples
+        - generic [ref=e932]:
+          - heading "Cost vs sensitivity" [level=3] [ref=e934]
+          - img [ref=e936]:
+            - generic [ref=e937]: Sens
+            - generic [ref=e938]: Cost ($)
+            - generic [ref=e941]: Current
+            - generic [ref=e944]: Cheapest
+            - generic [ref=e947]: Fastest
+            - generic [ref=e950]: Highest
+            - generic [ref=e953]: Highest
+            - generic [ref=e956]: Balanced

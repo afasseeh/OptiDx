@@ -77,8 +77,18 @@ function serializeWizardProjectState(project) {
   });
 }
 
+function getWizardTestCatalog() {
+  const workspaceTestsRaw = window.OptiDxActions?.getWorkspaceTests?.();
+  return Array.isArray(workspaceTestsRaw)
+    ? workspaceTestsRaw
+    : Array.isArray(window.SEED_TESTS)
+      ? window.SEED_TESTS
+      : [];
+}
+
 function ScreenWizard({ setScreen }) {
   const initialProject = getWizardProjectState();
+  const workspaceTests = getWizardTestCatalog();
   const [step, setStep] = useState(() => Number(window.OptiDxWizardStep ?? 0) || 0);
   const [mode, setMode] = useState(null); // null | "test" | "optimize"
   const [runMode, setRunMode] = useState("light");
@@ -125,6 +135,12 @@ function ScreenWizard({ setScreen }) {
 
       const normalizedStatus = String(run.status || '').toLowerCase();
       const nextStage = run.progress_stage || run.progress_message || run.status || '';
+      const shouldAdoptLiveState = optimizationStartRef.current != null || ['success', 'infeasible', 'no_feasible_found_time_limit', 'failed'].includes(normalizedStatus);
+
+      if (!shouldAdoptLiveState) {
+        return;
+      }
+
       setOptimization(current => ({
         ...current,
         status: normalizedStatus === 'failed'
@@ -292,7 +308,6 @@ function ScreenWizard({ setScreen }) {
       const minSpecificity = Number.parseFloat(currentProject.minSpecificity);
       const maxCostPerPatientUsd = Number.parseFloat(currentProject.maxCostPerPatientUsd);
       const maxTurnaroundTimeHours = Number.parseFloat(currentProject.maxTurnaroundTimeHours);
-      const workspaceTests = window.OptiDxActions.getWorkspaceTests?.() || window.SEED_TESTS || [];
       if (!workspaceTests.length) {
         throw new Error("Add at least one diagnostic test before running the optimization.");
       }
@@ -510,14 +525,18 @@ function ScreenWizard({ setScreen }) {
         {step === 3 && <WizardStep4 project={project}/>}
         {step === 4 && <WizardStep5 mode={mode} setMode={setMode} runMode={runMode} setRunMode={setRunMode}/>}
         {(optimization.status === "running" || optimization.status === "error") && (
-          <OptimizationOverlay optimization={optimization} onOpenScenarios={() => setScreen("scenarios")} />
+          <OptimizationOverlay
+            optimization={optimization}
+            onOpenScenarios={() => setScreen("scenarios")}
+            onStopOptimization={() => window.OptiDxActions.cancelOptimizationRun?.(optimization.id)}
+          />
         )}
       </div>
     </>
   );
 }
 
-function OptimizationOverlay({ optimization, onOpenScenarios }) {
+function OptimizationOverlay({ optimization, onOpenScenarios, onStopOptimization }) {
   const currentStage = optimization.stage || "Preparing candidate pathways.";
   const currentStageIndex = Math.max(0, OPTIMIZATION_STAGES.findIndex(stage => stage === currentStage));
   const isRunning = optimization.status === "running";
@@ -568,6 +587,11 @@ function OptimizationOverlay({ optimization, onOpenScenarios }) {
               </div>
             )}
             <div className="row" style={{marginTop:14, gap:8, justifyContent:"flex-end"}}>
+              {isRunning && (
+                <button className="btn btn--primary" type="button" onClick={onStopOptimization}>
+                  Stop run
+                </button>
+              )}
               <button className="btn" type="button" onClick={onOpenScenarios}>
                 Open run status
               </button>
@@ -728,6 +752,7 @@ function WizardStep1({ project, setProject }) {
 }
 
 function WizardStep2({ onOpenEvidence }) {
+  const workspaceTests = getWizardTestCatalog();
   const [, setLibraryRevision] = useState(0);
   const [menuFor, setMenuFor] = useState(null);
   useEffect(() => {
@@ -753,7 +778,7 @@ function WizardStep2({ onOpenEvidence }) {
         }}><Icon name="plus"/>Add test</button>
         <button className="btn" onClick={onOpenEvidence}><Icon name="database"/>Import from evidence</button>
         <div className="spacer"/>
-        <span className="u-meta">{(window.OptiDxActions.getWorkspaceTests?.() || window.SEED_TESTS || []).length} tests in library</span>
+        <span className="u-meta">{workspaceTests.length} tests in library</span>
       </div>
       <div className="card card--flush" style={{maxHeight:"none"}}>
         <table className="table">
@@ -762,7 +787,7 @@ function WizardStep2({ onOpenEvidence }) {
             <th className="num">Cost</th><th>TAT</th><th>Sample</th><th>Skill</th><th/>
           </tr></thead>
           <tbody>
-            {(window.OptiDxActions.getWorkspaceTests?.() || window.SEED_TESTS || []).map(t => (
+            {workspaceTests.map(t => (
               <tr key={t.id}>
                 <td><b>{t.name}</b></td>
                 <td><span className="chip chip--outline">{t.category}</span></td>
@@ -931,6 +956,7 @@ function WizardStep3({ project, setProject }) {
 }
 
 function WizardStep4({ project }) {
+  const workspaceTests = getWizardTestCatalog();
   return (
     <div className="card card--pad">
       <div className="sme-eyebrow" style={{marginBottom:6}}>Step 04</div>
@@ -964,7 +990,7 @@ function WizardStep4({ project }) {
         </div>
         <div className="card card--pad">
           <div className="sme-eyebrow" style={{marginBottom:6}}>Test library</div>
-          <div style={{fontSize:15, fontWeight:700}}>{(window.OptiDxActions.getWorkspaceTests?.() || window.SEED_TESTS || []).length} tests</div>
+          <div style={{fontSize:15, fontWeight:700}}>{workspaceTests.length} tests</div>
           <div className="u-meta" style={{marginTop:4}}>
             {[
               project.allowSampleNone ? "None" : null,
