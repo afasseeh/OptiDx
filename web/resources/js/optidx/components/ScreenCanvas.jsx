@@ -1050,6 +1050,10 @@ function ScreenCanvas({ variant = "A", openPanel, setOpenPanel }) {
 
     setNodes(ns => ns.map(n => {
       if (n.id !== nodeId || n.type !== "parallel") return n;
+      if ((n.members || []).length >= 2) {
+        flash("Parallel blocks are limited to two tests right now");
+        return n;
+      }
       flash(`Added ${test.name} to the block`);
       return {
         ...n,

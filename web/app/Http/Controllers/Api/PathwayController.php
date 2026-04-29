@@ -7,6 +7,7 @@ use App\Models\EvaluationResult;
 use App\Models\OptimizationRun;
 use App\Models\Pathway;
 use App\Services\OptimizationService;
+use App\Services\ReportService;
 use App\Services\PathwayGraphService;
 use App\Services\PathwayDefinitionService;
 use App\Services\PythonEngineBridge;
@@ -23,12 +24,13 @@ class PathwayController extends Controller
         private readonly PythonEngineBridge $bridge,
         private readonly OptimizationService $optimizer,
         private readonly PathwayGraphService $graph,
+        private readonly ReportService $reports,
     ) {
     }
 
     public function index()
     {
-        return Pathway::query()->with('latestEvaluationResult')->latest()->get();
+        return Pathway::query()->with(['project:id,title', 'latestEvaluationResult'])->latest()->get();
     }
 
     public function store(Request $request)
@@ -57,12 +59,12 @@ class PathwayController extends Controller
         $data['engine_definition'] = $prepared['engine_definition'];
         $data['metadata'] = $prepared['metadata'];
 
-        return response()->json(Pathway::create($data)->load('latestEvaluationResult'), 201);
+        return response()->json(Pathway::create($data)->load(['project:id,title', 'latestEvaluationResult']), 201);
     }
 
     public function show(Pathway $pathway)
     {
-        return $pathway->load('latestEvaluationResult');
+        return $pathway->load(['project:id,title', 'latestEvaluationResult']);
     }
 
     public function update(Request $request, Pathway $pathway)
@@ -95,7 +97,7 @@ class PathwayController extends Controller
 
         $pathway->update($data);
 
-        return $pathway->refresh()->load('latestEvaluationResult');
+        return $pathway->refresh()->load(['project:id,title', 'latestEvaluationResult']);
     }
 
     public function destroy(Pathway $pathway)
@@ -181,7 +183,7 @@ class PathwayController extends Controller
             'evaluation_mode' => 'server',
         ]);
 
-        $pathwayRecord->load('latestEvaluationResult');
+        $pathwayRecord->load(['project:id,title', 'latestEvaluationResult']);
 
         return response()->json([
             ...$result,
@@ -271,7 +273,7 @@ class PathwayController extends Controller
             'engine_definition' => $prepared['engine_definition'],
             'validation_status' => 'draft',
             'metadata' => $pathway['metadata'] ?? [],
-        ])->load('latestEvaluationResult'), 201);
+        ])->load(['project:id,title', 'latestEvaluationResult']), 201);
     }
 
     public function exportJson(Pathway $pathway)
@@ -281,21 +283,39 @@ class PathwayController extends Controller
 
     public function exportReport(Request $request, Pathway $pathway)
     {
-        $format = strtolower((string) $request->query('format', 'html'));
+        $format = strtolower((string) $request->input('format', $request->query('format', 'html')));
+        $pathway->loadMissing(['project', 'latestEvaluationResult']);
         $result = $pathway->latestEvaluationResult?->result_payload ?? [];
-        $reportData = $this->buildReportData($pathway, $result);
+
+        if ($result === []) {
+            return response()->json([
+                'message' => 'Run the pathway before exporting a report.',
+            ], 422);
+        }
+
+        $settings = $request->input('settings');
+        $reportSettings = is_array($settings) ? $settings : [];
+        $report = $this->reports->findOwnedReportForPathway($pathway, $request->integer('report_id'));
+        $report = $report
+            ? $this->reports->updateReportSettings($report, $reportSettings)
+            : $this->reports->generateReport($pathway, $reportSettings);
+        $reportData = $this->reports->readSnapshot($report);
 
         return match ($format) {
             'pdf' => $this->downloadGeneratedFile(
-                $this->buildPdfReport($pathway, $reportData),
+                $report->pdf_path,
                 $this->exportFilename($pathway, 'pdf'),
                 'application/pdf'
             ),
             'docx' => $this->downloadGeneratedFile(
                 $this->buildDocxReport($pathway, $reportData),
                 $this->exportFilename($pathway, 'docx'),
-                'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                true
             ),
+            'html' => response($report->html_path ? File::get($report->html_path) : '', 200, [
+                'Content-Type' => 'text/html; charset=UTF-8',
+            ]),
             default => response()->json([
                 'pathway' => $pathway,
                 'evaluation' => $result,
@@ -303,6 +323,25 @@ class PathwayController extends Controller
                 'report' => $reportData,
             ]),
         };
+    }
+
+    public function generateAiReport(Request $request, Pathway $pathway)
+    {
+        $pathway->loadMissing(['project', 'latestEvaluationResult']);
+        $validated = $request->validate([
+            'settings' => ['nullable', 'array'],
+            'report_id' => ['nullable', 'integer'],
+        ]);
+
+        $report = $this->reports->findOwnedReportForPathway($pathway, $validated['report_id'] ?? null);
+        $generated = $this->reports->generateAiDraft(
+            $pathway,
+            is_array($validated['settings'] ?? null) ? $validated['settings'] : [],
+            $report,
+            $request->user()
+        );
+
+        return response()->json($this->reports->showReport($generated));
     }
 
     private function buildReportData(Pathway $pathway, array $evaluation): array
@@ -348,65 +387,13 @@ class PathwayController extends Controller
         return ($base !== '' ? $base : 'optidx-pathway') . '.' . $extension;
     }
 
-    private function downloadGeneratedFile(string $filePath, string $downloadName, string $contentType): BinaryFileResponse
+    private function downloadGeneratedFile(string $filePath, string $downloadName, string $contentType, bool $deleteAfterSend = false): BinaryFileResponse
     {
-        return response()->download($filePath, $downloadName, [
+        $response = response()->download($filePath, $downloadName, [
             'Content-Type' => $contentType,
-        ])->deleteFileAfterSend(true);
-    }
+        ]);
 
-    private function buildPdfReport(Pathway $pathway, array $reportData): string
-    {
-        $filePath = $this->temporaryExportPath('pdf');
-        File::put($filePath, $this->renderPdfDocument($pathway, $reportData));
-
-        return $filePath;
-    }
-
-    private function renderPdfDocument(Pathway $pathway, array $reportData): string
-    {
-        $lines = $this->buildReportLines($pathway, $reportData);
-        $contentLines = [
-            'BT',
-            '/F1 11 Tf',
-            '50 790 Td',
-        ];
-
-        foreach ($lines as $index => $line) {
-            $escaped = $this->escapePdfText($line);
-            $contentLines[] = sprintf('(%s) Tj', $escaped);
-            if ($index < count($lines) - 1) {
-                $contentLines[] = 'T*';
-            }
-        }
-
-        $contentLines[] = 'ET';
-        $contentStream = implode("\n", $contentLines);
-
-        $objects = [];
-        $objects[] = "<< /Type /Catalog /Pages 2 0 R >>";
-        $objects[] = "<< /Type /Pages /Kids [3 0 R] /Count 1 >>";
-        $objects[] = "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>";
-        $objects[] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>";
-        $objects[] = "<< /Length " . strlen($contentStream) . " >>\nstream\n" . $contentStream . "\nendstream";
-
-        $pdf = "%PDF-1.4\n";
-        $offsets = [0];
-
-        foreach ($objects as $index => $object) {
-            $offsets[] = strlen($pdf);
-            $pdf .= ($index + 1) . " 0 obj\n" . $object . "\nendobj\n";
-        }
-
-        $xrefOffset = strlen($pdf);
-        $pdf .= "xref\n0 " . (count($objects) + 1) . "\n";
-        $pdf .= sprintf("%010d %05d f \n", 0, 65535);
-        foreach (array_slice($offsets, 1) as $offset) {
-            $pdf .= sprintf("%010d %05d n \n", $offset, 0);
-        }
-        $pdf .= "trailer\n<< /Size " . (count($objects) + 1) . " /Root 1 0 R >>\nstartxref\n" . $xrefOffset . "\n%%EOF";
-
-        return $pdf;
+        return $deleteAfterSend ? $response->deleteFileAfterSend(true) : $response;
     }
 
     private function buildDocxReport(Pathway $pathway, array $reportData): string
@@ -453,10 +440,10 @@ class PathwayController extends Controller
             'Prevalence: ' . $this->formatPercent($summary['prevalence'] ?? null),
             'Sensitivity: ' . $this->formatPercent($summary['sensitivity'] ?? null),
             'Specificity: ' . $this->formatPercent($summary['specificity'] ?? null),
-            'Expected cost: ' . $this->formatCurrency($summary['expected_cost_population'] ?? null),
-            'Expected turnaround: ' . $this->formatDuration($summary['expected_turnaround_time_population'] ?? null),
-            'PPV: ' . $this->formatPercent($metrics['ppv'] ?? null),
-            'NPV: ' . $this->formatPercent($metrics['npv'] ?? null),
+            'Expected cost: ' . $this->formatCurrency($summary['expected_cost_population'] ?? $summary['expected_cost'] ?? null),
+            'Expected turnaround: ' . $this->formatDuration($summary['expected_turnaround_time_population'] ?? $summary['turnaround'] ?? null),
+            'PPV: ' . $this->formatPercent($metrics['ppv'] ?? $summary['ppv'] ?? null),
+            'NPV: ' . $this->formatPercent($metrics['npv'] ?? $summary['npv'] ?? null),
             'Warnings:',
         ];
 
@@ -465,16 +452,11 @@ class PathwayController extends Controller
             $lines[] = ' - None';
         } else {
             foreach ($warnings as $warning) {
-                $lines[] = ' - ' . $warning;
+                $lines[] = ' - ' . (is_array($warning) ? ($warning['text'] ?? '') : $warning);
             }
         }
 
         return $lines;
-    }
-
-    private function escapePdfText(string $value): string
-    {
-        return str_replace(['\\', '(', ')'], ['\\\\', '\\(', '\\)'], $value);
     }
 
     private function formatPercent(mixed $value): string

@@ -148,7 +148,7 @@ def test_hard_constraint_infeasibility_reports_exhaustive_message():
     )
     assert result['status'] == 'infeasible'
     assert result['search_exhaustive'] is True
-    assert result['message'] == 'No pathway can fulfil the selected constraints.'
+    assert result['message'] == 'No feasible pathways under the provided constraints.'
     assert result['rejection_summary']['sensitivity_below_minimum'] > 0
 
 

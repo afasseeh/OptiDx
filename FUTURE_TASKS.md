@@ -35,9 +35,9 @@
 ## 5. PDF/DOCX reporting polish
 
 - **Context:** HTML reporting is the safest initial path.
-- **Limitation:** The current export pipeline now produces real server-side PDF and DOCX files, but the layout is still intentionally minimal.
-- **Improvement:** Add branded page templates, richer charts, section pagination, and snapshot-driven export QA.
-- **Benefit:** More reliable ministry/HTA-ready reporting with production-grade formatting.
+- **Limitation:** The current export pipeline now renders HTML on the backend and converts it to PDF, the report builder now restores the original audience/format/section controls, but the layout is still intentionally minimal, the previous-report browser can still be polished further, and some Windows runtimes still need the new compatibility-PDF fallback instead of the browser renderer.
+- **Improvement:** Add branded page templates, richer charts, section pagination, stored-report comparison, snapshot-driven export QA, and a more deterministic server-side PDF renderer that does not depend on the browser stack.
+- **Benefit:** More reliable ministry/HTA-ready reporting with production-grade formatting and fewer environment-specific export surprises.
 - **Priority:** Medium
 
 ## 6. Collaboration and admin actions
@@ -117,6 +117,14 @@
 - **Limitation:** The in-browser validation panel is still a structural heuristic and does not yet call the same canonical validation path the backend uses for every engine run.
 - **Improvement:** Add a debounced `/api/pathways/validate` round-trip for the active graph and merge those results into the Builder validation tab.
 - **Benefit:** Keeps the visible Builder warnings perfectly aligned with the backend evaluator contract.
+- **Priority:** Medium
+
+## 14. AI-authored report sections
+
+- **Context:** The report detail page now exposes the stored template settings and section map, and the builder page preserves the restored report-template controls before export.
+- **Limitation:** OpenRouter-backed draft generation now exists, but the request still runs inline in the web request and the preview does not yet support manual per-section editing or approval states.
+- **Improvement:** Move AI generation onto a queued job with progress state, add per-section review/edit controls, and optionally store revision history for regenerated sections.
+- **Benefit:** Produces richer report narratives without blocking the request cycle and gives reviewers tighter control over generated content changes.
 - **Priority:** Medium
 
 ## 14. Backend enforcement for required terminal endpoint roles
@@ -259,6 +267,14 @@
 - **Limitation:** The live-data normalization logic still lives in the browser component layer, which leaves a small amount of duplication across the report and compare preview paths.
 - **Improvement:** Extract a shared workspace preview helper for pathway summaries, comparison rows, and report metrics so both screens reuse one normalization boundary.
 - **Benefit:** Reduces drift between the report preview, compare view, and future export previews while keeping the real-data rule in one place.
+- **Priority:** Low
+
+## 32. Remove remaining legacy compare and branding shims
+
+- **Context:** The rail and settings pages no longer expose compare or branding as product surfaces, and the report hub now uses persisted pathway selection.
+- **Limitation:** A few legacy compatibility strings and no-op component stubs still remain in the browser bundle so older entry points and search hits can degrade gracefully during the cutover.
+- **Improvement:** Delete the remaining compare/branding compatibility stubs once the new history/report navigation has been stable for a release or two.
+- **Benefit:** Shrinks the frontend surface area and removes the last vestiges of retired product language.
 - **Priority:** Low
 # Stabilize Vite Dev Loading For Legacy Global Components
 

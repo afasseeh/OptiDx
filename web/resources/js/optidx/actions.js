@@ -492,6 +492,49 @@ function numberOrNull(value) {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
+function isGenericPathwayLabel(value) {
+  const label = String(value || '').trim().toLowerCase();
+  return !label
+    || label === 'untitled pathway'
+    || label === 'current pathway'
+    || label === 'pathway'
+    || label === 'search candidate'
+    || label === 'search_candidate'
+    || /^candidate[_\s-]?\d*$/.test(label)
+    || /^search[_\s-]?candidate(?:[_\s-]?\d+)?$/.test(label);
+}
+
+function buildReadablePathwayName(pathway, fallbackName = 'Untitled pathway') {
+  const explicitName = String(pathway?.name || '').trim();
+  if (explicitName && !isGenericPathwayLabel(explicitName)) {
+    return explicitName;
+  }
+
+  const projectTitle = String(pathway?.project?.title || pathway?.project?.name || pathway?.project_title || '').trim();
+  const condition = String(
+    pathway?.metadata?.disease
+    || pathway?.disease
+    || pathway?.condition
+    || pathway?.metadata?.label
+    || pathway?.title
+    || ''
+  ).trim();
+
+  if (projectTitle && condition && !isGenericPathwayLabel(condition)) {
+    return `${projectTitle} - ${condition}`;
+  }
+
+  if (projectTitle) {
+    return projectTitle;
+  }
+
+  if (condition && !isGenericPathwayLabel(condition)) {
+    return condition;
+  }
+
+  return fallbackName;
+}
+
 function extractPathwayEvaluationSummary(pathway = {}) {
   const latestEvaluationResult = pathway.latest_evaluation_result
     ?? pathway.latestEvaluationResult
@@ -525,6 +568,9 @@ function extractPathwayEvaluationSummary(pathway = {}) {
     tat: tatHours == null ? null : formatDurationHours(tatHours),
     status: pathway.status ?? pathway.validation_status ?? 'Draft',
     disease: pathway.disease ?? pathway.metadata?.disease ?? pathway.metadata?.label ?? pathway.name ?? null,
+    project_title: pathway.project?.title ?? pathway.project?.name ?? pathway.project_title ?? null,
+    condition: pathway.metadata?.disease ?? pathway.disease ?? pathway.metadata?.label ?? pathway.name ?? null,
+    evaluation_status: resultPayload?.status ?? latestEvaluationResult?.status ?? pathway.validation_status ?? null,
     updated: updatedAt ? new Date(updatedAt).toLocaleDateString() : pathway.updated ?? null,
     owner: pathway.owner ?? pathway.owner_name ?? null,
   };
@@ -775,6 +821,22 @@ function setActiveProjectDraft(project = null) {
   return draft;
 }
 
+function selectProject(project = null) {
+  return setActiveProjectRecord(project, { persistSelection: true, hydrateDraft: true });
+}
+
+function openProject(project = null) {
+  return selectProject(project);
+}
+
+function createStandalonePathway() {
+  setActiveProjectRecord(null);
+  setActivePathwayRecord(null);
+  const draft = createStarterCanvasGraph();
+  setActivePathwayDraft(draft);
+  return draft;
+}
+
 function normalizeDiagnosticTestRecord(test) {
   if (!test || typeof test !== 'object') {
     return null;
@@ -826,7 +888,7 @@ function normalizePathwayRecord(pathway) {
     editor_definition: normalized || pathway.editor_definition || null,
     engine_definition: pathway.engine_definition || null,
     prevalence: pathway.prevalence ?? normalized?.prevalence ?? pathway.metadata?.prevalence ?? null,
-    name: pathway.name ?? pathway.metadata?.label ?? 'Untitled pathway',
+    name: buildReadablePathwayName(pathway, 'Untitled pathway'),
     ...summary,
     _canonical: normalized,
   };
@@ -1021,7 +1083,7 @@ async function loadWorkspaceData() {
     const activeProjectId = readActiveProjectId();
     const activeProject = activeProjectId
       ? normalizedProjects.find(project => String(project.id) === String(activeProjectId))
-      : normalizedProjects[0];
+      : null;
 
     if (activeProject) {
       setActiveProjectRecord(activeProject, { persistSelection: true, hydrateDraft: true });
@@ -2358,6 +2420,44 @@ async function saveProjectDraft(draft = null) {
   return normalized;
 }
 
+async function updateProjectRecord(projectId, updates = {}) {
+  if (!projectId) {
+    return null;
+  }
+
+  const response = await request('put', `/api/projects/${projectId}`, updates);
+  const normalized = upsertWorkspaceProject(response);
+  if (normalized) {
+    selectProject(normalized);
+  }
+
+  return normalized;
+}
+
+async function deleteProjectRecord(project) {
+  const record = normalizeProjectRecord(project || getActiveProjectRecord());
+  if (!record?.id) {
+    return null;
+  }
+
+  await request('delete', `/api/projects/${record.id}`);
+
+  const remainingProjects = getWorkspaceProjects().filter(item => String(item.id) !== String(record.id));
+  window.SEED_PROJECTS = remainingProjects;
+  setWorkspaceSnapshot({
+    projects: remainingProjects,
+    projectsById: toWorkspaceIndex(remainingProjects),
+  });
+
+  if (String(getActiveProjectRecord()?.id ?? '') === String(record.id)) {
+    setActiveProjectRecord(null);
+  }
+
+  await loadWorkspaceData().catch(() => {});
+  showToast(`Deleted "${record.title || record.name || 'project'}"`, 'success');
+  return true;
+}
+
 const OPTIMIZATION_RESULT_LABELS = {
   least_cost_per_positive_test: 'Least cost per positive test',
   highest_balanced_accuracy: 'Highest balanced accuracy',
@@ -3021,14 +3121,27 @@ async function evaluatePathway(pathway = null, prevalence = null) {
   return response;
 }
 
-async function loadPathwayIntoWorkspace(pathway) {
+async function loadPathwayIntoWorkspace(pathway, options = {}) {
+  const persist = options.persist !== false;
+  const source = pathway?.editor_definition || pathway?.engine_definition || pathway;
+  const canvasDraft = buildCanvasDraftFromPathway(source);
+
+  if (!persist) {
+    window.OptiDxImportedPathway = null;
+    setActivePathwayRecord(null);
+    setActivePathwayDraft(canvasDraft);
+    window.dispatchEvent(new CustomEvent('optidx-pathway-loaded', { detail: canvasDraft }));
+    showToast(`Opened "${canvasDraft.metadata?.label || 'pathway'}"`, 'success');
+    return canvasDraft;
+  }
+
   const response = await request('post', '/api/pathways/import', { pathway });
-  const canvasDraft = buildCanvasDraftFromPathway(response?.editor_definition || response?.engine_definition || pathway);
+  const nextDraft = buildCanvasDraftFromPathway(response?.editor_definition || response?.engine_definition || pathway);
   window.OptiDxImportedPathway = response;
   upsertWorkspacePathwayRecord(response);
-  setActivePathwayDraft(canvasDraft);
-  window.dispatchEvent(new CustomEvent('optidx-pathway-loaded', { detail: canvasDraft }));
-  showToast(`Imported "${canvasDraft.metadata?.label || 'pathway'}"`, 'success');
+  setActivePathwayDraft(nextDraft);
+  window.dispatchEvent(new CustomEvent('optidx-pathway-loaded', { detail: nextDraft }));
+  showToast(`Imported "${nextDraft.metadata?.label || 'pathway'}"`, 'success');
   return response;
 }
 
@@ -3169,20 +3282,104 @@ async function importEvidenceTest(test) {
   return normalized;
 }
 
-async function downloadReport(format = 'pdf') {
-  const pathwayId = getActivePathwayRecord()?.id || window.OptiDxLatestEvaluationPathway?.id;
-  if (!pathwayId) {
+async function downloadReport(format = 'pdf', pathwayId = null, settings = null) {
+  const selectedPathwayId = pathwayId || getActivePathwayRecord()?.id || window.OptiDxLatestEvaluationPathway?.id;
+  if (!selectedPathwayId) {
     showToast('Save or run a pathway before exporting a report.', 'error');
+    return null;
+  }
+
+  const hasSettings = settings && typeof settings === 'object' && Object.keys(settings).length > 0;
+  const reportId = hasSettings ? settings.report_id || null : null;
+  const payloadSettings = hasSettings
+    ? Object.fromEntries(Object.entries(settings).filter(([key]) => key !== 'report_id'))
+    : null;
+  const response = await api.request({
+    method: hasSettings ? 'post' : 'get',
+    url: `/api/pathways/${selectedPathwayId}/export/report`,
+    ...(hasSettings ? { data: { format, settings: payloadSettings, report_id: reportId } } : { params: { format } }),
+    responseType: 'blob',
+  });
+
+  const disposition = response.headers?.['content-disposition'] || '';
+  const match = disposition.match(/filename="?([^"]+)"?/i);
+  const filename = match?.[1] || `optidx-report.${format}`;
+  ensureBlobDownload(filename, response.data, response.headers?.['content-type'] || 'application/octet-stream');
+  return response.data;
+}
+
+async function fetchPathwayReports(pathwayId) {
+  if (!pathwayId) {
+    return [];
+  }
+
+  const response = await request('get', `/api/pathways/${pathwayId}/reports`);
+  return Array.isArray(response?.data) ? response.data : [];
+}
+
+async function fetchReportRecord(reportId) {
+  if (!reportId) {
+    return null;
+  }
+
+  return request('get', `/api/reports/${reportId}`);
+}
+
+async function generateAiReportDraft(pathwayId, settings = {}, reportId = null) {
+  if (!pathwayId) {
+    throw new Error('Select a pathway before generating an AI report.');
+  }
+
+  const response = await request('post', `/api/pathways/${pathwayId}/report/generate-ai`, {
+    settings,
+    report_id: reportId,
+  });
+
+  showToast('AI report draft generated.', 'success');
+  return response;
+}
+
+async function updateReportRecord(reportId, payload = {}) {
+  if (!reportId) {
+    return null;
+  }
+
+  const response = await request('put', `/api/reports/${reportId}`, payload);
+  showToast('Report updated.', 'success');
+  return response;
+}
+
+async function renameReportRecord(reportId, title) {
+  if (!reportId) {
+    return null;
+  }
+
+  const response = await request('put', `/api/reports/${reportId}`, { title });
+  showToast('Report renamed.', 'success');
+  return response;
+}
+
+async function deleteReportRecord(reportId) {
+  if (!reportId) {
+    return null;
+  }
+
+  await request('delete', `/api/reports/${reportId}`);
+  showToast('Report deleted.', 'success');
+  return true;
+}
+
+async function downloadStoredReport(reportId, format = 'pdf') {
+  if (!reportId) {
     return null;
   }
 
   const response = await api.request({
     method: 'get',
-    url: `/api/pathways/${pathwayId}/export/report`,
+    url: `/api/reports/${reportId}/download`,
     params: { format },
     responseType: 'blob',
   });
-
   const disposition = response.headers?.['content-disposition'] || '';
   const match = disposition.match(/filename="?([^"]+)"?/i);
   const filename = match?.[1] || `optidx-report.${format}`;
@@ -3231,6 +3428,7 @@ function comingSoon(label) {
 window.OptiDxActions = {
   api,
   request,
+  refreshCsrfToken,
   loadWorkspaceData,
   buildProjectWizardState,
   getWorkspaceProjects,
@@ -3243,7 +3441,12 @@ window.OptiDxActions = {
   getActiveProjectRecord,
   setActiveProjectRecord,
   setActiveProjectDraft,
+  selectProject,
+  openProject,
+  createStandalonePathway,
   saveProjectDraft,
+  updateProjectRecord,
+  deleteProjectRecord,
   getActivePathwayRecord,
   setActivePathwayRecord,
   setActivePathwayDraft,
@@ -3285,6 +3488,13 @@ window.OptiDxActions = {
   deletePathwayRecord,
   importEvidenceTest,
   downloadReport,
+  fetchPathwayReports,
+  fetchReportRecord,
+  generateAiReportDraft,
+  renameReportRecord,
+  updateReportRecord,
+  deleteReportRecord,
+  downloadStoredReport,
   downloadJson(filename, data) {
     ensureBlobDownload(filename, JSON.stringify(data, null, 2), 'application/json');
   },

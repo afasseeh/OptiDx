@@ -8,7 +8,7 @@ function Rail({ screen, setScreen, onHelp }) {
     { id: "wizard",   icon: "layout-grid", label: "New" },
     { id: "canvas",   icon: "git-branch",  label: "Builder" },
     { id: "results",  icon: "bar-chart",   label: "Results" },
-    { id: "compare",  icon: "sliders",     label: "Compare" },
+    { id: "history",  icon: "history",     label: "History" },
     { id: "evidence", icon: "database",    label: "Evidence" },
     { id: "report",   icon: "file-text",   label: "Report" },
     { id: "teams",    icon: "users",       label: "Teams" },

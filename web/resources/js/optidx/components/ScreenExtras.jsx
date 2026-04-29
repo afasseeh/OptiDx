@@ -213,7 +213,7 @@ function LegacyScreenScenarios({ setScreen }) {
               <p style={{marginTop:8, color:"var(--fg-2)", fontSize:13, lineHeight:1.5}}>{optimization.progress_message}</p>
             )}
             <p style={{marginTop:8, color:"var(--fg-3)", fontSize:12}}>
-              Extensive runs continue in the background and will email the launching user when they finish.
+              Extensive mode is under development and is not available yet.
             </p>
           </div>
         </div>
@@ -236,7 +236,7 @@ function LegacyScreenScenarios({ setScreen }) {
               return;
             }
             try {
-              await window.OptiDxActions.loadPathwayIntoWorkspace?.(scenario);
+              await window.OptiDxActions.loadPathwayIntoWorkspace?.(scenario, { persist: false });
               setScreen("canvas");
             } catch (error) {
               window.OptiDxActions.showToast?.(error?.message || "Unable to open scenario", "error");
@@ -287,7 +287,7 @@ function LegacyScreenScenarios({ setScreen }) {
               <p style={{marginTop:8, color:"var(--fg-2)", fontSize:13, lineHeight:1.5}}>{optimization.progress_message}</p>
             )}
             <p style={{marginTop:8, color:"var(--fg-3)", fontSize:12}}>
-              Extensive runs keep working after you leave the page. You will receive an email when the run finishes.
+              Extensive mode is under development and is not available yet.
             </p>
           </div>
         )}
@@ -425,7 +425,7 @@ function LegacyScreenScenarios({ setScreen }) {
                 return;
               }
               try {
-                await window.OptiDxActions.loadPathwayIntoWorkspace?.(current.pathway);
+                await window.OptiDxActions.loadPathwayIntoWorkspace?.(current.pathway, { persist: false });
                 setScreen("canvas");
               } catch (error) {
                 window.OptiDxActions.showToast?.(error?.message || "Unable to load scenario into canvas", "error");
@@ -499,7 +499,7 @@ function ScreenScenarios({ setScreen }) {
               <p style={{marginTop:8, color:"var(--fg-2)", fontSize:13, lineHeight:1.5}}>{optimization.progress_message}</p>
             )}
             <p style={{marginTop:8, color:"var(--fg-3)", fontSize:12}}>
-              Extensive runs continue in the background and will email the launching user when they finish.
+              Extensive mode is under development and is not available yet.
             </p>
           </div>
         </div>
@@ -533,14 +533,14 @@ function ScreenScenarios({ setScreen }) {
 
   if (!scenarios.length) {
     const statusTitle = optimization?.status === 'infeasible'
-      ? 'No feasible pathway was found'
+      ? 'No feasible pathways under the provided constraints'
       : optimization?.status === 'no_feasible_found_time_limit'
         ? 'The search timed out before finding a feasible pathway'
         : 'No optimization scenarios are available yet';
     const statusMessage = optimization?.message
       || optimization?.failure_reason
       || (optimization?.status === 'infeasible'
-        ? 'No pathway can fulfil the selected constraints.'
+        ? 'No feasible pathways under the provided constraints.'
         : optimization?.status === 'no_feasible_found_time_limit'
           ? 'No feasible pathway was found within the time limit. Because the search was not exhaustive, the system cannot claim that no feasible pathway exists.'
           : 'Run the optimizer to populate the named scenario buckets and the sortable feasible-candidate table.');
@@ -630,7 +630,7 @@ function ScreenScenarios({ setScreen }) {
               return;
             }
             try {
-              await window.OptiDxActions.loadPathwayIntoWorkspace?.(scenario);
+              await window.OptiDxActions.loadPathwayIntoWorkspace?.(scenario, { persist: false });
               setScreen("canvas");
             } catch (error) {
               window.OptiDxActions.showToast?.(error?.message || "Unable to open scenario", "error");
@@ -837,7 +837,7 @@ function ScreenScenarios({ setScreen }) {
                   return;
                 }
                 try {
-                  await window.OptiDxActions.loadPathwayIntoWorkspace?.(current.pathway);
+                  await window.OptiDxActions.loadPathwayIntoWorkspace?.(current.pathway, { persist: false });
                   setScreen("canvas");
                 } catch (error) {
                   window.OptiDxActions.showToast?.(error?.message || "Unable to load scenario into canvas", "error");
@@ -869,7 +869,6 @@ function ScreenSettingsFull({ currentUser }) {
     { id:"profile", label:"Profile" },
     { id:"workspace", label:"Workspace" },
     { id:"defaults", label:"Pathway defaults" },
-    { id:"branding", label:"Branding" },
     { id:"integrations", label:"Integrations" },
   ];
   return (
@@ -880,7 +879,7 @@ function ScreenSettingsFull({ currentUser }) {
           <div>
             <div className="sme-eyebrow" style={{marginBottom:6}}>Preferences</div>
             <h1>Settings</h1>
-            <p>Workspace, defaults, branding, integrations. Changes save automatically.</p>
+            <p>Workspace, defaults, integrations. Changes save automatically.</p>
           </div>
         </div>
         <div className="tabs" style={{marginBottom:24}}>
@@ -893,7 +892,6 @@ function ScreenSettingsFull({ currentUser }) {
         {tab === "profile" && <SetProfile currentUser={currentUser}/>}
         {tab === "workspace" && <SetWorkspace currentUser={currentUser}/>}
         {tab === "defaults" && <SetDefaults/>}
-        {tab === "branding" && <SetBranding/>}
         {tab === "integrations" && <SetIntegrations/>}
       </div>
     </>
@@ -1141,24 +1139,6 @@ function SetWorkspace({ currentUser }) {
         </div>
       </div>
 
-      <div className="card card--pad" style={{gridColumn:"span 2"}}>
-        <h3 style={{fontSize:14, marginBottom:14}}>Billing</h3>
-        <div className="row" style={{gap:16}}>
-          <div style={{flex:1, padding:16, background:"var(--sme-orange-050)", borderRadius:6, border:"1px solid var(--sme-orange-100)"}}>
-            <div className="sme-eyebrow" style={{color:"var(--sme-orange-600)", marginBottom:4}}>Current plan</div>
-            <div style={{fontSize:18, fontWeight:700}}>Research Â· Non-profit</div>
-            <div className="u-meta" style={{marginTop:4}}>Unlimited pathways Â· 8 seats Â· Priority support</div>
-          </div>
-          <div style={{flex:1, padding:16, background:"var(--surface-2)", borderRadius:6}}>
-            <div className="u-meta">Next renewal</div>
-            <div style={{fontSize:15, fontWeight:700, marginTop:4}}>1 Jan 2027</div>
-            <div className="u-meta" style={{marginTop:4}}>Waived, research license</div>
-          </div>
-          <div>
-            <button className="btn" onClick={() => window.OptiDxActions.comingSoon("Manage billing")}>Manage billing</button>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
@@ -1177,12 +1157,6 @@ function SetDefaults() {
       flagEvidenceAge: false,
       blockLowSensitivity: false,
       requireReferee: true,
-    },
-    weights: {
-      sensitivity: 0.30,
-      specificity: 0.30,
-      cost: 0.30,
-      tat: 0.10,
     },
   });
   const [saving, setSaving] = useState(false);
@@ -1207,13 +1181,6 @@ function SetDefaults() {
     "Flag evidence older than 10 years": "flagEvidenceAge",
     "Block save if below minimum sensitivity": "blockLowSensitivity",
     "Require referee on discordant branches": "requireReferee",
-  };
-
-  const weightKeyMap = {
-    Sensitivity: "sensitivity",
-    Specificity: "specificity",
-    Cost: "cost",
-    TAT: "tat",
   };
 
   return (
@@ -1269,40 +1236,12 @@ function SetDefaults() {
         </div>
       </div>
 
-      <div className="card card--pad" style={{gridColumn:"span 2"}}>
-        <h3 style={{fontSize:14, marginBottom:12}}>Default MCDA weights</h3>
-        <p className="u-meta" style={{marginBottom:14}}>Applied when a new pathway uses the Balanced MCDA objective. Must sum to 1.00.</p>
-        <div style={{display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:16}}>
-          {[["Sensitivity",0.30],["Specificity",0.30],["Cost",0.30],["TAT",0.10]].map(([l,v]) => {
-            const key = weightKeyMap[l];
-            return (
-              <div key={l}>
-                <div className="row"><span style={{fontSize:12, fontWeight:700}}>{l}</span><div className="spacer"/><span className="mono">{(defaults.weights?.[key] ?? v).toFixed(2)}</span></div>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.05"
-                  value={defaults.weights?.[key] ?? v}
-                  onChange={e => setDefaults(current => ({
-                    ...current,
-                    weights: {
-                      ...(current.weights || {}),
-                      [key]: Number(e.target.value),
-                    },
-                  }))}
-                  style={{width:"100%", accentColor:"var(--sme-orange)"}}
-                />
-              </div>
-            );
-          })}
-        </div>
-      </div>
     </div>
   );
 }
 
 function SetBranding() {
+  return null;
   return (
     <>
       <ComingSoonHeader
@@ -1610,149 +1549,34 @@ Object.assign(window, { ScreenLibrary, ScreenScenarios, ScreenSettingsFull, Shar
 
 // ---------- TEAMS (coming soon) -------------------------------------------
 function ScreenTeams({ currentUser }) {
-  const [email, setEmail] = useState("");
-  const [waitlisted, setWaitlisted] = useState(false);
-
   return (
     <>
       <TopBar
         crumbs={["OptiDx","Teams"]}
-        actions={<span className="chip chip--orange" style={{height:24, padding:"0 10px"}}>Coming soon</span>}
+        actions={<span className="chip chip--orange" style={{height:24, padding:"0 10px"}}>Not active</span>}
       />
       <div className="page" style={{maxWidth:1200}}>
         <div className="page__head">
           <div>
-            <div className="sme-eyebrow" style={{marginBottom:6}}>Collaboration Â· In development</div>
+            <div className="sme-eyebrow" style={{marginBottom:6}}>Collaboration</div>
             <h1>Teams &amp; collaboration</h1>
-            <p>Invite colleagues, share pathways for review, and co-author with role-based permissions. Currently in private beta, join the waitlist to get early access.</p>
+            <p>This feature is not active yet. The current workspace remains single-user while the collaboration model is under development.</p>
           </div>
         </div>
-
-        {/* Hero / waitlist */}
-        <div className="card" style={{padding:0, overflow:"hidden", marginBottom:24, position:"relative"}}>
-          <div style={{
-            background:"var(--sme-ink-900)", color:"#fff",
-            padding:"40px 48px",
-            display:"grid", gridTemplateColumns:"1.1fr 1fr", gap:48, alignItems:"center",
-            position:"relative", overflow:"hidden",
-          }}>
-            {/* Decorative network */}
-            <svg viewBox="0 0 460 280" style={{position:"absolute", right:0, top:0, height:"100%", opacity:0.45}}>
-              {[
-                [80,80],[180,50],[280,90],[380,60],
-                [60,180],[160,200],[260,170],[360,210],
-                [120,260],[220,250],[320,250],
-              ].map(([x,y], i) => (
-                <g key={i}>
-                  <circle cx={x} cy={y} r="4" fill="#F37739"/>
-                  <circle cx={x} cy={y} r="14" fill="none" stroke="#F37739" strokeOpacity="0.3"/>
-                </g>
-              ))}
-              <g stroke="#5A6B78" strokeOpacity="0.4" fill="none" strokeWidth="0.8">
-                <path d="M80 80 L180 50 M180 50 L280 90 M280 90 L380 60"/>
-                <path d="M60 180 L160 200 M160 200 L260 170 M260 170 L360 210"/>
-                <path d="M80 80 L60 180 M180 50 L160 200 M280 90 L260 170 M380 60 L360 210"/>
-                <path d="M60 180 L120 260 M160 200 L220 250 M260 170 L320 250"/>
-              </g>
-            </svg>
-
-            <div style={{position:"relative", zIndex:1}}>
-              <div className="sme-eyebrow" style={{color:"var(--sme-orange)", marginBottom:14}}>FEATURE PREVIEW</div>
-              <h2 style={{fontSize:32, lineHeight:1.15, letterSpacing:"-0.02em", color:"#fff", marginBottom:14, textWrap:"balance"}}>
-                Bring your whole HTA team into the same pathway.
-              </h2>
-              <p style={{fontSize:14, color:"#B0B5B9", lineHeight:1.55, marginBottom:24, maxWidth:480}}>
-                Workspaces, projects, granular roles, and review threads on every node, designed for the way clinicians, economists and lab directors actually work together.
-              </p>
-
-              {!waitlisted ? (
-                <form onSubmit={e => { e.preventDefault(); setWaitlisted(true); }}
-                  style={{display:"flex", gap:8, maxWidth:460}}>
-                  <input className="input" placeholder="Work email" value={email}
-                    onChange={e => setEmail(e.target.value)} required
-                    style={{background:"#3A4248", borderColor:"#4A5056", color:"#fff", height:40}}/>
-                  <button type="submit" className="btn btn--primary" style={{height:40}}>
-                    Join waitlist <Icon name="arrow-right"/>
-                  </button>
-                </form>
-              ) : (
-                <div className="banner" style={{background:"rgba(91,138,95,0.15)", border:"1px solid #5B8A5F", color:"#A8D4AB", maxWidth:460}}>
-                  <Icon name="check" size={16} className="banner__icon" style={{color:"#5B8A5F"}}/>
-                  <div>You're on the list. We'll email <b style={{color:"#fff"}}>{email}</b> as soon as Teams is available.</div>
-                </div>
-              )}
-              <div style={{marginTop:14, fontSize:11, color:"#8A9299"}}>
-                Estimated rollout: <b style={{color:"#fff"}}>Q3 2027</b> Â· Already invited 142 organizations
-              </div>
-            </div>
-
-            <div style={{position:"relative", zIndex:1}}>
-              <TeamsPreviewCard currentUser={currentUser}/>
-            </div>
+        <div className="card card--pad" style={{padding:32}}>
+          <div className="sme-eyebrow" style={{marginBottom:8}}>Teams</div>
+          <h2 style={{marginBottom:8}}>Feature not active yet</h2>
+          <p style={{color:"var(--fg-2)", maxWidth:760, lineHeight:1.6}}>
+            Teams collaboration is reserved for a later release. The workspace currently stays single-user and the screen is intentionally read-only.
+          </p>
+          <div className="banner banner--info" style={{marginTop:16}}>
+            <Icon name="info" size={16} className="banner__icon"/>
+            <div>Invite, role, and review-thread controls will appear here when collaboration is activated.</div>
           </div>
-        </div>
-
-        {/* Feature grid */}
-        <div className="grid" style={{gridTemplateColumns:"repeat(3, 1fr)", gap:16, marginBottom:24}}>
-          <FeatureCard icon="users" title="Workspaces &amp; projects"
-            desc="Group pathways under projects with separate evidence libraries, defaults and report branding per workspace." />
-          <FeatureCard icon="user" title="Granular roles"
-            desc="Owner, Editor, Clinical reviewer, Analyst and Viewer roles with explicit permissions for runs, edits and exports." />
-          <FeatureCard icon="clipboard-list" title="Review threads"
-            desc="Comment on any node, edge or assumption. Resolve threads, request changes, and approve sign-offs." />
-          <FeatureCard icon="git-branch" title="Branches &amp; suggestions"
-            desc="Propose changes to a pathway without overwriting it. Diff and merge between collaborators." />
-          <FeatureCard icon="lock" title="SSO &amp; SCIM"
-            desc="Map IdP groups to OptiDx roles. Auto-provision and de-provision when staff join or leave." />
-          <FeatureCard icon="check" title="Audit log"
-            desc="Tamper-evident history of who edited what, who ran the optimizer, and who exported reports." />
-        </div>
-
-        {/* Mock team list */}
-        <div className="card" style={{padding:0, opacity:0.85}}>
-          <div className="card__head">
-            <h3>Members <span className="u-meta" style={{marginLeft:8, fontWeight:400}}>(preview Â· disabled)</span></h3>
-            <div className="spacer"/>
-            <button className="btn btn--sm" onClick={() => window.OptiDxActions.comingSoon("Invite member")}><Icon name="plus" size={12}/>Invite member</button>
-          </div>
-          <table className="table">
-            <thead><tr>
-              <th>Member</th><th>Role</th><th>Projects</th><th>Last active</th><th>Status</th><th></th>
-            </tr></thead>
-            <tbody>
-              {[
-                [[currentUser?.first_name, currentUser?.last_name].filter(Boolean).join(" ") || currentUser?.name || "Current user", currentUser?.email || "your.email@example.com", currentUser?.title || "Owner", "All projects","Just now","active", getInitials([currentUser?.first_name, currentUser?.last_name].filter(Boolean).join(" ") || currentUser?.name || "Current user"), "var(--sme-orange)"],
-                ["Ahmed Khalil","ahmed.khalil@syreon.me","Editor","TB MENA Â· NCD Egypt","2h ago","active","AK","var(--refer)"],
-                ["Dr. Layla Haddad","l.haddad@cu.edu.eg","Clinical reviewer","TB MENA","Yesterday","invited","LH","var(--pos)"],
-                ["Omar Fouad","omar.f@minhealth.gov.eg","Viewer","NCD Egypt","3 days","active","OF","var(--inconcl)"],
-                ["Reem Saleh","reem.saleh@who.int","Analyst","All projects","1 wk","invited","RS","#7B5BA6"],
-              ].map(([n,e,r,p,t,s,i,c]) => (
-                <tr key={n}>
-                  <td>
-                    <div className="row" style={{gap:10}}>
-                      <div style={{width:30, height:30, borderRadius:"50%", background:c, color:"#fff",
-                        display:"grid", placeItems:"center", fontWeight:700, fontSize:11}}>{i}</div>
-                      <div>
-                        <div style={{fontSize:13, fontWeight:700}}>{n}</div>
-                        <div className="u-meta">{e}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td><span className="chip chip--outline">{r}</span></td>
-                  <td className="u-meta">{p}</td>
-                  <td className="u-meta mono">{t}</td>
-                  <td>
-                    <span className={"chip " + (s === "active" ? "chip--pos" : "chip--inc")}>
-                      {s === "active" ? "Active" : "Invited"}
-                    </span>
-                  </td>
-                  <td><Icon name="more" size={14} style={{color:"var(--fg-3)"}}/></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div style={{padding:"14px 20px", borderTop:"1px solid var(--edge)", textAlign:"center", color:"var(--fg-3)", fontSize:12, background:"var(--surface-2)"}}>
-            <Icon name="info" size={12}/> Member management is part of the Teams feature, currently in private beta.
+          <div className="row" style={{marginTop:18}}>
+            <button className="btn btn--primary" onClick={() => window.OptiDxActions.comingSoon("Teams collaboration")}>
+              Notify me when available
+            </button>
           </div>
         </div>
       </div>

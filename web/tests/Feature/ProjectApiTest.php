@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Project;
+use App\Models\Pathway;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -103,6 +104,52 @@ class ProjectApiTest extends TestCase
         $this->assertSame('Minimize cost', $updated->metadata['objective']);
         $this->assertSame(['Blood'], $updated->metadata['allowed_sample_types']);
         $this->assertEqualsWithDelta(0.12, (float) $updated->prevalence, 0.00001);
+    }
+
+    public function test_delete_preserves_project_pathways_as_standalone_records(): void
+    {
+        $this->actingAs($this->workspaceUser('project-delete@example.com'));
+
+        $project = Project::create([
+            'title' => 'Deletion target',
+            'disease_area' => 'Tuberculosis',
+            'intended_use' => 'Balanced MCDA',
+            'target_population' => 'Adults 15+',
+            'prevalence' => 0.08,
+            'setting' => 'comm',
+        ]);
+
+        $pathway = Pathway::create([
+            'project_id' => $project->id,
+            'name' => 'Project-linked pathway',
+            'version' => 1,
+            'schema_version' => 'v1',
+            'start_node_id' => 'start',
+            'editor_definition' => [
+                'start_node' => 'start',
+                'tests' => [],
+                'nodes' => [],
+                'metadata' => ['label' => 'Project-linked pathway'],
+            ],
+            'engine_definition' => [
+                'start_node' => 'start',
+                'tests' => [],
+                'nodes' => [],
+                'metadata' => ['label' => 'Project-linked pathway'],
+            ],
+            'metadata' => ['label' => 'Project-linked pathway'],
+        ]);
+
+        $this->deleteJson("/api/projects/{$project->id}")
+            ->assertNoContent();
+
+        $this->assertDatabaseMissing('projects', [
+            'id' => $project->id,
+        ]);
+
+        $pathway->refresh();
+        $this->assertNull($pathway->project_id);
+        $this->assertSame('Project-linked pathway', $pathway->name);
     }
 
     private function workspaceUser(string $email): User

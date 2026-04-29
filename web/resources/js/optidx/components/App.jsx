@@ -63,6 +63,8 @@ function App() {
   const [showShare, setShowShare] = useState(false);
   const [showTestEditor, setShowTestEditor] = useState(false);
   const [testEditorSeed, setTestEditorSeed] = useState(null);
+  const [selectedReportPathwayId, setSelectedReportPathwayId] = useState(null);
+  const [selectedReportId, setSelectedReportId] = useState(null);
 
   // Tweaks panel
   useEffect(() => {
@@ -139,10 +141,12 @@ function App() {
         setShowShare(false);
         setShowTestEditor(false);
         setTestEditorSeed(null);
+        setSelectedReportPathwayId(null);
         setShowFeedback(false);
         setShowTweaks(false);
         setScreen("home");
         setAuthMode("login");
+        setSelectedReportId(null);
       }
     };
 
@@ -154,10 +158,12 @@ function App() {
       setShowShare(false);
       setShowTestEditor(false);
       setTestEditorSeed(null);
+      setSelectedReportPathwayId(null);
       setShowFeedback(false);
       setShowTweaks(false);
       setScreen("home");
       setAuthMode("login");
+      setSelectedReportId(null);
     };
 
     window.addEventListener('optidx-auth-updated', onAuthUpdated);
@@ -210,11 +216,31 @@ function App() {
       {screen === "wizard"   && <ScreenErrorBoundary resetKey={screen} onRecover={() => setScreen("wizard")}><Frame><ScreenWizard setScreen={setScreen}/></Frame></ScreenErrorBoundary>}
       {screen === "scenarios"&& <ScreenErrorBoundary resetKey={screen} onRecover={() => setScreen("scenarios")}><Frame><ScreenScenarios setScreen={setScreen}/></Frame></ScreenErrorBoundary>}
       {screen === "canvas"   && <ScreenErrorBoundary resetKey={screen} onRecover={() => setScreen("canvas")}><CanvasWrapper variant={variant.canvas} setVariant={v => setVariant(s => ({...s, canvas:v}))} openPanel={openPanel} setOpenPanel={setOpenPanel} setScreen={setScreen}/></ScreenErrorBoundary>}
-      {screen === "results"  && <ScreenErrorBoundary resetKey={screen} onRecover={() => setScreen("results")}><ResultsWrapper variant={variant.results} setVariant={v => setVariant(s => ({...s, results:v}))} setScreen={setScreen} onShare={() => setShowShare(true)}/></ScreenErrorBoundary>}
+      {screen === "results"  && <ScreenErrorBoundary resetKey={screen} onRecover={() => setScreen("results")}><ResultsWrapper variant={variant.results} setVariant={v => setVariant(s => ({...s, results:v}))} setScreen={setScreen} onShare={() => setShowShare(true)} onGenerateReport={pathwayId => {
+        const run = async () => {
+          if (!pathwayId) {
+            setSelectedReportPathwayId(null);
+            setSelectedReportId(null);
+            setScreen("report");
+            return;
+          }
+
+          try {
+            setSelectedReportPathwayId(pathwayId);
+            setSelectedReportId(null);
+            setScreen("report-detail");
+          } catch (error) {
+            window.OptiDxActions.showToast?.(error?.message || "Unable to generate report", "error");
+          }
+        };
+
+        void run();
+      }}/></ScreenErrorBoundary>}
       {screen === "trace"    && <ScreenErrorBoundary resetKey={screen} onRecover={() => setScreen("trace")}><Frame><ScreenTrace setScreen={setScreen}/></Frame></ScreenErrorBoundary>}
-      {screen === "compare"  && <ScreenErrorBoundary resetKey={screen} onRecover={() => setScreen("compare")}><Frame><ScreenCompare setScreen={setScreen}/></Frame></ScreenErrorBoundary>}
+      {screen === "compare"  && <ScreenErrorBoundary resetKey={screen} onRecover={() => setScreen("history")}><Frame><ScreenOptimizationHistory setScreen={setScreen}/></Frame></ScreenErrorBoundary>}
       {screen === "evidence" && <ScreenErrorBoundary resetKey={screen} onRecover={() => setScreen("evidence")}><Frame><ScreenEvidence setScreen={setScreen}/></Frame></ScreenErrorBoundary>}
-      {screen === "report"   && <ScreenErrorBoundary resetKey={screen} onRecover={() => setScreen("report")}><Frame fullBleed><ScreenReport setScreen={setScreen} onShare={() => setShowShare(true)}/></Frame></ScreenErrorBoundary>}
+      {screen === "report"   && <ScreenErrorBoundary resetKey={screen} onRecover={() => setScreen("report")}><Frame><window.ScreenReport setScreen={setScreen} onShare={() => setShowShare(true)} selectedPathwayId={selectedReportPathwayId} onSelectPathwayId={setSelectedReportPathwayId} onOpenReport={(reportId, pathwayId) => { setSelectedReportId(reportId); setSelectedReportPathwayId(pathwayId ?? null); setScreen("report-detail"); }}/></Frame></ScreenErrorBoundary>}
+      {screen === "report-detail" && <ScreenErrorBoundary resetKey={screen} onRecover={() => setScreen("report-detail")}><Frame><window.ScreenReportBuilder setScreen={setScreen} reportId={selectedReportId} pathwayId={selectedReportPathwayId} onClose={() => setSelectedReportId(null)} onDelete={() => setSelectedReportId(null)}/></Frame></ScreenErrorBoundary>}
       {screen === "settings" && <ScreenErrorBoundary resetKey={screen} onRecover={() => setScreen("settings")}><Frame><ScreenSettingsFull currentUser={currentUser}/></Frame></ScreenErrorBoundary>}
       {screen === "teams"    && <ScreenErrorBoundary resetKey={screen} onRecover={() => setScreen("teams")}><Frame><ScreenTeams currentUser={currentUser}/></Frame></ScreenErrorBoundary>}
 
@@ -269,10 +295,10 @@ function CanvasWrapper({ variant, setVariant, openPanel, setOpenPanel, setScreen
   );
 }
 
-function ResultsWrapper({ variant, setVariant, setScreen, onShare }) {
+function ResultsWrapper({ variant, setVariant, setScreen, onShare, onGenerateReport }) {
   return (
     <Frame>
-      <ScreenResults variant={variant} setVariant={setVariant} setScreen={setScreen} onShare={onShare}/>
+      <ScreenResults variant={variant} setVariant={setVariant} setScreen={setScreen} onShare={onShare} onGenerateReport={onGenerateReport}/>
     </Frame>
   );
 }
@@ -532,10 +558,10 @@ function SpecContent() {
         <li><b>Wizard</b> (4 steps), disease → test library → constraints → review.</li>
         <li><b>Builder</b>, 3-pane canvas: library · canvas · properties.</li>
         <li><b>Results</b>, summary metrics, path-level trace, Sankey, trade-off, warnings.</li>
-        <li><b>Compare</b>, optimization candidates table + radar + scatter.</li>
+        <li><b>Optimization history</b>, stored runs and reopening past optimization outputs.</li>
         <li><b>Evidence</b>, browseable DB with import-to-pathway.</li>
         <li><b>Report</b>, printable multi-page document with audience toggles.</li>
-        <li><b>Settings</b>, profile, workspace, pathway defaults, branding, integrations.</li>
+        <li><b>Settings</b>, profile, workspace, pathway defaults, integrations.</li>
       </ol>
     </Spec>
     <Spec title="3 · Design tokens (Syreon-aligned)">
@@ -589,7 +615,7 @@ function SpecContent() {
     <Spec title="9 · Responsive behavior">
       <ul>
         <li>Desktop first (≥1280). Tablet (≥1024): library and properties collapse to drawers; canvas full-width.</li>
-        <li>Below 1024: builder switches to read-only view with "open on desktop" banner. Home, Results, Compare, Evidence, Report remain fully usable.</li>
+        <li>Below 1024: builder switches to read-only view with "open on desktop" banner. Home, Results, History, Evidence, Report remain usable.</li>
       </ul>
     </Spec>
     <Spec title="10 · Microcopy">
@@ -609,10 +635,10 @@ function SpecContent() {
     </Spec>
     <Spec title="12 · Frontend handoff">
       <p>Stack: <b>React + TypeScript + Tailwind + shadcn/ui + React Flow</b>. Directory:</p>
-      <pre style={{background:"var(--surface-2)", padding:12, borderRadius:4, fontSize:11, overflow:"auto"}}>{`src/
+  <pre style={{background:"var(--surface-2)", padding:12, borderRadius:4, fontSize:11, overflow:"auto"}}>{`src/
   tokens.css             , ported from this file
   routes/
-    home, wizard, builder, results, compare, evidence, report, settings
+    home, wizard, builder, results, history, evidence, report, settings
   flows/
     nodes/{Test,Parallel,Decision,Referee,Terminal,Annotation}.tsx
     edges/ConditionEdge.tsx
@@ -834,7 +860,7 @@ function FeedbackModal({ onClose }) {
                 <option>New project wizard</option>
                 <option>Builder (canvas)</option>
                 <option>Results</option>
-                <option>Compare</option>
+                <option>Optimization history</option>
                 <option>Evidence</option>
                 <option>Report</option>
                 <option>Settings</option>

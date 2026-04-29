@@ -225,16 +225,16 @@ function ScreenCompare({ setScreen }) {
       <TopBar crumbs={[
         { label: "OptiDx", onClick: () => setScreen("home"), title: "Back to home" },
         { label: window.OptiDxActions.getActiveProjectRecord?.()?.title || window.OptiDxActions.getActiveProjectRecord?.()?.name || window.OptiDxCurrentProjectRecord?.name || "Workspace project", onClick: () => setScreen("results"), title: "Back to results" },
-        { label: "Compare" },
+        { label: "Optimization history" },
       ]}
-        actions={<><button className="btn" onClick={() => window.OptiDxActions.downloadJson("optidx-compare-candidates.json", scenarios)}><Icon name="download"/>Export</button><button className="btn btn--primary" onClick={async () => {
+        actions={<><button className="btn" onClick={() => window.OptiDxActions.downloadJson("optidx-optimization-history.json", scenarios)}><Icon name="download"/>Export</button><button className="btn btn--primary" onClick={async () => {
           const candidate = scenarios.find(item => item.pathway) || null;
           if (!candidate?.pathway) {
             window.OptiDxActions.showToast?.("Load a live optimization run before applying a suggestion.", "info");
             return;
           }
           try {
-            await window.OptiDxActions.loadPathwayIntoWorkspace?.(candidate.pathway);
+            await window.OptiDxActions.loadPathwayIntoWorkspace?.(candidate.pathway, { persist: false });
             setScreen("canvas");
           } catch (error) {
             window.OptiDxActions.showToast?.(error?.message || "Unable to apply suggestion", "error");
@@ -244,8 +244,8 @@ function ScreenCompare({ setScreen }) {
         <div className="page__head">
           <div>
             <div className="sme-eyebrow" style={{marginBottom:6}}>Optimization</div>
-            <h1>Compare candidate pathways</h1>
-            <p>Trade-offs between cost, TAT, sensitivity, and specificity from live workspace data.</p>
+            <h1>Optimization history</h1>
+            <p>Stored runs and their trade-offs between cost, TAT, sensitivity, and specificity from live workspace data.</p>
           </div>
         </div>
 
@@ -1248,7 +1248,7 @@ function ScreenSettingsLegacy() {
           </div>
         </div>
         <div className="tabs" style={{marginBottom:24}}>
-          {["Profile","Workspace","Pathway defaults","Branding","Integrations"].map((t,i) =>
+          {["Profile","Workspace","Pathway defaults","Integrations"].map((t,i) =>
             <div key={t} className={"tab " + (i === 2 ? "is-active" : "")}>{t}</div>
           )}
         </div>

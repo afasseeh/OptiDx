@@ -234,6 +234,10 @@ function ParallelBlockProps({ node, updateNode, ungroupParallel, addParallelMemb
 
   const addMember = (testId) => {
     if (!testId) return;
+    if ((node.members || []).length >= 2) {
+      window.OptiDxActions?.showToast?.("Parallel blocks are limited to two tests right now.", "info");
+      return;
+    }
     addParallelMember?.(node.id, testId);
   };
 
@@ -283,11 +287,11 @@ function ParallelBlockProps({ node, updateNode, ungroupParallel, addParallelMemb
               <option key={test.id} value={test.id}>{test.name}</option>
             ))}
           </select>
-          <button className="btn btn--sm" onClick={() => addMember(selectedTestId)}>
+          <button className="btn btn--sm" disabled={(node.members || []).length >= 2} onClick={() => addMember(selectedTestId)}>
             <Icon name="plus" size={11}/>Add test
           </button>
         </div>
-        <div className="parallel-add-hint">The same diagnostic test can be added more than once.</div>
+        <div className="parallel-add-hint">Parallel blocks are limited to two tests for now.</div>
         <div className="parallel-members">
           {memberRows.map(({ member, test, key, occurrence }) => (
             <div key={key} className="parallel-member">
@@ -669,6 +673,10 @@ function LiveParallelBlockProps({ node, nodes, edges, updateNode, ungroupParalle
 
   const addMember = (testId) => {
     if (!testId) return;
+    if ((node.members || []).length >= 2) {
+      window.OptiDxActions?.showToast?.("Parallel blocks are limited to two tests right now.", "info");
+      return;
+    }
     addParallelMember?.(node.id, testId);
   };
 
@@ -719,11 +727,11 @@ function LiveParallelBlockProps({ node, nodes, edges, updateNode, ungroupParalle
               <option key={test.id} value={test.id}>{test.name}</option>
             ))}
           </select>
-          <button className="btn btn--sm" onClick={() => addMember(selectedTestId)}>
+          <button className="btn btn--sm" disabled={(node.members || []).length >= 2} onClick={() => addMember(selectedTestId)}>
             <Icon name="plus" size={11}/>Add test
           </button>
         </div>
-        <div className="parallel-add-hint">The same diagnostic test can be added more than once.</div>
+        <div className="parallel-add-hint">Parallel blocks are limited to two tests for now.</div>
         <div className="parallel-members">
           {memberRows.map(({ member, test, key, occurrence }) => (
             <div key={key} className="parallel-member">

@@ -209,7 +209,7 @@ def optimize_pathways(
     if feasible_count == 0:
         if search_exhaustive:
             status = 'infeasible'
-            message = 'No pathway can fulfil the selected constraints.'
+            message = 'No feasible pathways under the provided constraints.'
         else:
             status = 'no_feasible_found_time_limit'
             message = 'No feasible pathway was found within the time limit. Because the search was not exhaustive, the system cannot claim that no feasible pathway exists.'

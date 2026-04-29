@@ -115,7 +115,7 @@ function AuthHero() {
           SYREON · DIAGNOSTIC PATHWAY ENGINE
         </div>
         <h1 style={{fontSize:36, lineHeight:1.15, letterSpacing:"-0.02em", marginBottom:12, color:"#fff", textWrap:"balance"}}>
-          Design, evaluate and compare diagnostic pathways, grounded in published evidence.
+          Design and evaluate diagnostic pathways, grounded in published evidence.
         </h1>
         <p style={{fontSize:14, color:"#B0B5B9", lineHeight:1.55, marginBottom:24}}>
           Drag tests onto a canvas. Route them with rules. OptiDx scores every path for
@@ -251,8 +251,10 @@ function LoginForm({ onAuthed, onForgot, onNeedVerification }) {
         password: pwd,
         remember,
       });
-      onAuthed(payload.user);
+      await window.OptiDxActions.refreshCsrfToken?.();
       window.history.replaceState({}, "", window.location.pathname);
+      window.location.assign(window.location.pathname);
+      onAuthed(payload.user);
     } catch (err) {
       const response = err?.response?.data;
       if (err?.response?.status === 409 || response?.requires_verification) {

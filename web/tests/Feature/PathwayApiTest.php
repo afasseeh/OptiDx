@@ -6,10 +6,13 @@ use App\Models\Pathway;
 use App\Models\DiagnosticTest;
 use App\Models\OptimizationRun;
 use App\Models\Project;
+use App\Models\Report;
 use App\Models\Setting;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
@@ -156,6 +159,30 @@ class PathwayApiTest extends TestCase
                     ],
                 ],
             ]);
+    }
+
+    public function test_pathway_index_includes_project_summary_when_present(): void
+    {
+        $this->actingAs($this->workspaceUser('workspace-project-summary@example.com'));
+
+        $project = Project::create([
+            'created_by' => auth()->id(),
+            'title' => 'Report project',
+        ]);
+
+        $created = $this->postJson('/api/pathways', [
+            'project_id' => $project->id,
+            'name' => 'Project-linked pathway',
+            'editor_definition' => $this->canonicalPathwayPayload(),
+        ])
+            ->assertCreated()
+            ->json();
+
+        $this->getJson('/api/pathways')
+            ->assertOk()
+            ->assertJsonPath('0.id', $created['id'])
+            ->assertJsonPath('0.project.id', $project->id)
+            ->assertJsonPath('0.project.title', 'Report project');
     }
 
     public function test_pathway_update_can_rename_workspace_entry(): void
@@ -340,6 +367,319 @@ class PathwayApiTest extends TestCase
                 ->assertOk()
                 ->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
         }
+    }
+
+    public function test_report_history_and_download_endpoints_are_scoped_to_the_authenticated_user(): void
+    {
+        $user = $this->workspaceUser('report-history@example.com');
+        $otherUser = $this->workspaceUser('report-history-other@example.com');
+        $this->actingAs($user);
+
+        $project = Project::create([
+            'title' => 'History project',
+            'disease_area' => 'Tuberculosis',
+            'intended_use' => 'Balanced MCDA',
+            'target_population' => 'Adults 15+',
+            'prevalence' => 0.08,
+            'setting' => 'comm',
+        ]);
+
+        $pathway = $this->postJson('/api/pathways', [
+            'project_id' => $project->id,
+            'name' => 'History pathway',
+            'editor_definition' => $this->canonicalPathwayPayload(),
+        ])->assertCreated()->json();
+
+        $this->postJson('/api/pathways/evaluate', [
+            'pathway' => $this->canonicalPathwayPayload(),
+            'pathway_id' => $pathway['id'],
+            'prevalence' => 0.08,
+        ])->assertOk();
+
+        $generated = $this->get("/api/pathways/{$pathway['id']}/export/report?format=pdf")
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
+
+        $report = Report::query()->latest('id')->firstOrFail();
+        $this->assertNotEmpty($report->html_path);
+        $this->assertNotEmpty($report->pdf_path);
+        $this->assertTrue(File::exists($report->html_path));
+        $this->assertTrue(File::exists($report->pdf_path));
+
+        $this->actingAs($otherUser);
+        Report::withoutGlobalScopes()->create([
+            'created_by' => $otherUser->id,
+            'project_id' => $project->id,
+            'pathway_id' => $pathway['id'],
+            'optimization_run_id' => null,
+            'format' => 'pdf',
+            'html_path' => $report->html_path,
+            'pdf_path' => $report->pdf_path,
+            'json_path' => $report->json_path,
+            'metadata' => [
+                'title' => 'Foreign report',
+                'subtitle' => 'Should not leak',
+                'generated_at' => now()->toIso8601String(),
+                'summary' => [],
+            ],
+        ]);
+
+        $this->actingAs($user);
+
+        $this->getJson("/api/pathways/{$pathway['id']}/reports")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $report->id);
+
+        $this->getJson("/api/reports/{$report->id}")
+            ->assertOk()
+            ->assertJsonPath('report.id', $report->id)
+            ->assertJsonPath('data.title', 'Canonical pathway')
+            ->assertJsonPath('data.settings.template', 'OptiDx decision report')
+            ->assertJsonCount(11, 'data.sections');
+
+        $this->putJson("/api/reports/{$report->id}", [
+            'title' => 'Renamed report',
+        ])
+            ->assertOk()
+            ->assertJsonPath('report.id', $report->id)
+            ->assertJsonPath('report.title', 'Renamed report')
+            ->assertJsonPath('data.title', 'Renamed report');
+
+        $this->get("/api/reports/{$report->id}/download?format=pdf")
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
+
+        $this->deleteJson("/api/reports/{$report->id}")
+            ->assertNoContent();
+
+        $this->assertDatabaseMissing('reports', ['id' => $report->id]);
+    }
+
+    public function test_report_export_falls_back_when_the_browser_pdf_renderer_fails(): void
+    {
+        if (PHP_OS_FAMILY !== 'Windows') {
+            $this->markTestSkipped('This regression is specific to the Windows report renderer fallback.');
+        }
+
+        $this->actingAs($this->workspaceUser('report-fallback@example.com'));
+
+        $payload = $this->canonicalPathwayPayload();
+
+        $created = $this->postJson('/api/pathways', [
+            'name' => 'Fallback report target',
+            'editor_definition' => $payload,
+        ])
+            ->assertCreated()
+            ->json();
+
+        $this->postJson('/api/pathways/evaluate', [
+            'pathway' => $payload,
+            'pathway_id' => $created['id'],
+            'prevalence' => 0.08,
+        ])->assertOk();
+
+        $renderer = tempnam(sys_get_temp_dir(), 'fake-node-') . '.cmd';
+        File::put($renderer, "@echo off\r\nexit /b 1\r\n");
+
+        $previousNodeExecutable = getenv('NODE_EXECUTABLE') ?: null;
+        putenv('NODE_EXECUTABLE=' . $renderer);
+        $_ENV['NODE_EXECUTABLE'] = $renderer;
+        $_SERVER['NODE_EXECUTABLE'] = $renderer;
+
+        try {
+            $this->get("/api/pathways/{$created['id']}/export/report?format=pdf")
+                ->assertOk()
+                ->assertHeader('content-type', 'application/pdf');
+
+            $report = Report::query()->latest('id')->firstOrFail();
+            $this->assertTrue(File::exists($report->pdf_path));
+        } finally {
+            if ($previousNodeExecutable !== null && $previousNodeExecutable !== '') {
+                putenv('NODE_EXECUTABLE=' . $previousNodeExecutable);
+                $_ENV['NODE_EXECUTABLE'] = $previousNodeExecutable;
+                $_SERVER['NODE_EXECUTABLE'] = $previousNodeExecutable;
+            } else {
+                putenv('NODE_EXECUTABLE');
+                unset($_ENV['NODE_EXECUTABLE'], $_SERVER['NODE_EXECUTABLE']);
+            }
+
+            if (File::exists($renderer)) {
+                File::delete($renderer);
+            }
+        }
+    }
+
+    public function test_generate_ai_report_persists_generated_sections_into_the_report_snapshot(): void
+    {
+        config()->set('services.openrouter.api_key', 'test-openrouter-key');
+        config()->set('services.openrouter.model', '~anthropic/claude-sonnet-latest');
+
+        Http::fake([
+            'https://openrouter.ai/api/v1/chat/completions' => Http::response([
+                'choices' => [[
+                    'message' => [
+                        'content' => json_encode([
+                            'generated_sections' => [
+                                'cover' => [
+                                    'title' => 'Cover & executive summary',
+                                    'content' => 'AI-generated executive summary.',
+                                    'bullets' => ['Key takeaway'],
+                                ],
+                                'warnings' => [
+                                    'title' => 'Warnings & assumptions',
+                                    'content' => 'AI-generated warnings section.',
+                                ],
+                            ],
+                        ], JSON_UNESCAPED_SLASHES),
+                    ],
+                ]],
+            ], 200),
+        ]);
+
+        $this->actingAs($this->workspaceUser('ai-report-owner@example.com'));
+
+        $created = $this->postJson('/api/pathways', [
+            'name' => 'AI report target',
+            'editor_definition' => $this->canonicalPathwayPayload(),
+        ])->assertCreated()->json();
+
+        $this->postJson('/api/pathways/evaluate', [
+            'pathway' => $this->canonicalPathwayPayload(),
+            'pathway_id' => $created['id'],
+            'prevalence' => 0.08,
+        ])->assertOk();
+
+        $response = $this->postJson("/api/pathways/{$created['id']}/report/generate-ai", [
+            'settings' => [
+                'audience' => ['selected' => 'technical'],
+                'output' => ['selected_format' => 'pdf'],
+                'sections' => [
+                    ['id' => 'cover', 'label' => 'Cover & executive summary', 'enabled' => true],
+                    ['id' => 'warnings', 'label' => 'Warnings & assumptions', 'enabled' => true],
+                ],
+            ],
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.generated_sections.cover.content', 'AI-generated executive summary.')
+            ->assertJsonPath('data.ai_generation.model', '~anthropic/claude-sonnet-latest');
+
+        $reportId = $response->json('report.id');
+        $report = Report::query()->findOrFail($reportId);
+
+        $this->assertSame('AI-generated executive summary.', $report->metadata['generated_sections']['cover']['content'] ?? null);
+        $this->assertSame('~anthropic/claude-sonnet-latest', $report->metadata['ai_generation']['model'] ?? null);
+    }
+
+    public function test_generate_ai_report_is_scoped_to_the_authenticated_users_pathways(): void
+    {
+        config()->set('services.openrouter.api_key', 'test-openrouter-key');
+
+        Http::fake([
+            'https://openrouter.ai/api/v1/chat/completions' => Http::response([
+                'choices' => [[
+                    'message' => [
+                        'content' => json_encode([
+                            'generated_sections' => [
+                                'cover' => [
+                                    'title' => 'Cover & executive summary',
+                                    'content' => 'AI-generated executive summary.',
+                                ],
+                            ],
+                        ], JSON_UNESCAPED_SLASHES),
+                    ],
+                ]],
+            ], 200),
+        ]);
+
+        $owner = $this->workspaceUser('ai-report-owner-scope@example.com');
+        $otherUser = $this->workspaceUser('ai-report-other-scope@example.com');
+        $this->actingAs($owner);
+
+        $created = $this->postJson('/api/pathways', [
+            'name' => 'Scoped AI report target',
+            'editor_definition' => $this->canonicalPathwayPayload(),
+        ])->assertCreated()->json();
+
+        $this->postJson('/api/pathways/evaluate', [
+            'pathway' => $this->canonicalPathwayPayload(),
+            'pathway_id' => $created['id'],
+            'prevalence' => 0.08,
+        ])->assertOk();
+
+        $this->actingAs($otherUser);
+
+        $this->postJson("/api/pathways/{$created['id']}/report/generate-ai", [
+            'settings' => [
+                'sections' => [
+                    ['id' => 'cover', 'label' => 'Cover & executive summary', 'enabled' => true],
+                ],
+            ],
+        ])->assertNotFound();
+    }
+
+    public function test_openrouter_credentials_setting_is_masked_in_api_responses(): void
+    {
+        $this->actingAs($this->workspaceUser('openrouter-settings@example.com'));
+
+        $saved = $this->putJson('/api/settings', [
+            'scope' => 'workspace',
+            'key' => 'openrouter_credentials',
+            'value' => [
+                'api_key' => 'sk-or-v1-test-secret',
+                'model' => '~anthropic/claude-sonnet-latest',
+            ],
+        ])
+            ->assertOk()
+            ->assertJsonPath('value.model', '~anthropic/claude-sonnet-latest')
+            ->assertJsonPath('value.has_api_key', true)
+            ->assertJsonMissing(['api_key' => 'sk-or-v1-test-secret']);
+
+        $setting = Setting::query()->firstOrFail();
+        $this->assertNotSame('sk-or-v1-test-secret', $setting->value['api_key_encrypted'] ?? null);
+        $this->assertArrayHasKey('api_key_encrypted', $setting->value ?? []);
+
+        $this->getJson('/api/settings')
+            ->assertOk()
+            ->assertJsonPath('0.key', 'openrouter_credentials')
+            ->assertJsonPath('0.value.has_api_key', true)
+            ->assertJsonMissing(['api_key' => 'sk-or-v1-test-secret']);
+    }
+
+    public function test_pathway_crud_supports_standalone_records(): void
+    {
+        $this->actingAs($this->workspaceUser('standalone-pathway@example.com'));
+
+        $created = $this->postJson('/api/pathways', [
+            'project_id' => null,
+            'name' => 'Standalone pathway',
+            'editor_definition' => $this->canonicalPathwayPayload(),
+            'metadata' => [
+                'label' => 'Standalone pathway',
+            ],
+        ])
+            ->assertCreated()
+            ->json();
+
+        $this->assertNull($created['project_id']);
+
+        $updated = $this->putJson("/api/pathways/{$created['id']}", [
+            'name' => 'Updated standalone pathway',
+            'metadata' => [
+                'label' => 'Updated standalone pathway',
+            ],
+        ])
+            ->assertOk()
+            ->json();
+
+        $this->assertSame('Updated standalone pathway', $updated['name']);
+
+        $this->deleteJson("/api/pathways/{$created['id']}")
+            ->assertNoContent();
+
+        $this->assertDatabaseMissing('pathways', [
+            'id' => $created['id'],
+        ]);
     }
 
     public function test_store_import_and_export_use_canonical_graph_shape(): void

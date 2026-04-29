@@ -1,5 +1,86 @@
 # Change Log
 
+## 2026-04-29 - Fix report-builder white screen on open
+
+- Summary: Removed the report builder hook-order branch that was throwing `ScreenReportBuilder is not defined`, passed the stored report's pathway id through the open-report callback, exported the builder on `window`, and taught the builder to hydrate its settings from the stored snapshot so opening a report lands on the editable report page instead of a white screen.
+- Files or modules affected: `web/resources/js/optidx/components/App.jsx`, `web/resources/js/optidx/components/ScreenReport.jsx`, `CHANGE_LOG.md`.
+- Reason for the change: Clicking Open report reproduced a blank screen in a live browser session because the report-detail route tried to render an unresolved component reference instead of the shared builder page.
+- Architecture impact: The report-builder screen now behaves as a stable settings-edit surface for stored reports, with the snapshot hydrate step separated from the render path so the same component can support both new drafts and reopened reports.
+- Migration or deployment impact: Frontend rebuild only. No schema or backend migration was required.
+- Follow-up notes: Validation passed with a live Playwright smoke test against the running app plus `php artisan test --filter=PathwayApiTest` and `npm run build`.
+
+## 2026-04-29 - Restore HTML-first report builder and original section template
+
+- Summary: Changed the pathway-analysis generate action to open the dedicated report builder instead of downloading immediately, restored the original 11-section technical report template with audience and format controls, and switched the stored/detail report preview to a clean HTML-first document renderer that mirrors the builder contract before PDF or DOCX export.
+- Files or modules affected: `web/resources/js/optidx/components/App.jsx`, `web/resources/js/optidx/components/ScreenReport.jsx`, `web/app/Services/ReportService.php`, `web/app/Http/Controllers/Api/PathwayController.php`, `web/resources/js/optidx/actions.js`, `web/tests/Feature/PathwayApiTest.php`, `ARCHITECTURE.md`, `FUTURE_TASKS.md`, `CHANGE_LOG.md`.
+- Reason for the change: The generate button still needed to land on the configurable report page, and the earlier report-template simplification had dropped the audience/format/sections structure the mockup expected.
+- Architecture impact: The report flow is now explicitly HTML-first and builder-driven. The browser edits the report settings before export, the backend persists those settings in the report snapshot, and the document preview renders from a shared 11-section contract so future AI-authored sections can slot into the same template.
+- Migration or deployment impact: Frontend rebuild and PHP deploy only. No schema migration was required.
+- Follow-up notes: Validation passed with `php artisan test --filter=PathwayApiTest` and `npm run build`.
+
+## 2026-04-29 - Add resilient fallback for report PDF generation
+
+- Summary: Made the report export pipeline best-effort for PDF rendering by using an explicit Node executable when available and falling back to a minimal pure-PHP PDF when the Playwright renderer crashes, so report generation now completes instead of returning a 500 on this Windows runtime.
+- Files or modules affected: `web/app/Services/ReportService.php`, `web/tests/Feature/PathwayApiTest.php`, `ARCHITECTURE.md`, `FUTURE_TASKS.md`, `CHANGE_LOG.md`.
+- Reason for the change: Clicking Generate report in pathway analysis could still fail with `Request failed with status code 500` because the browser-based PDF renderer crashed before the report row and download response were finalized.
+- Architecture impact: The report pipeline remains HTML-first, but PDF generation is now resilient to renderer failure and can return a compatibility PDF instead of aborting the request.
+- Migration or deployment impact: Frontend/backend deploy only. No schema migration is required.
+- Follow-up notes: Validation passed with `php artisan test --filter=PathwayApiTest` and `npm run build`, including a new regression test that forces the renderer to fail and verifies the fallback path.
+
+## 2026-04-29 - Stabilize report detail navigation and actions
+
+- Summary: Tightened the report hub interaction model so report rows and action buttons use explicit button semantics, the report detail screen no longer auto-bounces back to the hub on a transient missing id, and generate/open flows now keep the selected pathway/report state aligned before routing to the dedicated detail page.
+- Files or modules affected: `web/resources/js/optidx/components/App.jsx`, `web/resources/js/optidx/components/ScreenReport.jsx`, `CHANGE_LOG.md`.
+- Reason for the change: Clicking a report or generating a new one could still feel like a no-op because the routed detail page was too eager to dismiss itself and the list actions were still mixed with legacy nested click behavior.
+- Architecture impact: None beyond making the existing list/detail split more robust against async state handoff and nested click bubbling.
+- Migration or deployment impact: Frontend rebuild only. No schema or backend migration was required.
+- Follow-up notes: Validation passed with `php artisan test --filter=PathwayApiTest` and `npm run build`.
+
+## 2026-04-29 - Split report hub into list and dedicated detail page
+
+- Summary: Moved the report preview off the hub and into a dedicated report-detail screen, expanded generated reports to persist template settings and section maps, and updated the Blade/React report renderers so the full snapshot, settings, and section breakdown are available when a stored report opens on its own page.
+- Files or modules affected: `web/resources/js/optidx/components/App.jsx`, `web/resources/js/optidx/components/ScreenReport.jsx`, `web/resources/js/optidx/actions.js`, `web/app/Services/ReportService.php`, `web/resources/views/reports/optidx.blade.php`, `web/routes/api.php`, `web/tests/Feature/PathwayApiTest.php`, `ARCHITECTURE.md`, `FUTURE_TASKS.md`, `CHANGE_LOG.md`.
+- Reason for the change: The hub still mixed report selection with report viewing, and the stored report page did not surface the template settings and section map that were present in the previous mockup.
+- Architecture impact: Reports now have a true hub/detail split. The report snapshot contract now carries report template settings and the ordered section map, which makes future AI-authored narrative sections a clean extension point.
+- Migration or deployment impact: Frontend rebuild and PHP deploy. No schema migration was required.
+- Follow-up notes: Validation still needs a fresh build/test pass after the route split.
+
+## 2026-04-29 - Make report hub scrollable and add report actions
+
+- Summary: Removed the report screen from the flush full-bleed shell so it scrolls normally, split report handling into a dedicated detail view when a stored report is opened, and added rename/delete actions to the report list with backend support for metadata title updates and artifact cleanup.
+- Files or modules affected: `web/resources/js/optidx/components/App.jsx`, `web/resources/js/optidx/components/ScreenReport.jsx`, `web/resources/js/optidx/actions.js`, `web/app/Http/Controllers/Api/ReportController.php`, `web/app/Services/ReportService.php`, `web/routes/api.php`, `web/tests/Feature/PathwayApiTest.php`, `ARCHITECTURE.md`, `CHANGE_LOG.md`.
+- Reason for the change: The report page could not scroll, stored reports were still being previewed inline instead of opening as their own view, and the main list had no way to rename or remove saved report snapshots.
+- Architecture impact: The report hub now has two presentation states, list and detail, while the backend report service owns report title metadata updates and the cleanup of generated export artifacts on deletion.
+- Migration or deployment impact: Frontend rebuild plus PHP deploy. No schema migration was required.
+- Follow-up notes: Validation pending on the updated report flow and rename/delete API contract.
+
+## 2026-04-29 - Repair reports ownership column in SQLite
+
+- Summary: Applied the pending `2026_04_29_000300_add_created_by_to_reports_table` migration to the local SQLite database so the reports page can filter report history by authenticated user without hitting a missing-column error.
+- Files or modules affected: `web/database/database.sqlite`, `web/database/migrations/2026_04_29_000300_add_created_by_to_reports_table.php`, `CHANGE_LOG.md`.
+- Reason for the change: The reports list query was scoped by `reports.created_by`, but the local database had not yet received the ownership column that the application already expects.
+- Architecture impact: None. This restores the database to the schema already assumed by the report model and report history service.
+- Migration or deployment impact: The SQLite schema now includes `reports.created_by`; any other environment with the same pending migration needs to apply it before serving the reports page.
+- Follow-up notes: Verified with `Schema::hasColumn('reports', 'created_by')` and a focused `php artisan test --filter=PathwayApiTest` run.
+
+## 2026-04-29 - Project/standalone workspace split and HTML-to-PDF reports
+
+- Summary: Split the workspace home into explicit `Projects` and `Standalone pathways` areas, preserved project-linked pathways when a project is deleted, added report history and stored-report downloads, changed the infeasible optimization copy to the requested message, and replaced the report export path with a server-rendered HTML snapshot that is converted to PDF before download.
+- Files or modules affected: `web/resources/js/optidx/components/ScreenHome.jsx`, `web/resources/js/optidx/components/ScreenWizard.jsx`, `web/resources/js/optidx/components/ScreenReport.jsx`, `web/resources/js/optidx/components/ScreenExtras.jsx`, `web/resources/js/optidx/actions.js`, `web/app/Http/Controllers/Api/PathwayController.php`, `web/app/Http/Controllers/Api/ReportController.php`, `web/app/Services/ReportService.php`, `web/app/Models/Report.php`, `web/database/migrations/2026_04_29_000300_add_created_by_to_reports_table.php`, `web/resources/views/reports/optidx.blade.php`, `web/scripts/render-report-pdf.mjs`, `optidx_package/optidx/optimizer.py`, `web/tests/Feature/ProjectApiTest.php`, `web/tests/Feature/PathwayApiTest.php`, `optidx_package/tests/test_optimizer.py`, `ARCHITECTURE.md`, `FUTURE_TASKS.md`, `CHANGE_LOG.md`.
+- Reason for the change: The workspace still treated projects and standalone pathways as a blended concept, report exports were too ad hoc, and the infeasible optimization/result copy no longer matched the requested product language.
+- Architecture impact: Reports are now first-class persisted snapshot records owned by the authenticated user, the report service owns the HTML/PDF generation boundary, and project deletion now intentionally leaves attached pathways behind as standalone workspace records.
+- Migration or deployment impact: Requires the new `reports.created_by` migration and a frontend rebuild. The HTML-to-PDF path depends on Playwright/Chromium being available at runtime.
+- Follow-up notes: Validation passed with `npm run build`, `php artisan test --filter=ProjectApiTest`, `php artisan test --filter=PathwayApiTest`, and `python -m pytest optidx_package/tests/test_optimizer.py -q`.
+
+## 2026-04-29 - Workspace cleanup for history, reports, and inactive surfaces
+
+- Summary: Reworked the workspace so recent pathways use readable project/condition labels and live evaluation stats, optimization history is the canonical destination for stored runs, report generation runs against a selected persisted pathway record, teams/settings no longer expose active Billing or Branding surfaces, extensive optimization is shown as under development, and parallel blocks are capped at two tests.
+- Files or modules affected: `web/resources/js/optidx/actions.js`, `web/app/Http/Controllers/Api/PathwayController.php`, `web/app/Services/OptimizationService.php`, `web/resources/js/optidx/components/App.jsx`, `web/resources/js/optidx/components/Shell.jsx`, `web/resources/js/optidx/components/ScreenHome.jsx`, `web/resources/js/optidx/components/ScreenWizard.jsx`, `web/resources/js/optidx/components/ScreenCanvas.jsx`, `web/resources/js/optidx/components/PropertiesPanel.jsx`, `web/resources/js/optidx/components/ScreenExtras.jsx`, `web/resources/js/optidx/components/ScreenOther.jsx`, `web/resources/js/optidx/components/ScreenReport.jsx`, `web/resources/js/optidx/components/ScreenResults.jsx`, `web/resources/js/optidx/components/ScreenAuth.jsx`, `web/resources/js/optidx/data.js`, `ARCHITECTURE.md`, `FUTURE_TASKS.md`, `CHANGE_LOG.md`.
+- Reason for the change: The workspace was still surfacing retired product areas and report/history flows that were too generic for real project use, while reopening optimization scenarios could accidentally create duplicate pathway records.
+- Architecture impact: Browser state now distinguishes reopening a saved pathway from duplicating it, the report hub is explicitly pathway-selected, and the shell/navigation surface now treats optimization history as the canonical stored-run destination.
+- Migration or deployment impact: Frontend rebuild and Laravel/PHP deploy only; no schema migration was required for this slice.
+- Follow-up notes: Validation passed with `npm run build`, `php artisan test --filter=OptimizationServiceTest`, and `php artisan test --filter=PathwayApiTest`. Vite still reports the existing large-bundle warning.
+
 ## 2026-04-28 - Bind teams, report, and compare screens to live workspace data
 
 - Summary: Passed the authenticated user into the Teams screen so it can render its preview card without an out-of-scope variable, replaced the report preview with a workspace-backed summary of the active project/pathway/evaluation, and changed the compare screen to prefer live optimizer outputs or evaluated workspace pathways instead of seeded demo candidates.
@@ -764,6 +845,15 @@
 - Architecture impact: None; documentation and asset refresh only.
 - Migration or deployment impact: None.
 - Follow-up notes: Regenerate the screenshots if the web UI changes materially.
+
+## 2026-04-29 - OpenRouter-backed AI report drafts
+
+- Summary: Added server-side OpenRouter report-section generation, encrypted per-user credential overrides, persisted AI-authored section drafts inside stored report snapshots, updated the report builder/HTML export to prefer those drafts, and fixed the live browser path so opening a stored report reaches the report builder with settings and preview intact. The OpenRouter default model was corrected to the user-provided `~anthropic/claude-sonnet-latest`, and the auth shell now reloads after login so later POST requests use the refreshed session/CSRF context.
+- Files or modules affected: `web/app/Services/AiReportGenerationService.php`, `web/app/Services/ReportService.php`, `web/app/Http/Controllers/Api/PathwayController.php`, `web/app/Http/Controllers/Api/SettingsController.php`, `web/config/services.php`, `web/routes/api.php`, `web/resources/js/optidx/actions.js`, `web/resources/js/optidx/components/ScreenAuth.jsx`, `web/resources/js/optidx/components/ScreenReport.jsx`, `web/resources/views/reports/optidx.blade.php`, `web/tests/Unit/AiReportGenerationServiceTest.php`, `web/tests/Feature/PathwayApiTest.php`, `web/.env`, `web/.env.example`, `ARCHITECTURE.md`, `FUTURE_TASKS.md`, `CHANGE_LOG.md`.
+- Reason for the change: The report builder needed to generate audience-aware narrative sections from the selected report settings and the persisted pathway/evaluation snapshot instead of only rendering deterministic local copy, and the runtime had to keep credentials server-side.
+- Architecture impact: Introduced `AiReportGenerationService` as the OpenRouter boundary, extended the report snapshot contract with `generated_sections` and `ai_generation`, formalized encrypted `openrouter_credentials` settings for optional per-user overrides, and made the React/Blade report renderers consume the same persisted AI draft payload.
+- Migration or deployment impact: Rebuild frontend assets, deploy the new PHP service/controller changes, and ensure `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, and `OPENROUTER_BASE_URL` are present in the runtime environment. No database migration was required.
+- Follow-up notes: Verified with `php artisan test --filter=AiReportGenerationServiceTest`, `php artisan test --filter=PathwayApiTest`, `npm run build`, and a headless Playwright smoke flow that logged in, opened a stored report, and generated a live AI draft through OpenRouter.
 
 ## 2026-04-25 - Initial web productization slice
 

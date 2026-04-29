@@ -187,7 +187,7 @@ function ScreenWizard({ setScreen }) {
 
   useEffect(() => {
     let active = true;
-    const hydratedProject = getWizardProjectState(window.OptiDxActions?.getActiveProjectRecord?.() || window.OptiDxActions?.getWorkspaceProjects?.()?.[0] || projectRef.current);
+    const hydratedProject = getWizardProjectState(window.OptiDxActions?.getActiveProjectRecord?.() || projectRef.current);
 
     if (active) {
       setProject(hydratedProject);
@@ -653,11 +653,11 @@ function WizardStep5({ mode, setMode, runMode, setRunMode }) {
           <h3 style={{fontSize:17, marginBottom:6}}>Find the optimal pathway</h3>
           <p style={{color:"var(--fg-3)", fontSize:13, lineHeight:1.5, marginBottom:14}}>
             Let OptiDx enumerate test orderings and rules under your constraints, then surface
-            multiple optimization scenarios along the Pareto frontier to compare.
+            multiple optimization scenarios along the Pareto frontier to review.
           </p>
           <div className="stack" style={{gap:4, fontSize:12, color:"var(--fg-2)"}}>
             <div className="row"><Icon name="check" size={12} style={{color:"var(--pos)"}}/>Explore cost-optimal, sensitivity-maximal, fastest, etc.</div>
-            <div className="row"><Icon name="check" size={12} style={{color:"var(--pos)"}}/>Compare 3–6 candidates side-by-side</div>
+            <div className="row"><Icon name="check" size={12} style={{color:"var(--pos)"}}/>Review 3–6 candidates side-by-side</div>
             <div className="row"><Icon name="check" size={12} style={{color:"var(--pos)"}}/>Load any scenario back into the canvas to refine</div>
           </div>
         </div>
@@ -675,16 +675,14 @@ function WizardStep5({ mode, setMode, runMode, setRunMode }) {
             </button>
             <button
               type="button"
-              className={"btn " + (runMode === "extensive" ? "btn--primary" : "")}
-              onClick={() => setRunMode("extensive")}
+              className="btn"
+              onClick={() => window.OptiDxActions.comingSoon?.("Extensive optimization")}
             >
               Extensive
             </button>
           </div>
           <div style={{marginTop:10, fontSize:12, color:"var(--fg-3)", lineHeight:1.5}}>
-            {runMode === "light"
-              ? "Light mode targets a result in about five minutes using a smaller search budget."
-              : "Extensive mode keeps searching in the background and emails you when it completes."}
+            Light mode targets a result in about five minutes using a smaller search budget. Extensive mode is not activated yet.
           </div>
         </div>
       )}
@@ -694,9 +692,7 @@ function WizardStep5({ mode, setMode, runMode, setRunMode }) {
           <div>
             {mode === "test"
               ? "The canvas will open with required positive and negative endpoints already placed on the right side."
-              : runMode === "extensive"
-                ? "Extensive mode keeps searching in the background and sends the launching user an email when it completes."
-                : "Light mode uses a smaller search budget and is tuned to return within about five minutes."}
+              : "Light mode uses a smaller search budget and is tuned to return within about five minutes. Extensive mode is under development."}
           </div>
         </div>
       )}

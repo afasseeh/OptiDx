@@ -515,7 +515,7 @@ class OptimizationService
             ? [
                 'max_stages' => 4,
                 'max_tests_per_realized_path' => 6,
-                'max_parallel_block_size' => 3,
+                'max_parallel_block_size' => 2,
                 'max_candidates' => 20000,
                 'time_limit_seconds' => 14400,
                 'allow_repeated_test' => true,

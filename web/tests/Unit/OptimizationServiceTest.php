@@ -103,7 +103,7 @@ class OptimizationServiceTest extends TestCase
         $this->assertSame('extensive', $bridge->payload['run_mode']);
         $this->assertSame(4, $bridge->payload['search_config']['max_stages']);
         $this->assertSame(6, $bridge->payload['search_config']['max_tests_per_realized_path']);
-        $this->assertSame(3, $bridge->payload['search_config']['max_parallel_block_size']);
+        $this->assertSame(2, $bridge->payload['search_config']['max_parallel_block_size']);
         $this->assertSame(14400, $bridge->payload['search_config']['time_limit_seconds']);
     }
 

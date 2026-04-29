@@ -26,7 +26,7 @@ function collectPathwayTests(pathway) {
   return items;
 }
 
-function ScreenResults({ variant = "A", setVariant, setScreen, onShare }) {
+function ScreenResults({ variant = "A", setVariant, setScreen, onShare, onGenerateReport }) {
   const r = window.OptiDxLatestEvaluationView || window.SEED_RESULTS || { warnings: [], paths: [] };
   const pathway = window.OptiDxLatestEvaluationPathway;
   const pathwayLabel = pathway?.metadata?.label || "Latest pathway";
@@ -66,7 +66,16 @@ function ScreenResults({ variant = "A", setVariant, setScreen, onShare }) {
           }}><Icon name="play"/>Re-run</button>
           {onShare && <button className="btn" onClick={onShare}><Icon name="upload"/>Share</button>}
           <button className="btn" onClick={() => window.OptiDxActions.downloadJson("optidx-results.json", r)}><Icon name="download"/>Export</button>
-          <button className="btn btn--primary" onClick={() => setScreen("report")}>
+          <button className="btn btn--primary" onClick={() => {
+            const selectedPathwayId = window.OptiDxLatestEvaluationResult?.pathway?.id
+              || window.OptiDxCurrentPathwayRecord?.id
+              || window.OptiDxSavedPathway?.id
+              || null;
+            onGenerateReport?.(selectedPathwayId);
+            if (!onGenerateReport) {
+              setScreen("report");
+            }
+          }}>
             <Icon name="file-text"/>Generate report
           </button>
         </>}

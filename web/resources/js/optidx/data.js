@@ -169,6 +169,6 @@ window.SEED_COMPARE = [
   { id: "c3", name: "Fastest viable",         sens: 0.798, spec: 0.934, cost: 4.90,  tat: "40m", ppv: 0.51, npv: 0.981, skill: "Radiographer", samples: 2, feasible: true },
   { id: "c4", name: "Highest sensitivity",    sens: 0.962, spec: 0.901, cost: 24.30, tat: "15d", ppv: 0.46, npv: 0.996, skill: "Specialist", samples: 2, feasible: false, reason: "TAT > 72h constraint" },
   { id: "c5", name: "Highest specificity",    sens: 0.712, spec: 0.993, cost: 11.20, tat: "3.5h", ppv: 0.86, npv: 0.976, skill: "Lab Tech",  samples: 3, feasible: true },
-  { id: "c6", name: "Balanced MCDA",          sens: 0.856, spec: 0.951, cost: 6.10,  tat: "2.4h", ppv: 0.60, npv: 0.988, skill: "Lab Tech",  samples: 3, feasible: true },
+  { id: "c6", name: "Balanced pathway",       sens: 0.856, spec: 0.951, cost: 6.10,  tat: "2.4h", ppv: 0.60, npv: 0.988, skill: "Lab Tech",  samples: 3, feasible: true },
 ];
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';

@@ -35,6 +35,7 @@ The frontend owns:
 - account-scoped workspace bootstrap state for persisted pathways, diagnostic tests, and scoped settings
 - current-pathway record selection, duplication, and hydration into the live canvas
 - active-project draft selection, hydration, and debounced autosave for the new-project wizard
+- the workspace home now splits management into first-class `Projects` and `Standalone pathways` areas so users can create, view, edit, delete, and open either persisted project-linked pathways or unassigned standalone pathways without the wizard implicitly picking a different project
 - request/response presentation for evaluation and optimization
 - optimization candidate imports now preserve engine-style node ids during frontend hydration, so optimized pathways and imported records can render in the builder even when the source payload uses keyed object maps
 - optimizer and imported pathway drafts now preserve a missing discordant branch as a normal unresolved branch, which the canvas validates like any other unconnected output instead of forcing a synthetic inconclusive fallback
@@ -42,7 +43,12 @@ The frontend owns:
 - the optimization run state normalizes terminal `result_payload` snapshots before the scenarios view consumes them, so a completed extensive run cannot remain stuck on a stale queued/running progress card
 - the optimization scenarios view now labels the fixed outputs by objective name, not generic candidate names, and its frontier chart plots average cost per patient against Youden's J so the scenario cards and chart axes match the optimizer contract
 - the report preview now renders from the active project, pathway, and latest evaluation state instead of a generic seeded sample, while the compare screen now prefers live optimizer outputs or evaluated workspace pathways and falls back to an explicit empty state when no real candidates exist
+- the report hub now opens a stored report in a dedicated detail view when a list item is clicked, and the same list surface supports renaming or deleting stored report snapshots without mixing those actions into the live pathway preview
+- the report hub now treats the list and the report detail as separate screens; the hub only selects and launches a stored report, while the dedicated report page renders the full stored snapshot, template settings, and section map
+- the report generation button from pathway analysis now opens the dedicated HTML-first report builder instead of downloading immediately, so the user can adjust audience, format, and section toggles before export
+- the report builder now includes an explicit `Generate AI draft` action that calls a backend OpenRouter integration, persists section-level narrative drafts into the stored report snapshot, and rehydrates the same drafts when the report is reopened later
 - the Teams screen receives the authenticated user from the shell and uses that live profile in its preview card rather than reading an out-of-scope variable during render
+- the report hub now lists previous generated reports for the selected pathway, can reopen stored report snapshots, and keeps the document-style preview aligned with the same normalized report data that the backend persists
 - results analysis now collapses disease-present and disease-absent cohort outputs into unique human-readable pathways, then renders probability-weighted cost and turnaround summaries from that deduplicated path set
 - browser-side canonical graph serialization and hydration for save/export/import
 - the new-project wizard now owns the diagnostic test library step, including a shared modal-backed create/update/delete editor and evidence imports that preserve the source test name
@@ -56,6 +62,11 @@ The frontend owns:
 - the authenticated shell layout, which uses a beta banner row plus a single content row; page top bars live inside the screen body so the shell does not reserve an empty middle track, and the full-bleed builder/report screens use an intrinsic-height top bar with a body that fills the remaining main area
 - the shared top bar now accepts clickable crumb descriptors so screens can expose a real previous-step navigation path instead of static directory text
 - the workspace home now hydrates the latest pathway evaluation summary into the recent-pathway cards and lets users rename pathways in-place through the pathway update endpoint
+- the workspace home recent-pathway cards now prefer readable project/condition labels plus live evaluation stats, and the card menu can rename the pathway in place through the pathway update endpoint
+- the report hub now selects from persisted project/pathway records, requires a selected evaluated pathway before export, and routes DOCX/PDF generation through the backend report endpoint for that exact record
+- optimization history is now the canonical destination for stored runs; the old compare surface is retained only as a legacy alias and is not exposed from the rail
+- reopening stored optimization scenarios/history items hydrates the canvas draft without persisting a fresh pathway row unless the user explicitly chooses duplicate/import
+- active optimizer presets now cap parallel blocks at two tests so the browser builder and backend search contract stay aligned
 
 The UI must preserve the Syreon orange/charcoal language, Carlito/Open Sans typography, and the workflow-builder visual style from UI V2.
 
@@ -65,6 +76,7 @@ The backend owns:
 
 - project, pathway, evidence, report, and settings persistence
 - account-scoped persistence for projects, pathways, evidence tests, and workspace settings
+- project deletion intentionally preserves attached pathways as standalone records by nulling `project_id`, which keeps prior work in the workspace even after a project is removed
 - schema validation
 - API responses
 - user authentication, session state, email verification, and password reset flows
@@ -72,6 +84,9 @@ The backend owns:
 - CPBB-PF v3 run creation, polling, and result hydration for the eight fixed optimizer outputs
 - derived optimization metrics and fixed named scenario buckets, including cost per positive test, Balanced Accuracy, Youden's J, worst-case turnaround time, and Pareto frontier identity tracking
 - report generation jobs and export-file assembly for PDF/DOCX downloads
+- HTML-first report generation that renders a Blade template, stores HTML and JSON snapshots alongside the PDF artifact, persists the report template settings and section map inside the snapshot, and serves report history plus report-detail/download endpoints for the selected pathway; the PDF step prefers Playwright/Chromium when available but now falls back to a minimal compatibility PDF so report generation does not fail outright on Windows renderer crashes; the browser now also opens a configurable report-builder page with the restored audience, format, and 11-section template before the user exports PDF or DOCX
+- report history now also supports report metadata updates and deletion, with the service merging renamed titles back into the stored snapshot view and removing the associated HTML/PDF/JSON artifacts when a report is deleted
+- OpenRouter-backed AI report generation through `AiReportGenerationService`, including server-side prompt assembly from the persisted pathway/evaluation snapshot, encrypted per-user credential overrides stored in `settings`, and strict JSON normalization into `generated_sections` plus `ai_generation` metadata before the report HTML/PDF/DOCX artifacts are refreshed
 - bridge calls to the Python evaluator
 - canonical compilation of parallel-block member occurrences into unique aliases so duplicate tests in the same block survive engine compilation without collapsing onto a single result key
 - turnaround times are normalized to hours before aggregation so mixed-unit paths such as days plus hours stay numerically correct through the evaluator and results screens
@@ -115,9 +130,13 @@ The optimizer now sits beside that evaluator as a separate Python responsibility
 12. On authenticated load, the browser action layer fetches the signed-in account's `/api/pathways`, `/api/evidence/tests`, and `/api/settings` once, then keeps the normalized workspace snapshot on `window.OptiDxWorkspace` so the Home, Wizard, Library, Evidence, Scenario, and Settings screens operate from persisted records instead of static seed arrays.
 13. On authenticated load, the same browser action layer also fetches the signed-in account's `/api/projects`, restores the active project draft from local storage when available, and hydrates the new-project wizard from that draft so prevalence, constraints, and sample-type selections survive screen changes and refreshes without leaking between users.
 14. The Builder and Results actions treat the active pathway record as first-class state; when a saved pathway is opened or re-evaluated, the backend preserves the existing pathway row and attaches the new evaluation to that record instead of creating a disconnected duplicate.
-15. Report exports are server-generated on demand: the controller materializes a real PDF or DOCX download from the current pathway and its latest evaluation payload rather than streaming browser-generated text files.
-16. Optimization candidates and imported engine-style pathway records are converted into canvas-ready builder graphs in the browser before they are mounted, with keyed object maps preserving their node ids during hydration so the canvas always receives node types, edge ports, and layout coordinates instead of a raw engine template or an empty graph.
-17. The workspace home recent-pathway cards read the persisted pathway name plus the latest evaluation summary from the workspace snapshot, and the card menu can rename the pathway through the same persisted `PUT /api/pathways/{id}` update path used by the canvas saver.
+15. Report exports are server-generated on demand: the controller materializes a real PDF or DOCX download from the selected persisted pathway and its latest evaluation payload rather than streaming browser-generated text files.
+16. The report pipeline now renders HTML from a Blade view first, writes the HTML plus a JSON snapshot to disk, and then converts that HTML to PDF through a small Playwright-based Node helper before exposing the generated artifact to the browser.
+17. Optimization candidates and imported engine-style pathway records are converted into canvas-ready builder graphs in the browser before they are mounted, with keyed object maps preserving their node ids during hydration so the canvas always receives node types, edge ports, and layout coordinates instead of a raw engine template or an empty graph.
+18. The workspace home recent-pathway cards read the persisted pathway name plus the latest evaluation summary from the workspace snapshot, and the card menu can rename the pathway through the same persisted `PUT /api/pathways/{id}` update path used by the canvas saver.
+19. The report hub enumerates persisted projects and pathways from the workspace snapshot, then exports the exact pathway record the user selected instead of assuming the current canvas draft.
+20. When the user clicks `Generate AI draft` in the report builder, the browser posts the current report settings and optional `report_id` to `/api/pathways/{pathway}/report/generate-ai`; the backend either updates the existing stored report or creates a new report snapshot, calls OpenRouter server-side, validates the returned JSON section map, persists `generated_sections` into the report snapshot, rewrites the HTML/PDF artifacts, and returns the updated stored report back to the builder preview.
+21. Saved OpenRouter overrides are account-scoped settings under `scope=workspace` and `key=openrouter_credentials`. The API stores `api_key_encrypted` using Laravel encryption, returns only masked metadata (`has_api_key`, `model`, `saved_at`) to the browser, and keeps the raw secret exclusively on the server side.
 
 Current bridge shape:
 
@@ -175,6 +194,8 @@ Current bridge shape:
 - `web/resources/js/optidx/components/PropertiesPanel.jsx` restricts terminal editing to the supported endpoint classes (positive, negative, inconclusive) and locks the required positive/negative endpoints so their outcome role cannot drift
 - `web/app/Http/Controllers/Api/PathwayController.php` validates the compiled engine definition before invoking Python for evaluation and returns a structured `422` validation payload when the current graph cannot be evaluated, rather than surfacing a generic bridge `500`
 - `web/app/Http/Controllers/Api/PathwayController.php` also falls back to the project prevalence when an evaluation request omits prevalence, so results, PPV/NPV, and population metrics stay aligned with the project record
+- `web/app/Http/Controllers/Api/ReportController.php` exposes report history, report detail, and report download endpoints for a selected pathway, while `web/app/Services/ReportService.php` owns the normalized snapshot builder, Blade rendering, HTML persistence, and Playwright-based PDF conversion
+- `web/app/Services/AiReportGenerationService.php` resolves the effective OpenRouter credential set, builds the HTA-style machine-parseable prompt, calls OpenRouter, and normalizes the returned JSON into the persisted `generated_sections` contract consumed by both the React preview and the Blade export template
 - `web/app/Http/Controllers/Api/ProjectController.php` remains the minimal persistence endpoint for wizard draft records, with the frontend persisting wizard-only fields inside `projects.metadata`
 - `optidx_package/optidx/engine.py` now converts turnaround units into hours before node and pathway aggregation so mixed-unit pathways remain numerically consistent
 
@@ -237,6 +258,7 @@ Ownership columns:
 - `projects.created_by`
 - `diagnostic_tests.created_by`
 - `pathways.created_by`
+- `reports.created_by`
 - `settings.created_by`
 
 These ownership columns are enforced by the model layer and authenticated API routes so the browser only sees records that belong to the current account.
@@ -257,8 +279,9 @@ The `projects` table now serves as the persisted draft record for the new-projec
 - The live Cloudflare deployment uses a shared tunnel on the `Main` account. `journalrecommendation.syreon.me` maps to `http://127.0.0.1:8081`, and `optidx.syreon.me` maps to `http://127.0.0.1:8082` so both websites can coexist on the same VPS without competing for the public ports.
 - The production compose image installs the system `python` entrypoint and bind-mounts `/opt/optidx/optidx_package` into `/var/www/optidx_package` for all runtime services so the Laravel optimizer can invoke the canonical Python engine without a separate Python container.
 - The production compose stack also mounts the database volume over `/var/www/html/database`, which means the runtime migration set lives in that volume instead of the image. Before each deploy, the `web/database` tree must be synchronized into the mounted volume so Laravel can see new migration files before `php artisan migrate` runs; otherwise the container can boot cleanly while still missing later schema files.
-- The browser shell currently uses local file downloads for some export controls; those should be replaced with server-side DOCX/PDF generation when the reporting pipeline is finalized.
-- The reporting pipeline now returns real DOCX/PDF files from Laravel, but the layout remains intentionally minimal and should be upgraded when the product team is ready for production-grade publishing.
+- The report pipeline now renders HTML server-side, converts that HTML into PDF, and persists the resulting snapshot files on disk for later history/download access. DOCX remains a simpler compatibility export for now, and the layout is still intentionally minimal.
+- The report snapshot JSON now persists `generated_sections` and `ai_generation` metadata in addition to the deterministic pathway metrics, settings, tests, paths, and warnings, and both the React preview and Blade export prefer those persisted AI-authored drafts when they are present.
+- The auth shell now forces a full page reload after a successful sign-in so the browser always boots the authenticated workspace with the fresh Laravel session and CSRF token before the next state-changing POST request.
 - The signed email-verification flow assumes the app URL matches the live dev host. In local development the host is `http://127.0.0.1:8000`, which keeps signed verification links and redirects consistent during browser testing.
 - The optimization wizard now supports two backend budgets: `light` and `extensive` both enqueue the same background optimization job, which lets the queue worker own the detached Artisan optimizer process so runs continue after the HTTP request ends and still support PID-backed cancellation.
 - The optimization run record now stores live progress fields (`progress_percent`, `progress_stage`, `progress_message`, `progress_payload`) plus the selected `run_mode` and completion notification timestamp so the browser can render honest backend progress instead of a fake timer.

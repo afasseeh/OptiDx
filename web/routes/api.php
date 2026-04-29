@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\BenchmarkController;
 use App\Http\Controllers\Api\DiagnosticTestController;
 use App\Http\Controllers\Api\OptimizationRunController;
+use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\PathwayController;
 use App\Http\Controllers\Api\ProjectController;
 use App\Http\Controllers\Api\SettingsController;
@@ -25,11 +26,17 @@ Route::middleware(['web', 'auth'])->group(function () {
     Route::post('pathways/optimize', [PathwayController::class, 'optimize']);
     Route::post('pathways/import', [PathwayController::class, 'import']);
     Route::get('pathways/{pathway}/export/json', [PathwayController::class, 'exportJson']);
-    Route::get('pathways/{pathway}/export/report', [PathwayController::class, 'exportReport']);
+    Route::match(['get', 'post'], 'pathways/{pathway}/export/report', [PathwayController::class, 'exportReport']);
+    Route::post('pathways/{pathway}/report/generate-ai', [PathwayController::class, 'generateAiReport']);
+    Route::get('pathways/{pathway}/reports', [ReportController::class, 'index']);
     Route::get('optimization-runs', [OptimizationRunController::class, 'index']);
     Route::get('optimization-runs/latest', [OptimizationRunController::class, 'latest']);
     Route::get('optimization-runs/{optimizationRun}', [OptimizationRunController::class, 'show']);
     Route::post('optimization-runs/{optimizationRun}/cancel', [OptimizationRunController::class, 'cancel']);
+    Route::get('reports/{report}', [ReportController::class, 'show']);
+    Route::put('reports/{report}', [ReportController::class, 'update']);
+    Route::delete('reports/{report}', [ReportController::class, 'destroy']);
+    Route::get('reports/{report}/download', [ReportController::class, 'download']);
 
     Route::apiResource('projects', ProjectController::class);
     Route::apiResource('pathways', PathwayController::class);
